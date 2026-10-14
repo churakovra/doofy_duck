@@ -1,12 +1,16 @@
-# ADR-001 — Python and Go microservices
+# ADR-001 — Python and Go service architecture
 
-Status: user-selected deployable shape: one frontend + Gateway + Platform/Core/Economy. Detailed tools remain proposed. `ADR-002-CLIENT-AND-REWARDS.md` supersedes the former WASM-first recommendation and records the current gift/currency clarification.
+Status: selected future deployment shape: one frontend + Gateway +
+Platform/Core/Economy. Detailed tools remain proposals. These services are not
+implemented; see [ARCHITECTURE](ARCHITECTURE.md) for the running code and
+[Product vision](PRODUCT_VISION.md) for release scope.
 
 ## Decision and scope
 
-The owner selected microservices from the beginning, Python for business-oriented services, Go for performance-oriented services, and retained the proposed TypeScript/React/Vite/PixiJS frontend. This replaces the Node.js/Fastify/grammY backend and modular-monolith recommendation in `INITIAL_DESIGN.md`.
-
-The owner has selected Stars purchases and gift-based rewards as the product direction. Gift-specific conversion/upgrade restrictions, a safe fulfillment workflow, currency definitions, target markets, age policy, and reward funding require validation; see ADR-002. Gift redemption must not be presented as guaranteed Stars cash-out.
+Platform and Economy use Python; Core uses Go. The frontend uses
+TypeScript/React/Vite/PixiJS. The first public release includes purchases and one
+optional continue; gift exchange and leaderboards are later features. The ownership
+and workflows below describe the future architecture, not current infrastructure.
 
 Recommendation: start with three independently deployable services, not a service for every table or function. Split by data ownership, consistency requirements, and workload. Language is a consequence of a service boundary, not the definition of that boundary. No performance advantage has been measured for this application yet.
 
@@ -15,7 +19,7 @@ Recommendation: start with three independently deployable services, not a servic
 | Service | Language / proposed tools | Responsibilities | Authoritative storage |
 | --- | --- | --- | --- |
 | Platform | Python; FastAPI, Pydantic, aiogram | Telegram webhook and bot commands; validate Mini App initialization; identity/session issuance; Telegram API transport; durable ingress and forwarding | Users, sessions, Telegram update inbox, transport operations, outbox |
-| Core | Go; net/http, pgx, sqlc | Run lifecycle; fixed-step simulation; procedural generation; checkpoint verification; abuse limits; verified score and collectible evidence; initial leaderboard projection | Runs, checkpoints, verification evidence, score projections, outbox |
+| Core | Go; net/http, pgx, sqlc | Run lifecycle; fixed-step simulation; procedural generation; checkpoint verification; abuse limits; verified score and collectible evidence; later leaderboard projection | Runs, checkpoints, verification evidence, score projections, outbox |
 | Economy | Python; FastAPI, Pydantic, SQLAlchemy, Alembic | Reward policy; wallet ledger; store/catalog; orders; payment/refund business states; inventory/equip; reconciliation | Reward receipt inbox, accounts, ledger, orders, payments, refunds, inventory, outbox |
 
 Python is a proposed fit for frequently changing product rules and integrations. Go is a proposed fit for the concentrated simulation/verification workload and its profiling/benchmarking needs. Do not translate services into Go merely because their traffic increases: investigate query patterns, locks, queues, CPU, and memory first. Go provides CPU/memory profiling and tracing facilities to investigate actual costs.[5]
@@ -26,7 +30,7 @@ The platform service is a Telegram/identity boundary, not a general-purpose busi
 
 ## Transaction boundaries
 
-Keep wallet, shop, inventory, and payment business state inside Economy initially. A feather purchase can debit the wallet and grant a cosmetic in one local database transaction. A confirmed payment can record its receipt and grant its entitlement in one local transaction.
+Keep wallet, shop, inventory, and payment business state inside Economy initially. A coin purchase can debit the wallet and grant a cosmetic in one local database transaction. A confirmed payment can record its receipt and grant its entitlement in one local transaction.
 
 Separating wallet, inventory, and payments now would require explicit cross-service workflows and compensations for those operations. Prefer local atomicity for these tightly related invariants; independently deployed services can still contain cohesive internal modules.
 
@@ -35,7 +39,7 @@ Core verification and Economy reward credit are deliberately not one ACID transa
 ## Communication
 
 - Browser and internal request/response operations: HTTP + JSON with version-controlled OpenAPI contracts and generated types/clients where useful. Define deadlines, authorization, payload bounds, error envelopes, and idempotency behavior.
-- Durable domain facts: a broker with transactional outbox/inbox handling. Broker selection is pending: ADR-003 now recommends **RabbitMQ** for the current workload and learning preferences. The earlier **NATS JetStream** candidate remains viable and documents persisted, replayable at-least-once delivery; consumers must account for redelivery.[3]
+- Durable domain facts: a broker with transactional outbox/inbox handling. Broker selection is pending: ADR-003 now recommends **RabbitMQ** for the current workload and learning preferences. Consumers must account for redelivery.
 - Do not assume broker acknowledgments, deduplication, or an “exactly-once” feature makes the entire database-plus-external-provider workflow exactly-once.
 - Reserve gRPC for a measured or contract-generation need; it is not a prerequisite for Python/Go interoperability.
 
@@ -43,7 +47,7 @@ Core verification and Economy reward credit are deliberately not one ACID transa
 
 1. Core validates an ordered input segment using the authoritative state and run's engine/config version.
 2. In one Core database transaction, it persists the accepted checkpoint and an outbox record for `RunSegmentVerified.v1`.
-3. A publisher sends the record to JetStream and records acknowledgment. A crash can cause redelivery.
+3. A publisher sends the record to the selected broker and records acknowledgment. A crash can cause redelivery.
 4. Economy verifies the producer's authority and validates the event, run/player identity, expected progression, and evidence. It applies the pinned reward-policy version, eligibility, and caps.
 5. In one Economy database transaction, it records the consumed event, credits the ledger if eligible, and writes its own resulting outbox event.
 6. The consumer acknowledges only after commit. Redelivery returns the prior result without a second credit.
@@ -78,13 +82,12 @@ Money/currency values use explicit integral units, never floats. IDs and wide in
 
 ## Deterministic game core: cross-language risk
 
-The old TypeScript-backend proposal shared one game-core package with the frontend. A Go backend removes that shortcut. Two implementations can disagree on collision edges, PRNG behavior, overflow, rounding, or event ordering.
-
-Updated recommendation in ADR-002: use a TypeScript browser simulation and authoritative Go Core with a language-neutral specification, identical PRNG, fixed-point/integer arithmetic, stable event ordering, and shared golden vectors. Cross-language parity is a blocking CI check. HTTP checkpoints are the owner-selected baseline; WebSockets are an optional transport, not an alternative rendering engine.
-
-Go WASM remains an optional code-reuse experiment, not a required frontend choice. Go's official documentation provides the `GOOS=js` / `GOARCH=wasm` target.[4] If evaluated, measure browser startup/download cost, frame behavior, boundary-call overhead, memory, and native/browser parity in actual Telegram clients. No such measurements have been performed.
-
-The repository tree below is an organizational proposal. `packages/game-core-go/` can hold native Core rules without implying that a WASM build has been selected.
+Use a TypeScript browser simulation and authoritative Go Core verification with
+identical numeric rules, PRNG, collision/event ordering, and shared fixtures.
+The two implementations already exist locally; the network verification service
+does not. HTTP input checkpoints are the selected future transport. WebSockets
+and Go WASM are not initial requirements. Verification of legal inputs alone does
+not establish human play.
 
 ## Repository and local deployment proposal
 
@@ -93,7 +96,8 @@ apps/web/
 services/platform/           # Python
 services/core/               # Go
 services/economy/            # Python
-packages/game-core-go/       # pure simulation, native + candidate WASM
+packages/game-sim/           # pure TypeScript simulation
+services/core/simulation/    # existing pure native Go simulation
 contracts/http/
 contracts/events/
 tests/system/
@@ -107,11 +111,12 @@ Independent deployment must be genuine: compatible API/event versions, no requir
 
 ## Testing and agent pipeline changes
 
-Preserve RED → GREEN → REFACTOR and independent review from the initial design. Add:
+Follow the repository RED → GREEN → REFACTOR workflow and independent review.
+Future service checks include:
 
 - Python: pytest, Hypothesis, Ruff, strict type checks, real-DB integration tests.
 - Go: standard tests, native fuzz tests, race checks, gofmt/go vet, verification benchmarks, real-DB integration tests.
-- Frontend: Vitest/fast-check, Playwright, game-core native/browser or Go/TypeScript golden-vector checks.
+- Frontend: Vitest/fast-check, Playwright, TypeScript/Go fixture parity checks.
 - Contract tests: schemas, generated clients, authorization, and compatibility with the previously supported API/event version.
 - Distributed failure tests: publisher crash after broker acceptance; consumer crash after DB commit before acknowledgment; duplicate/reordered events; Economy outage; delayed payment; ambiguous refund; projection rebuild.
 - System tests: authenticate → start run → validate segment → process event → credit wallet; cosmetic order → invoice/update → fulfill exactly once; refund → confirmed reversal.
@@ -122,12 +127,13 @@ Test the broker/database integration for real; mocks cannot validate redelivery 
 
 This design adds distributed delivery, independent schemas, additional deployments, and multi-language contracts. The proposed benefit is isolated simulation scaling and clear business ownership, not proven faster delivery or lower cost. Track those tradeoffs rather than describing microservices as inherently better.
 
-Written and source-checked: architecture decision, ownership, event/payment workflows, core parity choices, and testing changes. Not implemented: services, broker deployment, WASM spike, database schemas, CI, or performance measurements. No existing application code was renamed or migrated.
+Not implemented: network services, broker deployment, service databases, or
+production performance measurements. The local frontend, both simulation
+implementations, and their CI configuration exist; they do not establish
+commercial readiness.
 
 ## Sources
 
 [1] https://fastapi.tiangolo.com/features
 [2] https://docs.aiogram.dev/en/latest/dispatcher/webhook.html
-[3] https://docs.nats.io/concepts/jetstream
-[4] https://go.dev/wiki/WebAssembly
 [5] https://go.dev/doc/diagnostics

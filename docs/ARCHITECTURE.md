@@ -3,7 +3,7 @@
 This is a local browser game and two implementations of the same deterministic
 simulation. There is no running Go HTTP service, account system, or distributed
 backend in this repository. The root [README](../README.md) owns setup commands;
-the [documentation map](README.md) distinguishes current rules from old reports.
+the [documentation map](README.md) separates current behavior, product goals, and future architecture.
 
 ## Runtime flow
 

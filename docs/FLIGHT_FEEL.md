@@ -2,7 +2,7 @@
 
 ## Renderer-only presentation
 
-The duck is now assembled once from body and wing graphics inside a positioned container. Its rotation follows the authoritative vertical velocity (clamped to -0.48…0.62 radians); a short flap envelope adds a small squash/stretch and wing snap. The wing's idle movement is restrained and only runs during active flight. Existing palette and silhouette are retained.
+The duck is now assembled once from body and wing graphics inside a positioned container. Its rotation follows the authoritative vertical velocity (from -0.57 radians upward to 1.25 radians downward, with an immediate flap target of -0.64 radians); a short flap envelope adds a small squash/stretch and wing snap. The wing's idle movement is restrained and only runs during active flight. Existing palette and silhouette are retained.
 
 A soft, sparse background layer shifts subtly with simulation ticks. Static sky and sun remain Pixi's background/static scene; pipe, floor and collectible geometry is rebuilt only when the simulation tick changes, not for every presentation frame. Effects and duck transforms continue to animate within the single existing canvas.
 
@@ -20,6 +20,6 @@ Pixi initialization/disposal remains serialized; the optional callback is read t
 
 ## Verification
 
-- `apps/web/src/feel.test.ts`: clamped velocity pose, reduced-motion pose, flap envelope, immutable bounded FX pool.
+- `apps/web/src/feel.test.ts`: velocity-following pose, reduced-motion pose, flap envelope, immutable bounded FX pool.
 - `apps/web/test/newfeel.browser.ts`: actual canvas pixels change during flight; reduced-motion mode still renders and plays in the same single canvas.
 - Existing renderer lifecycle test remains in place.
