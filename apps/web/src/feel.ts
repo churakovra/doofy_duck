@@ -13,15 +13,18 @@ export function pushFx(items: readonly Fx[], item: Fx, pool: FxPool): readonly F
 }
 
 export function duckPose(vy: number, pulse: number, reducedMotion: boolean) {
-  const rotation = clamp(vy / 7_000, -0.48, 0.62);
+  const impulse = clamp(pulse, 0, 1);
+  const velocityAngle = vy < 0
+    ? -0.22 - clamp(-vy / 5600, 0, 1) * 0.35
+    : Math.pow(clamp(vy / 8500, 0, 1), 1.15) * 1.25;
+  const rotation = velocityAngle + (-0.64 - velocityAngle) * impulse;
   if (reducedMotion) return { rotation, scaleX: 1, scaleY: 1 };
-  const squash = clamp(pulse, 0, 1) * 0.055;
-  return { rotation, scaleX: 1 + squash, scaleY: 1 - squash * 0.7 };
+  return { rotation, scaleX: 1 - impulse * 0.1, scaleY: 1 + impulse * 0.16 };
 }
 
 export function flapEnvelope(elapsedSeconds: number, reducedMotion: boolean): number {
-  if (reducedMotion || elapsedSeconds < 0 || elapsedSeconds >= 0.34) return 0;
-  return (1 - elapsedSeconds / 0.34) ** 2;
+  if (reducedMotion || elapsedSeconds < 0 || elapsedSeconds >= 0.18) return 0;
+  return (1 - elapsedSeconds / 0.18) ** 2;
 }
 
 export function fxPosition(fx: Fx, nowSeconds: number): { x: number; y: number; alpha: number; scale: number } {
@@ -30,8 +33,8 @@ export function fxPosition(fx: Fx, nowSeconds: number): { x: number; y: number; 
   const progress = clamp(age / duration, 0, 1);
   const direction = ((fx.seed ?? 0) & 1) === 0 ? -1 : 1;
   return {
-    x: fx.x + direction * progress * (fx.kind === 'pickup' ? 13 : 9),
-    y: fx.y - progress * (fx.kind === 'pickup' ? 25 : 16),
+    x: fx.kind === 'air' ? fx.x - progress * 32 : fx.x + direction * progress * (fx.kind === 'pickup' ? 13 : 9),
+    y: fx.kind === 'air' ? fx.y + direction * progress * 10 : fx.y - progress * (fx.kind === 'pickup' ? 25 : 16),
     alpha: 1 - progress,
     scale: fx.kind === 'pickup' ? 0.8 + progress * 0.55 : 0.5 + progress * 0.4,
   };

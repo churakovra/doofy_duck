@@ -1,5 +1,7 @@
 # Playtest update — wallet, speed, flight feel, and audio
 
+> Historical: this report describes simulation 1.1.0 and the superseded speed rules. Current rules are in [ARCADE_SIMULATION.md](ARCADE_SIMULATION.md).
+
 Status: owner-requested implementation scope. Supersedes fixed-speed/no-cumulative-wallet/no-audio assumptions in GAME_V1_SPEC.md for this iteration; does not approve server accounts, payouts, monetization, new activities, or final art.
 
 ## Required outcomes

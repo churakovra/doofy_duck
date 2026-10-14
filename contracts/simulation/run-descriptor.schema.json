@@ -8,8 +8,8 @@
   "properties": {
     "runId": { "type": "string", "minLength": 1 },
     "seed": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
-    "simulationVersion": { "type": "string", "const": "1.0.0" },
-    "generatorVersion": { "type": "string", "const": "1.0.0" },
+    "simulationVersion": { "type": "string", "const": "1.2.0" },
+    "generatorVersion": { "type": "string", "const": "1.1.0" },
     "configId": { "type": "string", "minLength": 1 }
   }
 }

@@ -1,8 +1,23 @@
-import { configIdFor, createRun, DEFAULT_CONFIG } from '@doofy-duck/game-sim';
+import { createRunDescriptor, createRun, DEFAULT_CONFIG } from '@doofy-duck/game-sim';
 import { describe, expect, it } from 'vitest';
-import { createFxPool, duckPose, flapEnvelope, pushFx, type Fx } from './feel';
+import { createFxPool, duckPose, flapEnvelope, fxPosition, pushFx, type Fx } from './feel';
 
 describe('flight feel', () => {
+  it('makes an accepted flap visibly kick upward even from a dive', () => {
+    const pose = duckPose(8500, 1, false);
+    expect(pose.rotation).toBeLessThan(-0.5);
+    expect(pose.scaleY).toBeGreaterThan(1.12);
+    expect(pose.scaleX).toBeLessThan(0.95);
+    expect(duckPose(8500, 0, false).rotation).toBeGreaterThan(1);
+  });
+
+  it('finishes the impulse quickly and trails air behind rather than floating it upward', () => {
+    expect(flapEnvelope(0.2, false)).toBe(0);
+    const air = fxPosition({ x: 100, y: 250, kind: 'air', born: 0 }, 0.1);
+    expect(air.x).toBeLessThan(95);
+    expect(Math.abs(air.y - 250)).toBeLessThan(8);
+  });
+
   it('leans upward while rising and into a bounded dive while falling', () => {
     expect(duckPose(-240, 0, false).rotation).toBeLessThan(0);
     expect(duckPose(240, 0, false).rotation).toBeGreaterThan(0);
@@ -30,7 +45,7 @@ describe('flight feel', () => {
   });
 
   it('does not mutate the authoritative run state while deriving presentation pose', () => {
-    const state = createRun({ runId: 'feel-test', seed: 1, simulationVersion: '1.1.0', generatorVersion: '1.0.0', configId: configIdFor(DEFAULT_CONFIG) });
+    const state = createRun(createRunDescriptor({ runId: 'feel-test', seed: 1 }, DEFAULT_CONFIG));
     const before = JSON.stringify(state);
     duckPose(state.duck.vy, flapEnvelope(0.1, false), false);
     expect(JSON.stringify(state)).toBe(before);

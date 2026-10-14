@@ -6,6 +6,20 @@ import (
 	"testing"
 )
 
+func TestCurrentContractIdentity(t *testing.T) {
+	if SimulationVersion != "1.2.0" || GeneratorVersion != "1.1.0" || DefaultConfigID != "dd-v1-arcade-v2" {
+		t.Fatalf("unexpected contract identity: %s/%s/%s", SimulationVersion, GeneratorVersion, DefaultConfigID)
+	}
+	config := DefaultConfiguration()
+	id, err := ConfigIDFor(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id != DefaultConfigID {
+		t.Fatalf("default config ID = %q, want %q", id, DefaultConfigID)
+	}
+}
+
 func TestPauseReturnsIndependentState(t *testing.T) {
 	data, err := os.ReadFile("../../../contracts/simulation/golden-v1.json")
 	if err != nil {
@@ -115,7 +129,7 @@ func TestRunEndedTotalsPresentAndIndependentFromState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s, err := CreateRun(Descriptor{"totals-test", 1, "1.1.0", "1.0.0", id}, config)
+	s, err := CreateRun(Descriptor{"totals-test", 1, "1.2.0", "1.1.0", id}, config)
 	if err != nil {
 		t.Fatal(err)
 	}

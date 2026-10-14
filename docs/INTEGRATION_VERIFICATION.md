@@ -1,5 +1,7 @@
 # Integration verification checkpoint
 
+> Historical checkpoint for the prior integration. Current rules and verification are recorded in [ARCADE_SIMULATION.md](ARCADE_SIMULATION.md) and [ARCADE_FIXES_RESULTS.md](ARCADE_FIXES_RESULTS.md).
+
 **Final scoped review:** `GO_REVIEW_FOLLOWUP.md` passes the native corrections and raw initial/operation/event comparisons. `FINAL_WEB_REVIEW.md` found no further reproduced blocker. Local implementation handoff is in `IMPLEMENTATION_HANDOFF.md`; physical Telegram/device performance and release acceptance remain unverified. Subsequent sections retain the chronological execution history, including failures that have since been corrected.
 
 **Latest execution after Go corrections:** the parent reran a new fresh-copy install/check with72 unit/contract tests,9 isolated production-browser tests, native tests, race checks and vet all passing. `npm run test:parity` passed against unchanged fixture SHA256 a0f2f19e31f3944491d9bb71647ac41ff2535cbe5e2684e2d5ab2daf022350a7. Go accessors now return copies; signed range, event presence/aliasing and canonical guards have regressions; expected fixture JSON is compared raw rather than normalized through runtime structs. A focused independent re-review is pending. One storage-browser run paused on an actual overloaded animation frame; that storage/restart test now controls animation timestamps with Playwright Clock, while separate tests still exercise pause/visibility behavior. No production rule was weakened to force the test through.

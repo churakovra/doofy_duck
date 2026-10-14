@@ -35,16 +35,21 @@ type FlightConfig struct {
 	DuckHalfHeight int64 `json:"duckHalfHeight"`
 }
 type PipeConfig struct {
-	Speed      int64 `json:"speed"`
-	MaxSpeed   int64 `json:"maxSpeed"`
-	RampTicks  int64 `json:"rampTicks"`
-	Spacing    int64 `json:"spacing"`
-	Width      int64 `json:"width"`
-	GapHeight  int64 `json:"gapHeight"`
-	SafeLeadIn int64 `json:"safeLeadIn"`
-	Horizon    int64 `json:"horizon"`
-	FloorY     int64 `json:"floorY"`
-	CeilingY   int64 `json:"ceilingY"`
+	Speed            int64 `json:"speed"`
+	MaxSpeed         int64 `json:"maxSpeed"`
+	RampTicks        int64 `json:"rampTicks"`
+	SpeedEveryPipes  int64 `json:"speedEveryPipes"`
+	SpeedStepPercent int64 `json:"speedStepPercent"`
+	GapMinCenter     int64 `json:"gapMinCenter"`
+	GapMaxCenter     int64 `json:"gapMaxCenter"`
+	MaxGapDelta      int64 `json:"maxGapDelta"`
+	Spacing          int64 `json:"spacing"`
+	Width            int64 `json:"width"`
+	GapHeight        int64 `json:"gapHeight"`
+	SafeLeadIn       int64 `json:"safeLeadIn"`
+	Horizon          int64 `json:"horizon"`
+	FloorY           int64 `json:"floorY"`
+	CeilingY         int64 `json:"ceilingY"`
 }
 type Limits struct {
 	MaxActivePipes        int64 `json:"maxActivePipes"`
@@ -104,6 +109,7 @@ type State struct {
 	Totals              map[string]int64 `json:"totals"`
 	RNGState            uint32           `json:"rngState"`
 	NextPipeIndex       int64            `json:"nextPipeIndex"`
+	LastGapCenter       int64            `json:"lastGapCenter"`
 	NextInputSequence   int64            `json:"nextInputSequence"`
 	LastCollectiblePipe int64            `json:"lastCollectiblePipe"`
 	NextSpawnPipeIndex  int64            `json:"nextSpawnPipeIndex"`
@@ -143,9 +149,9 @@ type Pattern struct {
 }
 
 var canonicalCatalog = []Pattern{{"center", []int64{280000, 280000, 280000, 280000}}, {"rise-fall", []int64{260000, 280000, 300000, 280000}}, {"fall-rise", []int64{300000, 280000, 260000, 280000}}}
-var canonicalDefaultConfig = Config{FlightConfig{80, -4200, 6000, 160000, 12000, 10000}, PipeConfig{Speed: 2400, MaxSpeed: 4800, RampTicks: 5400, Spacing: 220000, Width: 52000, GapHeight: 176000, SafeLeadIn: 420000, Horizon: 960000, FloorY: 580000, CeilingY: 0}, Limits{8, 2}, []Definition{{"FEATHER", 1, 18, 2, 3, 1, 7000, "feather-v1"}, {"GAME_STAR", 1, 4, 5, 5, 1, 7000, "game-star-v1"}}, 78}
+var canonicalDefaultConfig = Config{FlightConfig{320, -5600, 8500, 100000, 12000, 10000}, PipeConfig{Speed: 3000, MaxSpeed: 5800, RampTicks: 2700, SpeedEveryPipes: 10, SpeedStepPercent: 10, GapMinCenter: 160000, GapMaxCenter: 400000, MaxGapDelta: 85000, Spacing: 225000, Width: 52000, GapHeight: 156000, SafeLeadIn: 420000, Horizon: 960000, FloorY: 561000, CeilingY: 0}, Limits{8, 2}, []Definition{{"FEATHER", 1, 34, 1, 1, 1, 7000, "feather-v1"}, {"GAME_STAR", 1, 8, 4, 3, 1, 7000, "game-star-v1"}}, 58}
 
-// PatternCatalog returns an independent copy of the authored pattern rules.
+// PatternCatalog returns a copy of the legacy catalog, retained for compatibility.
 func PatternCatalog() []Pattern {
 	out := make([]Pattern, len(canonicalCatalog))
 	for i, pattern := range canonicalCatalog {
@@ -159,6 +165,9 @@ func DefaultConfiguration() Config { return cloneConfig(canonicalDefaultConfig) 
 
 const MaxCounter int64 = 9007199254740990
 const maxSafeInteger int64 = 9007199254740991
+const SimulationVersion = "1.2.0"
+const GeneratorVersion = "1.1.0"
+const DefaultConfigID = "dd-v1-arcade-v2"
 
 func Mix32(x uint32) uint32 {
 	x ^= x >> 16
@@ -202,7 +211,7 @@ func ValidateConfig(c Config) error {
 		return fmt.Errorf("limits and collectible definitions are required")
 	}
 	f, p := c.Flight, c.Pipes
-	numericValues := []int64{f.Gravity, f.FlapVelocity, f.MaxFallSpeed, f.DuckX, f.DuckHalfWidth, f.DuckHalfHeight, p.Speed, p.MaxSpeed, p.RampTicks, p.Spacing, p.Width, p.GapHeight, p.SafeLeadIn, p.Horizon, p.FloorY, p.CeilingY, c.Limits.MaxActivePipes, c.Limits.MaxActiveCollectibles, c.SpawnNoneWeight}
+	numericValues := []int64{f.Gravity, f.FlapVelocity, f.MaxFallSpeed, f.DuckX, f.DuckHalfWidth, f.DuckHalfHeight, p.Speed, p.MaxSpeed, p.RampTicks, p.SpeedEveryPipes, p.SpeedStepPercent, p.GapMinCenter, p.GapMaxCenter, p.MaxGapDelta, p.Spacing, p.Width, p.GapHeight, p.SafeLeadIn, p.Horizon, p.FloorY, p.CeilingY, c.Limits.MaxActivePipes, c.Limits.MaxActiveCollectibles, c.SpawnNoneWeight}
 	for _, definition := range c.Collectibles {
 		numericValues = append(numericValues, definition.Version, definition.Weight, definition.MinPipeIndex, definition.MinSpacingPipes, definition.Amount, definition.Radius)
 	}
@@ -217,21 +226,14 @@ func ValidateConfig(c Config) error {
 	if f.Gravity <= 0 || f.FlapVelocity >= 0 || f.MaxFallSpeed <= 0 || f.FlapVelocity < -f.MaxFallSpeed {
 		return fmt.Errorf("flight")
 	}
-	vals := []int64{f.Gravity, f.FlapVelocity, f.MaxFallSpeed, f.DuckX, f.DuckHalfWidth, f.DuckHalfHeight, p.Speed, p.MaxSpeed, p.RampTicks, p.Spacing, p.Width, p.GapHeight, p.SafeLeadIn, p.Horizon, p.FloorY, p.CeilingY}
+	vals := []int64{f.Gravity, f.FlapVelocity, f.MaxFallSpeed, f.DuckX, f.DuckHalfWidth, f.DuckHalfHeight, p.Speed, p.MaxSpeed, p.RampTicks, p.SpeedEveryPipes, p.SpeedStepPercent, p.GapMinCenter, p.GapMaxCenter, p.MaxGapDelta, p.Spacing, p.Width, p.GapHeight, p.SafeLeadIn, p.Horizon, p.FloorY, p.CeilingY}
 	for _, v := range vals {
 		if v < -10000000 || v > 10000000 {
 			return fmt.Errorf("config bound")
 		}
 	}
-	if p.Speed <= 0 || p.MaxSpeed < p.Speed || p.RampTicks <= 0 || p.Spacing <= 0 || p.Width < p.MaxSpeed || p.Width <= 0 || p.GapHeight <= 2*f.DuckHalfHeight || p.Horizon < p.SafeLeadIn || p.FloorY <= p.CeilingY+p.GapHeight {
+	if p.Speed <= 0 || p.MaxSpeed < p.Speed || p.RampTicks <= 0 || (p.MaxSpeed-p.Speed)*p.RampTicks > maxSafeInteger || p.SpeedEveryPipes <= 0 || p.SpeedStepPercent < 0 || p.GapMinCenter > p.GapMaxCenter || p.MaxGapDelta <= 0 || p.GapMinCenter-p.GapHeight/2 < p.CeilingY || p.GapMaxCenter+p.GapHeight/2 > p.FloorY || p.Spacing <= 0 || p.Width < p.MaxSpeed || p.Width <= 0 || p.GapHeight <= 2*f.DuckHalfHeight || p.Horizon < p.SafeLeadIn || p.FloorY <= p.CeilingY+p.GapHeight {
 		return fmt.Errorf("invalid pipe geometry")
-	}
-	for _, pat := range canonicalCatalog {
-		for _, g := range pat.Gaps {
-			if g-p.GapHeight/2 < p.CeilingY || g+p.GapHeight/2 > p.FloorY {
-				return fmt.Errorf("invalid pipe geometry")
-			}
-		}
 	}
 	if c.Limits.MaxActivePipes < 2 || c.Limits.MaxActiveCollectibles < 0 || c.SpawnNoneWeight < 0 {
 		return fmt.Errorf("config limits")
@@ -239,7 +241,7 @@ func ValidateConfig(c Config) error {
 	seen := map[string]bool{}
 	total := c.SpawnNoneWeight
 	for _, d := range c.Collectibles {
-		if d.TypeID == "" || seen[d.TypeID] || d.Version < 1 || d.Weight < 0 || d.MinPipeIndex < 0 || d.MinSpacingPipes < 0 || d.Amount <= 0 || d.Radius <= 0 || d.Radius >= p.GapHeight/2 || d.Appearance == "" {
+		if d.TypeID == "" || seen[d.TypeID] || d.Version < 1 || d.Weight < 0 || d.MinPipeIndex < 0 || d.MinSpacingPipes < 0 || d.Amount <= 0 || d.Radius <= 0 || d.Radius >= p.GapHeight/2 || d.Radius+f.DuckHalfHeight+2 >= p.GapHeight/2 || d.Appearance == "" {
 			return fmt.Errorf("invalid collectible definition")
 		}
 		seen[d.TypeID] = true
@@ -318,7 +320,7 @@ func ConfigIDFor(c Config) (string, error) {
 	def, _ := CanonicalJSON(canonicalDefaultConfig)
 	cur, _ := CanonicalJSON(c)
 	if cur == def {
-		return "dd-v1-speed-v1", nil
+		return DefaultConfigID, nil
 	}
 	body, e := CanonicalJSON(struct {
 		Configuration Config    `json:"configuration"`
@@ -330,7 +332,7 @@ func validateDescriptor(d Descriptor) error {
 	if d.Seed < 0 || d.Seed > 4294967295 {
 		return fmt.Errorf("invalid seed")
 	}
-	if strings.TrimSpace(d.RunID) == "" || d.SimulationVersion != "1.1.0" || d.GeneratorVersion != "1.0.0" || d.ConfigID == "" {
+	if strings.TrimSpace(d.RunID) == "" || d.SimulationVersion != SimulationVersion || d.GeneratorVersion != GeneratorVersion || d.ConfigID == "" {
 		return fmt.Errorf("invalid descriptor")
 	}
 	return nil
@@ -346,7 +348,7 @@ func CreateRun(d Descriptor, c Config) (State, error) {
 	if e != nil || d.ConfigID != id {
 		return State{}, fmt.Errorf("configId mismatch")
 	}
-	s := State{Descriptor: d, Config: cloneConfig(c), Phase: Ready, Duck: Duck{X: c.Flight.DuckX, Y: (c.Pipes.FloorY + c.Pipes.CeilingY) / 2}, Pipes: []Pipe{}, Collectibles: []Collectible{}, Totals: map[string]int64{}, RNGState: uint32(d.Seed), LastCollectiblePipe: -1000000, InputHistory: []Input{}}
+	s := State{Descriptor: d, Config: cloneConfig(c), Phase: Ready, Duck: Duck{X: c.Flight.DuckX, Y: (c.Pipes.FloorY + c.Pipes.CeilingY) / 2}, Pipes: []Pipe{}, Collectibles: []Collectible{}, Totals: map[string]int64{}, RNGState: uint32(d.Seed), LastGapCenter: (c.Pipes.GapMinCenter + c.Pipes.GapMaxCenter) / 2, LastCollectiblePipe: -1000000, InputHistory: []Input{}}
 	r, e := GenerateNext(s)
 	return r.State, e
 }
@@ -354,16 +356,23 @@ func GenerateNext(s State) (Result, error) {
 	s = cloneState(s)
 	pipes := append([]Pipe{}, s.Pipes...)
 	rng, index := s.RNGState, s.NextPipeIndex
+	previousGap := s.LastGapCenter
 	x := s.Config.Pipes.SafeLeadIn
 	if len(pipes) > 0 {
 		x = pipes[len(pipes)-1].X + s.Config.Pipes.Spacing
 	}
 	for int64(len(pipes)) < s.Config.Limits.MaxActivePipes && x <= s.Config.Pipes.Horizon {
 		rng += 0x9e3779b9
-		block := uint32(index/4+1) * uint32(0x9e3779b9)
-		choice := Mix32(uint32(s.Descriptor.Seed) ^ block)
-		pat := canonicalCatalog[int(choice)%len(canonicalCatalog)]
-		pipes = append(pipes, Pipe{fmt.Sprintf("pipe-%d", index), index, x, pat.Gaps[index%int64(len(pat.Gaps))], false})
+		p := s.Config.Pipes
+		raw := p.GapMinCenter + int64(Mix32(uint32(s.Descriptor.Seed)^uint32(index+1)*uint32(0x9e3779b9)))%(p.GapMaxCenter-p.GapMinCenter+1)
+		lo, hi := previousGap-p.MaxGapDelta, previousGap+p.MaxGapDelta
+		if index == 0 {
+			lo, hi = previousGap-35000, previousGap+35000
+		}
+		lo, hi = max64(lo, p.GapMinCenter), min64(hi, p.GapMaxCenter)
+		gap := max64(lo, min64(hi, raw))
+		previousGap = gap
+		pipes = append(pipes, Pipe{fmt.Sprintf("pipe-%d", index), index, x, gap, false})
 		var e error
 		index, e = inc(index, 1)
 		if e != nil {
@@ -374,6 +383,7 @@ func GenerateNext(s State) (Result, error) {
 	s.Pipes = pipes
 	s.RNGState = rng
 	s.NextPipeIndex = index
+	s.LastGapCenter = previousGap
 	return Result{State: s, Events: []Event{}}, nil
 }
 func Step(input State, frames []Input) (Result, error) {
@@ -416,7 +426,7 @@ func Step(input State, frames []Input) (Result, error) {
 	vy = min64(input.Config.Flight.MaxFallSpeed, vy+input.Config.Flight.Gravity)
 	y += vy
 	pc, f := input.Config.Pipes, input.Config.Flight
-	speed, speedErr := WorldSpeedAt(input.Config, input.Tick+1)
+	speed, speedErr := WorldSpeedAt(input.Config, input.Tick+1, input.Score)
 	if speedErr != nil {
 		return Result{}, speedErr
 	}
@@ -493,9 +503,6 @@ func Step(input State, frames []Input) (Result, error) {
 		if e != nil {
 			return Result{}, e
 		}
-		if p.Index < 2 {
-			continue
-		}
 		defs := []Definition{}
 		weight := s.Config.SpawnNoneWeight
 		for _, d := range s.Config.Collectibles {
@@ -524,7 +531,7 @@ func Step(input State, frames []Input) (Result, error) {
 		if chosen != nil && int64(len(s.Collectibles)) < s.Config.Limits.MaxActiveCollectibles {
 			id := fmt.Sprintf("collectible-%d", p.Index)
 			spawned[id] = true
-			s.Collectibles = append(s.Collectibles, Collectible{id, chosen.TypeID, p.X, p.GapCenter, chosen.Amount, chosen.Radius, false})
+			s.Collectibles = append(s.Collectibles, Collectible{id, chosen.TypeID, p.X, bonusY(s.Config, uint32(s.Descriptor.Seed), p, chosen.Radius), chosen.Amount, chosen.Radius, false})
 			s.LastCollectiblePipe = p.Index
 		}
 	}
@@ -552,22 +559,64 @@ func Step(input State, frames []Input) (Result, error) {
 	s.Collectibles = keptC
 	return Result{s, events}, nil
 }
-func WorldSpeedAt(config Config, tick int64) (int64, error) {
+func WorldSpeedAt(config Config, tick int64, scores ...int64) (int64, error) {
 	if err := ValidateConfig(config); err != nil {
 		return 0, err
 	}
-	if tick <= 1 {
-		return config.Pipes.Speed, nil
+	if len(scores) > 1 {
+		return 0, fmt.Errorf("at most one score is accepted")
 	}
-	elapsed := tick - 1
+	score := int64(0)
+	if len(scores) == 1 {
+		score = scores[0]
+	}
+	if tick > MaxCounter || score < 0 || score > MaxCounter {
+		return 0, fmt.Errorf("invalid score")
+	}
+	elapsed := int64(0)
+	if tick > 1 {
+		elapsed = tick - 1
+	}
 	if elapsed > config.Pipes.RampTicks {
 		elapsed = config.Pipes.RampTicks
 	}
 	delta := config.Pipes.MaxSpeed - config.Pipes.Speed
-	// Config bounds keep this product within int64 and JavaScript's safe domain.
-	return config.Pipes.Speed + delta*elapsed/config.Pipes.RampTicks, nil
+	base := config.Pipes.Speed + delta*elapsed/config.Pipes.RampTicks
+	if config.Pipes.SpeedStepPercent == 0 {
+		return base, nil
+	}
+	denominator := config.Pipes.Speed * config.Pipes.SpeedStepPercent
+	maxSteps := ((config.Pipes.MaxSpeed-base)*100 + denominator - 1) / denominator
+	steps := score / config.Pipes.SpeedEveryPipes
+	if steps > maxSteps {
+		steps = maxSteps
+	}
+	return min64(config.Pipes.MaxSpeed, base+config.Pipes.Speed*steps*config.Pipes.SpeedStepPercent/100), nil
 }
 
+func max64(a, b int64) int64 {
+	if a > b {
+		return a
+	}
+	return b
+}
+func bonusY(c Config, seed uint32, pipe Pipe, radius int64) int64 {
+	p, f := c.Pipes, c.Flight
+	half := p.GapHeight / 2
+	low := max64(pipe.GapCenter-half+f.DuckHalfHeight+radius+2, pipe.GapCenter-half*7/10)
+	high := min64(pipe.GapCenter+half-f.DuckHalfHeight-radius-2, pipe.GapCenter+half*7/10)
+	if low >= high {
+		return (pipe.GapCenter - half + f.DuckHalfHeight + pipe.GapCenter + half - f.DuckHalfHeight) / 2
+	}
+	sample := Mix32(seed ^ uint32(pipe.Index+1)*uint32(0x85ebca6b))
+	maxOffset := min64(42000, (high-low)/2)
+	magnitude := int64(16000) + int64(sample)%max64(1, maxOffset-15999)
+	signed := magnitude
+	if sample&0x80000000 != 0 {
+		signed = -signed
+	}
+	return max64(low, min64(high, pipe.GapCenter+signed))
+}
 func min64(a, b int64) int64 {
 	if a < b {
 		return a
@@ -622,7 +671,7 @@ func VerifyFoundationFixtures(path string) error {
 	if e = json.Unmarshal(data, &f); e != nil {
 		return e
 	}
-	if f.FixtureRevision != "foundation-speed-1" || len(f.Cases) != 12 || len(f.Invalid) != 5 || len(f.MixerVectors) != 4 {
+	if f.FixtureRevision != "foundation-arcade-2" || len(f.Cases) != 12 || len(f.Invalid) != 5 || len(f.MixerVectors) != 4 {
 		return fmt.Errorf("unexpected fixture revision/case count")
 	}
 	operationCount, advanceTicks := 0, 0

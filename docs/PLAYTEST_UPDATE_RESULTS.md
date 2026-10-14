@@ -1,5 +1,7 @@
 # Playtest update — implementation and verification
 
+> Historical verification for the prior speed ruleset. See [ARCADE_FIXES_RESULTS.md](ARCADE_FIXES_RESULTS.md) for the current checkout results.
+
 Status: implemented and locally verified. Not a production release. Final independent follow-up review remains unapproved because the reviewer provider returned HTTP429 (usage limit); no successful verdict was returned.
 
 ## Delivered

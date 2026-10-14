@@ -7,6 +7,13 @@ export interface RunDescriptor {
   readonly generatorVersion: string;
   readonly configId: string;
 }
+export const SIMULATION_VERSION = "1.2.0";
+export const GENERATOR_VERSION = "1.1.0";
+export const DEFAULT_CONFIG_ID = "dd-v1-arcade-v2";
+export interface RunDescriptorIdentity {
+  readonly runId: string;
+  readonly seed: number;
+}
 export interface InputFrame {
   readonly sequence: number;
   readonly action: Action;
@@ -23,6 +30,11 @@ export interface PipeConfig {
   readonly speed: number;
   readonly maxSpeed: number;
   readonly rampTicks: number;
+  readonly speedEveryPipes: number;
+  readonly speedStepPercent: number;
+  readonly gapMinCenter: number;
+  readonly gapMaxCenter: number;
+  readonly maxGapDelta: number;
   readonly spacing: number;
   readonly width: number;
   readonly gapHeight: number;
@@ -65,7 +77,7 @@ export interface GapPattern {
   readonly gaps: readonly number[];
 }
 
-/** Finite authored v1 sequences repeat in catalog order. */
+/** Legacy authored catalog retained for API compatibility; generation is seeded and bounded instead. */
 export const PATTERN_CATALOG: readonly GapPattern[] = freeze([
   { id: "center", gaps: [280000, 280000, 280000, 280000] },
   { id: "rise-fall", gaps: [260000, 280000, 300000, 280000] },
@@ -74,23 +86,28 @@ export const PATTERN_CATALOG: readonly GapPattern[] = freeze([
 
 export const DEFAULT_CONFIG: GameConfig = freeze({
   flight: {
-    gravity: 80,
-    flapVelocity: -4200,
-    maxFallSpeed: 6000,
-    duckX: 160000,
+    gravity: 320,
+    flapVelocity: -5600,
+    maxFallSpeed: 8500,
+    duckX: 100000,
     duckHalfWidth: 12000,
     duckHalfHeight: 10000,
   },
   pipes: {
-    speed: 2400,
-    maxSpeed: 4800,
-    rampTicks: 5400,
-    spacing: 220000,
+    speed: 3000,
+    maxSpeed: 5800,
+    rampTicks: 2700,
+    speedEveryPipes: 10,
+    speedStepPercent: 10,
+    gapMinCenter: 160000,
+    gapMaxCenter: 400000,
+    maxGapDelta: 85000,
+    spacing: 225000,
     width: 52000,
-    gapHeight: 176000,
+    gapHeight: 156000,
     safeLeadIn: 420000,
     horizon: 960000,
-    floorY: 580000,
+    floorY: 561000,
     ceilingY: 0,
   },
   limits: { maxActivePipes: 8, maxActiveCollectibles: 2 },
@@ -98,9 +115,9 @@ export const DEFAULT_CONFIG: GameConfig = freeze({
     {
       typeId: "FEATHER",
       version: 1,
-      weight: 18,
-      minPipeIndex: 2,
-      minSpacingPipes: 3,
+      weight: 34,
+      minPipeIndex: 1,
+      minSpacingPipes: 1,
       amount: 1,
       radius: 7000,
       appearance: "feather-v1",
@@ -108,15 +125,15 @@ export const DEFAULT_CONFIG: GameConfig = freeze({
     {
       typeId: "GAME_STAR",
       version: 1,
-      weight: 4,
-      minPipeIndex: 5,
-      minSpacingPipes: 5,
+      weight: 8,
+      minPipeIndex: 4,
+      minSpacingPipes: 3,
       amount: 1,
       radius: 7000,
       appearance: "game-star-v1",
     },
   ],
-  spawnNoneWeight: 78,
+  spawnNoneWeight: 58,
 });
 const integer = (v: unknown): v is number => Number.isSafeInteger(v);
 export function validateConfig(c: GameConfig): GameConfig {
@@ -153,19 +170,17 @@ export function validateConfig(c: GameConfig): GameConfig {
     p.speed <= 0 ||
     p.maxSpeed < p.speed ||
     p.rampTicks <= 0 ||
+    (p.maxSpeed - p.speed) * p.rampTicks > Number.MAX_SAFE_INTEGER ||
+    p.speedEveryPipes <= 0 || p.speedStepPercent < 0 ||
+    p.gapMinCenter > p.gapMaxCenter || p.maxGapDelta <= 0 ||
+    p.gapMinCenter - Math.floor(p.gapHeight / 2) < p.ceilingY ||
+    p.gapMaxCenter + Math.floor(p.gapHeight / 2) > p.floorY ||
     p.spacing <= 0 ||
     p.width < p.maxSpeed ||
     p.width <= 0 ||
     p.gapHeight <= 2 * f.duckHalfHeight ||
     p.horizon < p.safeLeadIn ||
-    p.floorY <= p.ceilingY + p.gapHeight ||
-    PATTERN_CATALOG.some((pattern) =>
-      pattern.gaps.some(
-        (center) =>
-          center - Math.floor(p.gapHeight / 2) < p.ceilingY ||
-          center + Math.floor(p.gapHeight / 2) > p.floorY,
-      ),
-    )
+    p.floorY <= p.ceilingY + p.gapHeight
   )
     throw Error("invalid pipe geometry");
   if (
@@ -195,6 +210,7 @@ export function validateConfig(c: GameConfig): GameConfig {
       !integer(d.radius) ||
       d.radius <= 0 ||
       d.radius >= Math.floor(p.gapHeight / 2) ||
+      d.radius + f.duckHalfHeight + 2 >= Math.floor(p.gapHeight / 2) ||
       !d.appearance
     )
       throw Error("invalid collectible definition");
@@ -214,8 +230,8 @@ export function validateDescriptor(d: RunDescriptor): RunDescriptor {
     !integer(d.seed) ||
     d.seed < 0 ||
     d.seed > 0xffffffff ||
-    d.simulationVersion !== "1.1.0" ||
-    d.generatorVersion !== "1.0.0" ||
+    d.simulationVersion !== SIMULATION_VERSION ||
+    d.generatorVersion !== GENERATOR_VERSION ||
     !d.configId
   )
     throw Error(
@@ -266,6 +282,7 @@ export interface RunState {
   readonly totals: Readonly<Record<string, number>>;
   readonly rngState: number;
   readonly nextPipeIndex: number;
+  readonly lastGapCenter: number;
   readonly nextInputSequence: number;
   readonly lastCollectiblePipe: number;
   readonly nextSpawnPipeIndex: number;
@@ -327,7 +344,19 @@ export function configIdFor(config: GameConfig): string {
   validateConfig(config);
   const encode = (value: GameConfig) => canonicalJSON({ configuration: value, patterns: PATTERN_CATALOG });
   const content = encode(config);
-  return content === encode(DEFAULT_CONFIG) ? "dd-v1-speed-v1" : `dd-v1-config:${content}`;
+  return content === encode(DEFAULT_CONFIG) ? DEFAULT_CONFIG_ID : `dd-v1-config:${content}`;
+}
+
+export function createRunDescriptor(
+  identity: RunDescriptorIdentity,
+  config: GameConfig = DEFAULT_CONFIG,
+): RunDescriptor {
+  return {
+    ...identity,
+    simulationVersion: SIMULATION_VERSION,
+    generatorVersion: GENERATOR_VERSION,
+    configId: configIdFor(config),
+  };
 }
 
 export function createRun(
@@ -354,6 +383,7 @@ export function createRun(
     totals: {},
     rngState: descriptor.seed >>> 0,
     nextPipeIndex: 0,
+    lastGapCenter: Math.floor((config.pipes.gapMinCenter + config.pipes.gapMaxCenter) / 2),
     nextInputSequence: 0,
     lastCollectiblePipe: -1000000,
     nextSpawnPipeIndex: 0,
@@ -367,6 +397,7 @@ export function generateNext(s: RunState): StepResult {
   let rng = s.rngState,
     index = s.nextPipeIndex;
   const spacing = s.config.pipes.spacing;
+  let previousGap = s.lastGapCenter;
   let x = pipes.length
     ? pipes[pipes.length - 1]!.x + spacing
     : s.config.pipes.safeLeadIn;
@@ -375,29 +406,47 @@ export function generateNext(s: RunState): StepResult {
     x <= s.config.pipes.horizon
   ) {
     rng = (rng + 0x9e3779b9) >>> 0;
-    // Indexed sampling keeps the authored four-pipe block stable across horizon fills.
-    const block = Math.floor(index / 4);
-    const patternChoice = mix32((s.descriptor.seed ^ Math.imul(block + 1, 0x9e3779b9)) >>> 0);
-    const pattern = PATTERN_CATALOG[patternChoice % PATTERN_CATALOG.length]!;
-    const gapCenter = pattern.gaps[index % pattern.gaps.length]!;
+    const p = s.config.pipes;
+    const sample = mix32((s.descriptor.seed ^ Math.imul(index + 1, 0x9e3779b9)) >>> 0);
+    const raw = p.gapMinCenter + sample % (p.gapMaxCenter - p.gapMinCenter + 1);
+    const low = index === 0 ? Math.max(p.gapMinCenter, previousGap - 35000) : Math.max(p.gapMinCenter, previousGap - p.maxGapDelta);
+    const high = index === 0 ? Math.min(p.gapMaxCenter, previousGap + 35000) : Math.min(p.gapMaxCenter, previousGap + p.maxGapDelta);
+    const gapCenter = Math.max(low, Math.min(high, raw));
+    previousGap = gapCenter;
     pipes.push({ id: `pipe-${index}`, index, x, gapCenter, scored: false });
     index = incrementCounter(index);
     x += spacing;
   }
   return {
-    state: deepFreeze({ ...s, pipes, rngState: rng, nextPipeIndex: index }),
+    state: deepFreeze({ ...s, pipes, rngState: rng, nextPipeIndex: index, lastGapCenter: previousGap }),
     events: [],
   };
 }
+function bonusY(config: GameConfig, seed: number, pipe: Pipe, radius: number): number {
+  const p = config.pipes, f = config.flight;
+  const half = Math.floor(p.gapHeight / 2);
+  const safeLow = pipe.gapCenter - half + f.duckHalfHeight + radius + 2;
+  const safeHigh = pipe.gapCenter + half - f.duckHalfHeight - radius - 2;
+  const innerLow = Math.max(safeLow, pipe.gapCenter - Math.floor(half * 0.7));
+  const innerHigh = Math.min(safeHigh, pipe.gapCenter + Math.floor(half * 0.7));
+  if (innerLow >= innerHigh) return Math.floor((safeLow + safeHigh) / 2);
+  const maxOffset = Math.min(42000, Math.floor((innerHigh - innerLow) / 2));
+  const sample = mix32((seed ^ Math.imul(pipe.index + 1, 0x85ebca6b)) >>> 0);
+  const magnitude = 16000 + sample % Math.max(1, maxOffset - 15999);
+  const signed = (sample & 0x80000000) ? -magnitude : magnitude;
+  return Math.max(innerLow, Math.min(innerHigh, pipe.gapCenter + signed));
+}
 export const MAX_COUNTER = Number.MAX_SAFE_INTEGER - 1;
 /** Speed for a one-based active simulation tick; READY is still stationary. */
-export function worldSpeedAt(config: GameConfig, tick: number): number {
+export function worldSpeedAt(config: GameConfig, tick: number, score = 0): number {
   validateConfig(config);
-  if (!integer(tick) || tick > MAX_COUNTER)
-    throw Error("tick must be a safe simulation counter");
-  if (tick <= 1) return config.pipes.speed;
-  const elapsed = Math.min(tick - 1, config.pipes.rampTicks);
-  return config.pipes.speed + Math.floor((config.pipes.maxSpeed - config.pipes.speed) * elapsed / config.pipes.rampTicks);
+  if (!integer(tick) || tick > MAX_COUNTER || !integer(score) || score < 0 || score > MAX_COUNTER)
+    throw Error("tick and score must be safe simulation counters");
+  const elapsed = Math.min(Math.max(tick - 1, 0), config.pipes.rampTicks);
+  const base = config.pipes.speed + Math.floor((config.pipes.maxSpeed - config.pipes.speed) * elapsed / config.pipes.rampTicks);
+  const maxSteps = Math.ceil((config.pipes.maxSpeed - base) * 100 / (config.pipes.speed * config.pipes.speedStepPercent || 1));
+  const steps = Math.min(Math.floor(score / config.pipes.speedEveryPipes), maxSteps);
+  return Math.min(config.pipes.maxSpeed, base + Math.floor(config.pipes.speed * steps * config.pipes.speedStepPercent / 100));
 }
 function incrementCounter(value: number, amount = 1): number {
   const next = value + amount;
@@ -444,7 +493,7 @@ export function step(
   y += vy;
   const pc = input.config.pipes,
     f = input.config.flight,
-    speed = worldSpeedAt(input.config, input.tick + 1),
+    speed = worldSpeedAt(input.config, input.tick + 1, input.score),
     pipes = input.pipes.map((p) => ({ ...p, x: p.x - speed })),
     duck = { x: f.duckX, y, vy };
   const dead =
@@ -512,7 +561,7 @@ export function step(
     for (const pipe of next.pipes) {
       if (pipe.index < nextSpawnPipeIndex) continue;
       nextSpawnPipeIndex = incrementCounter(pipe.index);
-      if (pipe.index < 2) continue;
+
 
       const definitions = next.config.collectibles.filter(
         (definition) =>
@@ -544,7 +593,7 @@ export function step(
               id: `collectible-${pipe.index}`,
               typeId: chosen.typeId,
               x: pipe.x,
-              y: pipe.gapCenter,
+              y: bonusY(next.config, input.descriptor.seed, pipe, chosen.radius),
               amount: chosen.amount,
               radius: chosen.radius,
               collected: false,

@@ -25,11 +25,11 @@ Touch/click the field or press Space to flap. Screen buttons do not also flap. B
 
 - The wallet displays cumulative balances separately from completed-run earnings and saves locally after death. It is not an account, a Telegram Stars balance, or a redeemable reward. Earlier unsaved earnings cannot be recovered.
 - One tab at a time owns the persistent wallet. Close the first tab and reload the second to transfer ownership. If browser locking/storage is unavailable, play remains available with an explicitly non-persistent memory wallet.
-- Active-time world speed rises smoothly from144 to288pixels/second over90seconds, then caps. Pausing freezes the ramp; restarting resets it. This increases pressure rather than imposing a hidden death timer.
+- Active-time world speed rises from180 to348pixels/second over45seconds, then score adds speed in10% steps per10 passed pipes until the cap. Pausing freezes the ramp; restarting resets it.
 - Velocity tilt, wing/flap motion, restrained squash/stretch and bounded visual effects improve feedback without changing authoritative hitboxes. Extra motion respects the reduced-motion setting.
 - Original synthesized flap/pickup/death sounds and a quiet music loop unlock from a user gesture. Separate sound/music controls are saved locally; backgrounding and pause silence playback.
 
-The internal simulation version is1.1.0, generator version1.0.0, default config ID `dd-v1-speed-v1`. Detailed scope, verification and remaining gates are in `docs/PLAYTEST_UPDATE.md` and `docs/PLAYTEST_UPDATE_RESULTS.md`; audio research and primary sources are in `docs/TELEGRAM_AUDIO_RESEARCH.md`.
+The current rules use simulation version1.2.0, generator version1.1.0, and default config ID `dd-v1-arcade-v2`. See [`docs/ARCADE_SIMULATION.md`](docs/ARCADE_SIMULATION.md) for the rules and [`docs/ARCADE_TUNING_NOTES.md`](docs/ARCADE_TUNING_NOTES.md) for the tuning rationale. Older playtest and speed reports describe superseded rules.
 
 ## Verification commands
 
@@ -43,7 +43,8 @@ npm run test:parity
 npm run build
 npx playwright install chromium  # one-time browser prerequisite
 npm run test:browser
-npm run check                   # types, lint, unit/fixture tests, Go tests, production browser suite
+npm run test:dev                # isolated Vite development browser checks on 127.0.0.1:4175
+npm run check                   # types, lint, unit/fixture tests, Go tests, production and development browser suites
 ```
 
 Native-only commands:
@@ -54,11 +55,11 @@ go -C services/core/simulation test -race -count=1 ./...
 go -C services/core/simulation vet ./...
 ```
 
-Playwright starts its own **production preview on127.0.0.1:4174** with server reuse disabled. It must not borrow the development server on4173. This leaves an existing development session running. CI configuration includes Node and Go checks; a committed workflow file is not evidence of a GitHub-hosted run.
+Playwright starts an isolated **production preview on127.0.0.1:4174** and an isolated **development server on127.0.0.1:4175**. Both suites disable server reuse so they test the configured build and source reliably. Browser screenshots are saved as test artifacts, not written over documentation images. CI configuration includes Node and Go checks; a committed workflow file is not evidence of a GitHub-hosted run.
 
 ## Source layout
 
-- `apps/web`: renderer, HUD/screens, input, fixed-step scheduler, local storage, browser tests.
+- `apps/web`: renderer and HUD, run/progress/audio hooks, fixed-step scheduler, local storage, browser tests.
 - `packages/game-sim`: pure deterministic TypeScript rules and semantic/fixture tests.
 - `services/core/simulation`: native Go rules and parity verification; no HTTP service.
 - `contracts/simulation`: exact rules, authored pattern catalog, canonical fixtures and offline producer.

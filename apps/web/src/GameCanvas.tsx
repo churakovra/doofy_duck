@@ -64,12 +64,12 @@ function makeDuck(): { duck: Container; wing: Graphics } {
   const duck = new Container();
   const body = new Graphics();
   body.ellipse(0, 0, 19, 15).fill(0xffd267);
-  body.ellipse(-5, 6, 9, 6).fill(0xf0a94b);
   body.moveTo(15, -4).lineTo(27, 0).lineTo(15, 4).closePath().fill(0xe88452);
   body.circle(7, -5, 2.5).fill(0x33423b);
   const wing = new Graphics();
-  wing.ellipse(-5, 5, 9, 6).fill(0xf0a94b);
-  wing.pivot.set(-5, 5);
+  wing.ellipse(-3, 0, 12, 7).fill(0xe99b39);
+  wing.moveTo(-10, 0).lineTo(-1, 3).lineTo(5, 0).stroke({ color: 0xffe09b, width: 2 });
+  wing.position.set(-5, 2);
   duck.addChild(body, wing);
   return { duck, wing };
 }
@@ -83,6 +83,9 @@ function paintEffects(graphic: Graphics, effects: readonly Fx[], now: number, re
     if (fx.kind === 'pickup') {
       graphic.circle(pose.x, pose.y, 5 * pose.scale).fill({ color: 0xffe59c, alpha: pose.alpha * 0.8 });
       graphic.circle(pose.x, pose.y, 10 * pose.scale).stroke({ color: 0xf5bd56, alpha: pose.alpha * 0.65, width: 1.5 });
+    } else if (fx.kind === 'air') {
+      graphic.moveTo(pose.x, pose.y).lineTo(pose.x - 9 * pose.scale, pose.y + 2)
+        .stroke({ color: 0xffffff, alpha: pose.alpha * 0.9, width: 2.5 });
     } else {
       graphic.circle(pose.x, pose.y, 3 * pose.scale).fill({ color: fx.kind === 'death' ? 0xe88452 : 0xffffff, alpha: pose.alpha * 0.65 });
     }
@@ -180,6 +183,13 @@ export function GameCanvas({ getState, onReady, getFeedback }: Props) {
             if ((feedback?.flapSerial ?? lastFlapSerial) !== lastFlapSerial) {
               lastFlapSerial = feedback!.flapSerial;
               flapStarted = cosmeticTime;
+              if (!prefersReducedMotion) {
+                for (let i = 0; i < 3; i++) effects = pushFx(effects, {
+                  x: px(state.duck.x) - 16 - i * 4,
+                  y: px(state.duck.y) + (i - 1) * 7,
+                  kind: 'air', born: cosmeticTime, seed: fxSerial++,
+                }, FX_POOL);
+              }
             } else if (state.duck.vy < 0 && state.tick !== previousTick && feedback === undefined) {
               flapStarted = cosmeticTime;
             }
@@ -211,7 +221,7 @@ export function GameCanvas({ getState, onReady, getFeedback }: Props) {
             duckParts.duck.position.set(px(state.duck.x), px(state.duck.y));
             duckParts.duck.rotation = pose.rotation;
             duckParts.duck.scale.set(pose.scaleX, pose.scaleY);
-            duckParts.wing.rotation = prefersReducedMotion ? 0 : -0.18 - flapEnvelope(cosmeticTime - flapStarted, false) * 0.65 + Math.sin(cosmeticTime * 13) * (state.phase === 'RUNNING' ? 0.05 : 0);
+            duckParts.wing.rotation = prefersReducedMotion ? 0 : 0.25 - flapEnvelope(cosmeticTime - flapStarted, false) * 1.7 + Math.sin(cosmeticTime * 18) * (state.phase === 'RUNNING' ? 0.12 : 0);
             parallax.x = prefersReducedMotion ? 0 : (-(state.tick * 0.16) % WIDTH + WIDTH) % WIDTH;
             paintEffects(effectsGraphic, effects, cosmeticTime, prefersReducedMotion);
             app.renderer.render(app.stage);

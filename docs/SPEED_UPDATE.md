@@ -1,5 +1,7 @@
 # Speed ruleset update
 
+> Historical: superseded by simulation 1.2.0. See [ARCADE_SIMULATION.md](ARCADE_SIMULATION.md) for current speed and config identity.
+
 - Simulation version: `1.1.0`; generator version remains `1.0.0`.
 - Default identity: `dd-v1-speed-v1`. Custom identity remains the exact canonical configuration+pattern identity.
 - `PipeConfig` adds `maxSpeed: 4800` and `rampTicks: 5400` (defaults); base `speed` remains 2400. A valid config requires positive safe-integer ramp ticks, max speed at least base speed, and pipe width at least max speed. Existing bounded integer config validation keeps `(maxSpeed-speed)*elapsed` exact/safe in JS and Go.

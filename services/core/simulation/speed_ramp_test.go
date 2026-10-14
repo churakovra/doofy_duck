@@ -2,9 +2,22 @@ package simulation
 
 import "testing"
 
+func TestScoreAddsSpeedAtPipeBoundariesAndCapsSafely(t *testing.T) {
+	c := DefaultConfiguration()
+	for _, tc := range []struct{ score, want int64 }{{0, 3000}, {9, 3000}, {10, 3300}, {20, 3600}, {40, 4200}, {1000, 5800}} {
+		got, err := WorldSpeedAt(c, 1, tc.score)
+		if err != nil || got != tc.want {
+			t.Errorf("score %d: speed=%d err=%v want=%d", tc.score, got, err, tc.want)
+		}
+	}
+	if _, err := WorldSpeedAt(c, 1, -1); err == nil {
+		t.Fatal("negative score accepted")
+	}
+}
+
 func TestWorldSpeedAtBoundaries(t *testing.T) {
 	config := DefaultConfiguration()
-	for _, test := range []struct{ tick, want int64 }{{0, 2400}, {1, 2400}, {2, 2400}, {2701, 3600}, {5400, 4799}, {5401, 4800}, {9000, 4800}} {
+	for _, test := range []struct{ tick, want int64 }{{0, 3000}, {1, 3000}, {2, 3001}, {1351, 4400}, {2700, 5798}, {2701, 5800}, {5401, 5800}} {
 		got, err := WorldSpeedAt(config, test.tick)
 		if err != nil || got != test.want {
 			t.Errorf("WorldSpeedAt(%d)=%d, %v; want %d", test.tick, got, err, test.want)
@@ -19,11 +32,11 @@ func TestSpeedRampChangesActualStepDisplacement(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	state, err := CreateRun(Descriptor{"speed-test", 3, "1.1.0", "1.0.0", id}, config)
+	state, err := CreateRun(Descriptor{"speed-test", 3, "1.2.0", "1.1.0", id}, config)
 	if err != nil {
 		t.Fatal(err)
 	}
-	state.Phase, state.Tick = Running, 2700
+	state.Phase, state.Tick = Running, 1350
 	state.Duck.Y, state.Duck.VY = 280000, 0
 	state.Pipes = []Pipe{{ID: "p", Index: 90, X: 800000, GapCenter: 280000}}
 	state.Collectibles = []Collectible{{ID: "c", TypeID: "FEATHER", X: 800000, Y: 280000, Amount: 1, Radius: 7000}}
@@ -31,10 +44,10 @@ func TestSpeedRampChangesActualStepDisplacement(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := result.State.Pipes[0].X; got != 796400 {
+	if got := result.State.Pipes[0].X; got != 796550 {
 		t.Fatalf("mid-ramp pipe x=%d, want 796400", got)
 	}
-	if got := result.State.Collectibles[0].X; got != 796400 {
+	if got := result.State.Collectibles[0].X; got != 796550 {
 		t.Fatalf("mid-ramp collectible x=%d, want 796400", got)
 	}
 }

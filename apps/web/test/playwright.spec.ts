@@ -1,38 +1,50 @@
-import { resolve } from 'node:path';
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
-test('ready screen starts one playable run from the first Space press', async ({ page }) => {
+async function waitForWalletSession(page: Page) {
+  await expect(page.locator('.wallet-storage')).toHaveText(/Кошелёк на этом устройстве|Только в памяти/);
+}
+
+async function waitForPlayableGame(page: Page) {
+  await waitForWalletSession(page);
+  await expect(page.getByRole('button', { name: /Начать полёт/ })).toBeEnabled();
+}
+
+test('ready screen starts one playable run from the first Space press', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
+  await waitForPlayableGame(page);
   await expect(page.locator('script[src="/@vite/client"]')).toHaveCount(0);
   await expect(page.getByRole('heading', { name: /Привет/ })).toBeVisible();
   await expect(page.locator('canvas[aria-label="Doofy Duck game canvas"]')).toBeVisible();
-  await page.screenshot({ path: resolve(process.cwd(), 'docs/web-ready.png'), fullPage: true });
   await page.keyboard.press('Space');
   await expect(page.getByText('КАСАЙСЯ, ЧТОБЫ ВЗЛЕТЕТЬ')).toBeVisible();
-  await page.screenshot({ path: resolve(process.cwd(), 'docs/web-running.png'), fullPage: true });
   await expect(page.getByRole('button', { name: 'Пауза' })).toBeEnabled();
+  await page.screenshot({ path: testInfo.outputPath('web-running.png'), fullPage: true });
 });
 
-test('screen start, pause, explicit resume, death, and restart are playable', async ({ page }) => {
+test('screen start, pause, explicit resume, death, and restart survive three cycles', async ({ page }) => {
+  test.setTimeout(60_000);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
+  await waitForPlayableGame(page);
   await expect(page.locator('canvas[aria-label="Doofy Duck game canvas"]')).toBeVisible();
-  await page.keyboard.press('Space');
-  await expect(page.getByText('КАСАЙСЯ, ЧТОБЫ ВЗЛЕТЕТЬ')).toBeVisible();
-  await page.locator('.pause-button').evaluate((button: HTMLButtonElement) => button.click());
-  await expect(page.getByRole('heading', { name: 'На паузе' })).toBeVisible();
-  await page.locator('.screen-card .primary-button').evaluate((button: HTMLButtonElement) => button.click());
-  for (let elapsed = 0; elapsed < 8_000 && !(await page.getByRole('heading', { name: 'Хороший заход!' }).isVisible().catch(() => false)); elapsed += 200) {
-    if (await page.getByRole('heading', { name: 'На паузе' }).isVisible().catch(() => false)) {
-      await page.locator('.screen-card .primary-button').evaluate((button: HTMLButtonElement) => button.click());
+  for (let cycle = 0; cycle < 3; cycle++) {
+    await page.keyboard.press('Space');
+    await expect(page.getByText('КАСАЙСЯ, ЧТОБЫ ВЗЛЕТЕТЬ')).toBeVisible();
+    await page.locator('.pause-button').evaluate((button: HTMLButtonElement) => button.click());
+    await expect(page.getByRole('heading', { name: 'На паузе' })).toBeVisible();
+    await page.locator('.screen-card .primary-button').evaluate((button: HTMLButtonElement) => button.click());
+    for (let elapsed = 0; elapsed < 8_000 && !(await page.getByRole('heading', { name: 'Хороший заход!' }).isVisible().catch(() => false)); elapsed += 200) {
+      if (await page.getByRole('heading', { name: 'На паузе' }).isVisible().catch(() => false)) {
+        await page.locator('.screen-card .primary-button').evaluate((button: HTMLButtonElement) => button.click());
+      }
+      await page.waitForTimeout(200);
     }
-    await page.waitForTimeout(200);
+    await expect(page.getByRole('heading', { name: 'Хороший заход!' })).toBeVisible();
+    await page.getByRole('button', { name: /Ещё раз/ }).click();
+    await expect(page.getByRole('heading', { name: /Привет/ })).toBeVisible();
+    await expect(page.locator('canvas')).toHaveCount(1);
   }
-  await expect(page.getByRole('heading', { name: 'Хороший заход!' })).toBeVisible();
-  await page.getByRole('button', { name: /Ещё раз/ }).click();
-  await expect(page.getByRole('heading', { name: /Привет/ })).toBeVisible();
-  await expect(page.locator('canvas')).toHaveCount(1);
 });
 
 test('short landscape viewports keep the complete playfield and HUD inside the screen', async ({ page }) => {
@@ -71,6 +83,7 @@ test('short landscape viewports keep the complete playfield and HUD inside the s
 test('a primary field touch starts gameplay, while button touches remain isolated from field input', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
+  await waitForPlayableGame(page);
   const canvas = page.locator('canvas');
   await canvas.dispatchEvent('pointerdown', { pointerId: 1, pointerType: 'touch', isPrimary: true, button: 0, bubbles: true });
   await expect(page.getByText('КАСАЙСЯ, ЧТОБЫ ВЗЛЕТЕТЬ')).toBeVisible();
@@ -83,6 +96,7 @@ test('a primary field touch starts gameplay, while button touches remain isolate
 test('queued field inputs after pause and resume retain the next accepted sequence', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
+  await waitForPlayableGame(page);
   const canvas = page.locator('canvas');
   const touch = () => canvas.dispatchEvent('pointerdown', { pointerId: 1, pointerType: 'touch', isPrimary: true, button: 0, bubbles: true });
   await touch();
@@ -106,21 +120,46 @@ test('renderer failure blocks gameplay input and reports a visible error', async
   });
   await page.goto('/');
   await expect(page.getByRole('alert')).toBeVisible();
-  await expect(page.getByRole('button', { name: /Начать полёт/ })).toBeDisabled();
+  await expect(page.getByRole('heading', { name: 'Не удалось продолжить' })).toBeVisible();
   await page.locator('.game-shell').dispatchEvent('pointerdown', { button: 0, pointerType: 'touch', isPrimary: true, bubbles: true });
-  await expect(page.getByRole('heading', { name: /Привет/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Не удалось продолжить' })).toBeVisible();
+});
+
+test('run initialization failures show a recoverable reload screen', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(crypto, 'randomUUID', { configurable: true, value: () => '' });
+  });
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'Не удалось открыть игру' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Обновить страницу/ })).toBeVisible();
 });
 
 test('an input event burst stays within the bounded queue and preserves contiguous frames', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') });
+  await page.clock.pauseAt(new Date('2026-01-01T00:00:01Z'));
+  await page.addInitScript(() => {
+    let previousBrowserTime = -1;
+    let controlledTime = 0;
+    const requestFrame = window.requestAnimationFrame.bind(window);
+    window.requestAnimationFrame = (callback) => requestFrame((browserTime) => {
+      if (browserTime !== previousBrowserTime) {
+        previousBrowserTime = browserTime;
+        controlledTime += 1000 / 60;
+      }
+      callback(controlledTime);
+    });
+  });
   await page.goto('/');
+  await waitForPlayableGame(page);
   await page.locator('canvas').dispatchEvent('pointerdown', { pointerId: 1, pointerType: 'touch', isPrimary: true, button: 0, bubbles: true });
+  await page.clock.runFor(34);
   await expect(page.getByRole('button', { name: 'Пауза' })).toBeEnabled();
   await page.evaluate(() => {
     const canvas = document.querySelector('canvas')!;
     for (let i = 0; i < 40; i += 1) canvas.dispatchEvent(new PointerEvent('pointerdown', { pointerId: i + 2, pointerType: 'touch', isPrimary: true, button: 0, bubbles: true }));
   });
-  await page.waitForTimeout(150);
+  await page.clock.runFor(150);
   await expect(page.getByRole('alert')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Пауза' })).toBeEnabled();
 });
@@ -165,7 +204,7 @@ test('blocked storage does not prevent repeated complete runs and restarts', asy
   }
 });
 
-test('a completed run settles into the local wallet and survives reload', async ({ page }) => {
+test('a completed run settles once into the local wallet and survives reload', async ({ page }, testInfo) => {
   test.setTimeout(30_000);
   await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') });
   await page.clock.pauseAt(new Date('2026-01-01T00:00:01Z'));
@@ -194,7 +233,7 @@ test('a completed run settles into the local wallet and survives reload', async 
       configurable: true,
       value: <T extends ArrayBufferView>(array: T): T => {
         if (array instanceof Uint32Array && array.length === 1) {
-          array[0] = 1;
+          array[0] = 0;
           (window as typeof window & { __testSeed?: number }).__testSeed = array[0];
           return array;
         }
@@ -204,12 +243,13 @@ test('a completed run settles into the local wallet and survives reload', async 
   });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
-  expect(await page.evaluate(() => (window as typeof window & { __testSeed?: number }).__testSeed)).toBe(1);
+  expect(await page.evaluate(() => (window as typeof window & { __testSeed?: number }).__testSeed)).toBe(0);
   await expect(page.getByText('Перья · всего')).toBeVisible();
   await expect(page.getByText('Game Star · всего')).toBeVisible();
   await expect(page.getByText('Кошелёк на этом устройстве')).toBeVisible();
   await expect(page.locator('.wallet-total').nth(0).locator('strong')).toHaveText('11');
   await expect(page.locator('.wallet-total').nth(1).locator('strong')).toHaveText('7');
+  const settledIdsBefore = await page.evaluate(() => JSON.parse(localStorage.getItem('doofy-duck:wallet:v1')!).settledRunIds as string[]);
 
   await page.locator('canvas').dispatchEvent('pointerdown', { pointerId: 1, pointerType: 'touch', isPrimary: true, button: 0, bubbles: true });
   const advanceFrames = async (count: number) => {
@@ -224,7 +264,7 @@ test('a completed run settles into the local wallet and survives reload', async 
   };
   await advanceFrames(1); // The first RAF establishes FixedStepClock's timestamp without a simulation tick.
   let previousTapTick = 0;
-  for (const tapTick of [114, 218, 322, 426, 530]) {
+  for (const tapTick of [19, 52, 86, 120, 166]) {
     await advanceFrames(tapTick - previousTapTick);
     await page.locator('canvas').dispatchEvent('pointerdown', { pointerId: tapTick, pointerType: 'touch', isPrimary: true, button: 0, bubbles: true });
     previousTapTick = tapTick;
@@ -239,7 +279,10 @@ test('a completed run settles into the local wallet and survives reload', async 
   expect(featherGain).toBeGreaterThan(0);
   expect(Number(balancesAfterDeath[0])).toBe(11 + featherGain);
   expect(Number(balancesAfterDeath[1])).toBe(7 + starGain);
-  await page.screenshot({ path: resolve(process.cwd(), 'docs/web-wallet-death.png'), fullPage: true });
+  const settledIdsAfter = await page.evaluate(() => JSON.parse(localStorage.getItem('doofy-duck:wallet:v1')!).settledRunIds as string[]);
+  expect(settledIdsAfter).toHaveLength(settledIdsBefore.length + 1);
+  expect(new Set(settledIdsAfter).size).toBe(settledIdsAfter.length);
+  await page.screenshot({ path: testInfo.outputPath('web-wallet-death.png'), fullPage: true });
 
   await page.reload();
   await expect(page.locator('.wallet-total').nth(0).locator('strong')).toHaveText(String(11 + featherGain));

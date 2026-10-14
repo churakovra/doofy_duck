@@ -1,5 +1,7 @@
 # Final independent frontend regression review
 
+> Historical review of the earlier frontend implementation. See [ARCADE_FIXES_RESULTS.md](ARCADE_FIXES_RESULTS.md) for current verification.
+
 **Verdict: no additional reproduced blocking frontend findings** in the viewport, queued-input, or renderer-lifecycle fixes. Review was read-only for source; no product scope was added. The workspace did not expose a Git repository, so this is not a diff-based review.
 
 ## Verified against current source

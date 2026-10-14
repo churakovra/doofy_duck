@@ -20,26 +20,11 @@ const pendingReleases = new WeakMap<WalletLocks, Promise<void>>();
 export function acquireWalletSession(locks: WalletLocks | undefined, callbacks: WalletSessionCallbacks): WalletSession {
   let disposed = false;
   let release: (() => void) | undefined;
-  let completion: Promise<void> | undefined;
-  const session: WalletSession = {
-    dispose() {
-      if (disposed) return;
-      disposed = true;
-      release?.();
-      if (locks && completion) pendingReleases.set(locks, completion);
-    },
-  };
-
-  if (!locks || typeof locks.request !== 'function') {
-    callbacks.memoryOnly();
-    return session;
-  }
-
   const handleFailure = () => {
     if (!disposed) callbacks.memoryOnly();
   };
   const request = (): Promise<void> => {
-    if (disposed) return Promise.resolve();
+    if (disposed || !locks) return Promise.resolve();
     try {
       return locks.request(LOCK_NAME, { mode: 'exclusive', ifAvailable: true }, async (lock) => {
       if (disposed) return;
@@ -58,10 +43,21 @@ export function acquireWalletSession(locks: WalletLocks | undefined, callbacks: 
       return Promise.resolve();
     }
   };
-  const precedingRelease = pendingReleases.get(locks);
-  completion = precedingRelease ? precedingRelease.then(request, request) : request();
-  void completion.then(() => {
-    if (pendingReleases.get(locks) === completion) pendingReleases.delete(locks);
+  const completion = locks && typeof locks.request === 'function'
+    ? (pendingReleases.get(locks)?.then(request, request) ?? request())
+    : undefined;
+  const session: WalletSession = {
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      release?.();
+      if (locks && completion) pendingReleases.set(locks, completion);
+    },
+  };
+
+  if (!completion) callbacks.memoryOnly();
+  else void completion.then(() => {
+    if (locks && pendingReleases.get(locks) === completion) pendingReleases.delete(locks);
   });
 
   return session;

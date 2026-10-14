@@ -2,8 +2,8 @@
 // Existing fixtures are checked by tests; regeneration is never an automatic test step.
 import { writeFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
-import { DEFAULT_CONFIG, PATTERN_CATALOG, createRun, step, pauseRun, resumeRun, restartRun, makeInput, configIdFor, canonicalState, mix32, worldSpeedAt } from '../../packages/game-sim/dist/index.js';
-const descriptor = (name, seed = 1, config = DEFAULT_CONFIG) => ({ runId: name, seed, simulationVersion: '1.1.0', generatorVersion: '1.0.0', configId: configIdFor(config) });
+import { DEFAULT_CONFIG, PATTERN_CATALOG, createRunDescriptor, createRun, step, pauseRun, resumeRun, restartRun, makeInput, canonicalState, mix32, worldSpeedAt } from '../../packages/game-sim/dist/index.js';
+const descriptor = (name, seed = 1, config = DEFAULT_CONFIG) => createRunDescriptor({ runId: name, seed }, config);
 const snapshot = s => JSON.parse(canonicalState(s));
 const cases = [];
 function scenario(name, config = DEFAULT_CONFIG, seed = 1, alter) {
@@ -45,7 +45,7 @@ function scenario(name, config = DEFAULT_CONFIG, seed = 1, alter) {
 }
 const lifecycle = scenario('lifecycle');
 lifecycle.apply({ kind: 'step', frames: [makeInput(0, 'FLAP')] });
-assert.equal(lifecycle.state.duck.y, 285880);
+assert.equal(lifecycle.state.duck.y, 275220);
 for (let i = 0; i < 3; i++) lifecycle.apply({ kind: 'step', frames: [] });
 lifecycle.apply({ kind: 'pause' }); lifecycle.apply({ kind: 'step', frames: [] });
 lifecycle.apply({ kind: 'resume' }); lifecycle.apply({ kind: 'step', frames: [makeInput(1, 'FLAP')] });
@@ -72,10 +72,11 @@ const disabled = scenario('disabled-currencies', { ...DEFAULT_CONFIG, collectibl
 disabled.apply({ kind: 'step', frames: [makeInput(0, 'FLAP')] }); assert.equal(disabled.state.collectibles.length, 0);
 const ineligible = scenario('temporarily-ineligible', { ...DEFAULT_CONFIG, spawnNoneWeight: 0, collectibles: [{ ...DEFAULT_CONFIG.collectibles[1], minPipeIndex: 100 }] });
 ineligible.apply({ kind: 'step', frames: [makeInput(0, 'FLAP')] }); assert.equal(ineligible.state.collectibles.length, 0);
-const long = scenario('default-long-run', DEFAULT_CONFIG, 3);
+const witnessConfig = { ...DEFAULT_CONFIG, flight: { ...DEFAULT_CONFIG.flight, gravity: 1, flapVelocity: -11, maxFallSpeed: 100 }, pipes: { ...DEFAULT_CONFIG.pipes, gapHeight: 300000, gapMinCenter: 230000, gapMaxCenter: 330000, maxGapDelta: 30000 } };
+const long = scenario('custom-bounded-long-run', witnessConfig, 3);
 long.control(219); long.control(781); long.control(23000);
 assert.equal(long.state.tick, 24000); assert.ok(long.state.score > 100);
-assert.equal(configIdFor(DEFAULT_CONFIG), 'dd-v1-speed-v1');
+assert.equal(configIdFor(DEFAULT_CONFIG), 'dd-v1-arcade-v2');
 const speedMiddle = scenario('speed-midpoint', DEFAULT_CONFIG, 1, s => ({
   ...s, phase: 'RUNNING', tick: 2699, nextPipeIndex: 91, nextSpawnPipeIndex: 91,
   duck: { ...s.duck, y: 280000, vy: 0 },
@@ -83,8 +84,8 @@ const speedMiddle = scenario('speed-midpoint', DEFAULT_CONFIG, 1, s => ({
   collectibles: [{ id: 'speed-pickup', typeId: 'FEATHER', x: 800000, y: 280000, amount: 1, radius: 7000, collected: false }]
 }));
 speedMiddle.apply({ kind: 'step', frames: [] });
-assert.equal(speedMiddle.state.pipes.find(p => p.id === 'speed-pipe').x, 796401);
-assert.equal(speedMiddle.state.collectibles.find(c => c.id === 'speed-pickup').x, 796401);
+assert.equal(speedMiddle.state.pipes.find(p => p.id === 'speed-pipe').x, 794202);
+assert.equal(speedMiddle.state.collectibles.find(c => c.id === 'speed-pickup').x, 794202);
 speedMiddle.apply({ kind: 'pause' }); speedMiddle.apply({ kind: 'step', frames: [] }); speedMiddle.apply({ kind: 'resume' });
 const speedCap = scenario('speed-cap-boundary', DEFAULT_CONFIG, 1, s => ({
   ...s, phase: 'RUNNING', tick: 5399, nextPipeIndex: 91, nextSpawnPipeIndex: 91,
@@ -93,20 +94,20 @@ const speedCap = scenario('speed-cap-boundary', DEFAULT_CONFIG, 1, s => ({
   collectibles: [{ id: 'speed-pickup', typeId: 'FEATHER', x: 800000, y: 280000, amount: 1, radius: 7000, collected: false }]
 }));
 speedCap.apply({ kind: 'step', frames: [] });
-assert.equal(speedCap.state.pipes.find(p => p.id === 'speed-pipe').x, 795201);
+assert.equal(speedCap.state.pipes.find(p => p.id === 'speed-pipe').x, 794200);
 const speedCapped = scenario('speed-capped', DEFAULT_CONFIG, 1, s => ({ ...s, phase: 'RUNNING', tick: 5400, nextPipeIndex: 91, nextSpawnPipeIndex: 91, duck: { ...s.duck, y: 280000, vy: 0 }, pipes: [{ id: 'speed-pipe', index: 90, x: 800000, gapCenter: 280000, scored: false }] }));
 speedCapped.apply({ kind: 'step', frames: [] });
-assert.equal(speedCapped.state.pipes.find(p => p.id === 'speed-pipe').x, 795200);
+assert.equal(speedCapped.state.pipes.find(p => p.id === 'speed-pipe').x, 794200);
 const requiredTravel = DEFAULT_CONFIG.pipes.safeLeadIn - Math.floor(DEFAULT_CONFIG.pipes.width / 2) - DEFAULT_CONFIG.flight.duckX - DEFAULT_CONFIG.flight.duckHalfWidth;
 let firstPipeContactTick = 0, traveled = 0;
 while (traveled < requiredTravel) { firstPipeContactTick++; traveled += worldSpeedAt(DEFAULT_CONFIG, firstPipeContactTick); }
 const base = createRun(descriptor('invalid-base'));
 const fixture = {
-  contractVersion: '1.1.0', fixtureRevision: 'foundation-speed-1',
-  rules: { numericUnit: 'millipixel', ticksPerSecond: 60, inputTick: 'Each step call advances one tick; frames are applied on that tick; input sequence contiguous; multiple FLAPs in one call apply one impulse.', speed: 'For positive one-based active tick t, speed=speed+floor((maxSpeed-speed)*min(max(t-1,0),rampTicks)/rampTicks). READY uses base speed on its first running tick; pause freezes tick and restart returns to zero. All existing pipes and pickups move by the same tick speed; new pickups align with their post-movement pipe.', canonical: 'Recursively sorted ASCII object keys; arrays preserve order; safe integers only; no absent or null runtime fields.', generation: { firstPipeX: DEFAULT_CONFIG.pipes.safeLeadIn, spacing: DEFAULT_CONFIG.pipes.spacing, patternBlockSize: 4, patternSelection: 'fmix32(uint32(seed XOR imul(floor(pipeIndex/4)+1,0x9e3779b9))) modulo catalog length; index modulo 4 selects gap', cursor: 'rng cursor advances by uint32(0x9e3779b9) for each generated pipe, and once per evaluated pipe index >=2 spawn opportunity, including NONE and capacity suppression' }, spawn: 'Filter eligibility/spacing, cumulative half-open NONE-first buckets; total zero after filtering means NONE; one opportunity per pipe. Existing items move once; newly spawned items stay aligned with their post-movement pipe. Capacity suppresses spawn without retry.', ordering: 'input/integration/world move; lethal collision; if alive score ordered pipes; generate; spawn opportunities in pipe order; collect in stored array order; cleanup. Lethal tick does not move/collect items or generate.', configIdentity: 'dd-v1-speed-v1 iff config content equals current DEFAULT_CONFIG. Otherwise dd-v1-config: followed by canonical JSON of {configuration,patterns}. No hash collision and no implicit historical registry. Pre-release fixture replaces obsolete never-released tuning.', limits: 'Counter increments checked before Number.MAX_SAFE_INTEGER-1. Object window stays local; no accumulated distance coordinate. Unsupported configs are experiments, not guaranteed reachable.' },
+  contractVersion: '1.2.0', fixtureRevision: 'foundation-arcade-2',
+  rules: { numericUnit: 'millipixel', ticksPerSecond: 60, inputTick: 'Each step call advances one tick; frames are applied on that tick; input sequence contiguous; multiple FLAPs in one call apply one impulse.', speed: 'For one-based active tick t, base=speed+floor((maxSpeed-speed)*clamp(t-1,0,rampTicks)/rampTicks); add floor(speed*floor(score/speedEveryPipes)*speedStepPercent/100), capped at maxSpeed. A score earned during this step affects the following step.', canonical: 'Recursively sorted ASCII object keys; arrays preserve order; safe integers only; no absent or null runtime fields.', generation: { firstPipeX: DEFAULT_CONFIG.pipes.safeLeadIn, spacing: DEFAULT_CONFIG.pipes.spacing, gapSelection: 'center_i is clamp(raw_i, previousGap +/- maxGapDelta, configured bounds), raw_i uses independent fmix32(seed XOR imul(i+1,0x9e3779b9)); first center is clamped around field midpoint', cursor: 'rng cursor advances by uint32(0x9e3779b9) for each generated pipe and each evaluated spawn opportunity, including NONE and capacity suppression' }, spawn: 'Filter eligibility/spacing, cumulative half-open NONE-first buckets; total zero after filtering means NONE; one opportunity per pipe. Existing items move once; newly spawned items stay aligned with their post-movement pipe. Capacity suppresses spawn without retry.', ordering: 'input/integration/world move; lethal collision; if alive score ordered pipes; generate; spawn opportunities in pipe order; collect in stored array order; cleanup. Lethal tick does not move/collect items or generate.', configIdentity: 'dd-v1-arcade-v2 iff config content equals current DEFAULT_CONFIG. Otherwise dd-v1-config: followed by canonical JSON of {configuration,patterns}. No hash collision and no implicit historical registry. Pre-release fixture replaces obsolete never-released tuning.', limits: 'Counter increments checked before Number.MAX_SAFE_INTEGER-1. Object window stays local; no accumulated distance coordinate. Unsupported configs are experiments, not guaranteed reachable.' },
   defaultConfig: DEFAULT_CONFIG, patternCatalog: PATTERN_CATALOG,
   mixerVectors: [0,1,305419896,4294967295].map(input => ({ input, output: mix32(input) })),
-  reachabilityWitness: { controller: 'first tick FLAP; thereafter FLAP when previous y>=333000 and vy>0', firstPipeContactTick: firstPipeContactTick, firstPipeContactTravel: traveled, commonSafeCenterIntervalExclusive: [222000,338000], observedOrbitYRange: [227440,335600], cycleStartTick:115, cycleEndTick:219, cyclePeriod:104, testedLongRunTicks:24000, note:'Closed vertical orbit lies strictly inside every supported default gap; establishes a default-physics surviving strategy across arbitrary catalog transitions, not all player states or custom configs.' },
+  reachabilityWitness: { controller: 'bounded custom-physics long-run controller only; not a default-feasibility claim', firstPipeContactTick, firstPipeContactTravel: traveled, testedLongRunTicks: 24000, note: 'Default gaps vary and require active steering; custom witness does not prove default or arbitrary-config reachability.' },
   cases,
   invalidCases: [
     { name:'unsupported-simulation', kind:'create', descriptor:{ ...base.descriptor, simulationVersion:'99.0.0' }, config:DEFAULT_CONFIG },

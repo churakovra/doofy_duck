@@ -1,5 +1,7 @@
 # Go simulation review follow-up
 
+> Historical review of the prior simulation contract. Current contract identity is simulation 1.2.0 / generator 1.1.0; see [ARCADE_FIXES_RESULTS.md](ARCADE_FIXES_RESULTS.md).
+
 **Verdict: `passed: true` for the focused follow-up to `docs/GO_REVIEW.md` findings 1–4 and raw-JSON fixture parity.** I found no remaining demonstrated logic or security error in those scoped corrections. This is not approval of the full v1 release, HTTP layer, or physical Telegram/mobile behavior.
 
 ## Reproductions and checks

@@ -1,17 +1,26 @@
 import { describe, expect, it } from 'vitest';
 import {
-  DEFAULT_CONFIG, createRun, step, pauseRun, resumeRun, restartRun,
+  DEFAULT_CONFIG, createRunDescriptor, createRun, step, pauseRun, resumeRun, restartRun,
   makeInput, validateConfig, validateDescriptor, mix32, generateNext,
-  Feather, GameStar, collectibleFromDefinition, canonicalState, configIdFor,
+  Feather, GameStar, collectibleFromDefinition, canonicalState,
+  SIMULATION_VERSION, GENERATOR_VERSION, DEFAULT_CONFIG_ID,
 } from '../src/index.js';
 import type { RunDescriptor, InputFrame } from '../src/index.js';
 
-const descriptor: RunDescriptor = {
-  runId: 'run-001', seed: 1, simulationVersion: '1.1.0', generatorVersion: '1.0.0', configId: 'dd-v1-speed-v1',
-};
+const descriptor: RunDescriptor = createRunDescriptor({ runId: 'run-001', seed: 1 });
 const press = (sequence: number): InputFrame => makeInput(sequence, 'FLAP');
 
 describe('public contract validation', () => {
+  it('builds a run descriptor from the current exported rules identity', () => {
+    const current = createRunDescriptor({ runId: 'contract-run', seed: 42 });
+    expect(current).toEqual({
+      runId: 'contract-run', seed: 42,
+      simulationVersion: SIMULATION_VERSION,
+      generatorVersion: GENERATOR_VERSION,
+      configId: DEFAULT_CONFIG_ID,
+    });
+    expect(createRun(current).descriptor).toEqual(current);
+  });
   it('accepts the immutable default config and rejects invalid physics', () => {
     expect(validateConfig(DEFAULT_CONFIG)).toEqual(DEFAULT_CONFIG);
     expect(Object.isFrozen(DEFAULT_CONFIG)).toBe(true);
@@ -54,7 +63,7 @@ describe('deterministic flight and lifecycle', () => {
   });
   it('boundary edge contact kills once and post-death ticks are inert', () => {
     const cfg = { ...DEFAULT_CONFIG, flight: { ...DEFAULT_CONFIG.flight, gravity: 1000, maxFallSpeed: 1000, flapVelocity: -1 } };
-    let state = step(createRun({ ...descriptor, configId: configIdFor(cfg) }, cfg), [press(0)]).state;
+    let state = step(createRun(createRunDescriptor({ runId: descriptor.runId, seed: descriptor.seed }, cfg), cfg), [press(0)]).state;
     for (let i = 0; i < 400 && state.phase !== 'DEAD'; i++) state = step(state, []).state;
     expect(state.phase).toBe('DEAD');
     const again = step(state, [press(state.nextInputSequence)]);
@@ -107,7 +116,7 @@ describe('score and bounded generated world', () => {
   });
   it('maintains bounded live world on a known surviving flap sequence', () => {
     const config = { ...DEFAULT_CONFIG, flight: { ...DEFAULT_CONFIG.flight, gravity: 1, flapVelocity: -11, maxFallSpeed: 100 }, pipes: { ...DEFAULT_CONFIG.pipes, speed: 100, gapHeight: 300000 } };
-    let state = createRun({ ...descriptor, configId: configIdFor(config) }, config);
+    let state = createRun(createRunDescriptor({ runId: descriptor.runId, seed: descriptor.seed }, config), config);
     let flapSeq = 0;
     for (let t = 0; t < 24000 && state.phase !== 'DEAD'; t++) {
       const input = t % 20 === 0 ? [press(flapSeq++)] : [];
@@ -134,10 +143,10 @@ describe('collectible definitions and pickup', () => {
       collectibles: [],
       spawnNoneWeight: 1,
     };
-    let state = createRun({ ...descriptor, configId: configIdFor(config) }, config);
+    let state = createRun(createRunDescriptor({ runId: descriptor.runId, seed: descriptor.seed }, config), config);
     state = step(state, [press(0)]).state;
     expect(state.nextSpawnPipeIndex).toBe(state.nextPipeIndex);
-    expect(state.rngState).toBe((1 + (state.nextPipeIndex + Math.max(0, state.nextPipeIndex - 2)) * 0x9e3779b9) >>> 0);
+    expect(state.rngState).toBe((1 + (state.nextPipeIndex + state.nextPipeIndex) * 0x9e3779b9) >>> 0);
     const again = step(state, []).state;
     expect(again.rngState).toBe(state.rngState);
     expect(again.nextSpawnPipeIndex).toBe(state.nextSpawnPipeIndex);
@@ -149,7 +158,7 @@ describe('collectible definitions and pickup', () => {
       collectibles: DEFAULT_CONFIG.collectibles.map(definition => ({ ...definition, weight: 0 })),
       spawnNoneWeight: 10,
     };
-    const state = createRun({ ...descriptor, configId: configIdFor(config) }, config);
+    const state = createRun(createRunDescriptor({ runId: descriptor.runId, seed: descriptor.seed }, config), config);
     const started = step(state, [press(0)]);
     expect(started.state.collectibles).toEqual([]);
   });
