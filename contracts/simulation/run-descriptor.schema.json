@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://doofy-duck.invalid/contracts/simulation/run-descriptor.schema.json",
+  "title": "Doofy Duck Simulation Run Descriptor",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["runId", "seed", "simulationVersion", "generatorVersion", "configId"],
+  "properties": {
+    "runId": { "type": "string", "minLength": 1 },
+    "seed": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+    "simulationVersion": { "type": "string", "const": "1.0.0" },
+    "generatorVersion": { "type": "string", "const": "1.0.0" },
+    "configId": { "type": "string", "minLength": 1 }
+  }
+}

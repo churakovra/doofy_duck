@@ -1,0 +1,43 @@
+{
+  "name": "doofy-duck-core",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": [
+    "packages/game-sim",
+    "apps/web"
+  ],
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "dev": "npm run build:sim && npm run dev --workspace @doofy-duck/web -- --host 127.0.0.1",
+    "test:go": "go -C services/core/simulation test -count=1 ./...",
+    "test:go:race": "go -C services/core/simulation test -race -count=1 ./...",
+    "test:parity": "npm run build:sim && vitest run packages/game-sim/test/fixtures.test.ts && go -C services/core/simulation test -count=1 -run Foundation2 ./...",
+    "check": "npm run typecheck && npm run lint && npm test && npm run test:go && npm run test:browser",
+    "test:browser": "npm run build && playwright test -c apps/web/playwright.config.ts",
+    "typecheck": "npm run build:sim && tsc --noEmit && tsc -p apps/web/tsconfig.json",
+    "build:sim": "tsc -p packages/game-sim/tsconfig.build.json",
+    "build:web": "vite build --config apps/web/vite.config.ts",
+    "build": "npm run build:sim && npm run build:web",
+    "lint": "eslint packages/game-sim/src packages/game-sim/test apps/web/src apps/web/test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1",
+    "@types/node": "24.10.0",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "5.2.0",
+    "eslint": "10.12.0",
+    "jsdom": "30.1.2",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.71.2",
+    "vite": "7.3.7",
+    "vitest": "5.0.4"
+  },
+  "dependencies": {
+    "pixi.js": "8.22.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  }
+}

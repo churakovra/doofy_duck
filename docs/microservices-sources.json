@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "sources": [
+    {
+      "id": 1,
+      "url": "https://fastapi.tiangolo.com/features",
+      "title": "",
+      "accessed": "2026-10-09",
+      "quotes": [
+        {
+          "text": "OpenAPI for API creation, including declarations of path operations, parameters, request bodies, security, etc.",
+          "added": "2026-10-10"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "url": "https://docs.aiogram.dev/en/latest/dispatcher/webhook.html",
+      "title": "",
+      "accessed": "2026-10-09",
+      "quotes": [
+        {
+          "text": "You can use any async web framework you want, but you should write your own integration if you don’t use aiohttp.",
+          "added": "2026-10-10"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "url": "https://docs.nats.io/concepts/jetstream",
+      "title": "",
+      "accessed": "2026-10-09",
+      "quotes": [
+        {
+          "text": "JetStream adds a persistence layer on top, giving you at-least-once delivery",
+          "added": "2026-10-10"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "url": "https://go.dev/wiki/WebAssembly",
+      "title": "",
+      "accessed": "2026-10-09",
+      "quotes": [
+        {
+          "text": "Set GOOS=js and GOARCH=wasm environment variables to compile for WebAssembly:",
+          "added": "2026-10-10"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "url": "https://go.dev/doc/diagnostics",
+      "title": "",
+      "accessed": "2026-10-09",
+      "quotes": [
+        {
+          "text": "Profiling is useful for identifying expensive or frequently called sections of code.",
+          "added": "2026-10-10"
+        }
+      ]
+    }
+  ]
+}

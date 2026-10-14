@@ -1,0 +1,117 @@
+{
+  "version": 1,
+  "sources": [
+    {
+      "id": 1,
+      "url": "https://telegram.org/blog/gifts-verification-platform/ru?ln=a",
+      "title": "",
+      "accessed": "2026-10-10",
+      "quotes": [
+        {
+          "text": "Пользователи теперь могут отправлять друг другу подарки за Звёзды Telegram.",
+          "added": "2026-10-10"
+        },
+        {
+          "text": "5 октября 2024, Команда Telegram",
+          "added": "2026-10-10"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "url": "https://core.telegram.org/bots/api",
+      "title": "",
+      "accessed": "2026-10-10",
+      "quotes": [
+        {
+          "text": "The gift can't be converted to Telegram Stars by the receiver.",
+          "added": "2026-10-10"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "url": "https://raw.githubusercontent.com/nats-io/nats-server/main/LICENSE",
+      "title": "",
+      "accessed": "2026-10-10",
+      "quotes": [
+        {
+          "text": "worldwide, non-exclusive, no-charge, royalty-free, irrevocable copyright license",
+          "added": "2026-10-10"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "url": "https://docs.nats.io/concepts/jetstream",
+      "title": "",
+      "accessed": "2026-10-10",
+      "quotes": [
+        {
+          "text": "JetStream adds a persistence layer on top, giving you at-least-once delivery",
+          "added": "2026-10-10"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "url": "https://raw.githubusercontent.com/rabbitmq/rabbitmq-server/main/LICENSE",
+      "title": "",
+      "accessed": "2026-10-10",
+      "quotes": [
+        {
+          "text": "RabbitMQ server and its tier 1 (core) plugins source code is licensed under the MPL 2.0.",
+          "added": "2026-10-10"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "url": "https://www.rabbitmq.com/tutorials/tutorial-two-python",
+      "title": "",
+      "accessed": "2026-10-10",
+      "quotes": [
+        {
+          "text": "The main idea behind Work Queues",
+          "added": "2026-10-10"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "url": "https://www.rabbitmq.com/docs/confirms",
+      "title": "",
+      "accessed": "2026-10-10",
+      "quotes": [
+        {
+          "text": "The two features, however, are entirely orthogonal and unaware of each other.",
+          "added": "2026-10-10"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "url": "https://www.rabbitmq.com/docs/quorum-queues",
+      "title": "",
+      "accessed": "2026-10-10",
+      "quotes": [
+        {
+          "text": "The RabbitMQ quorum queue is a modern queue type which implements a durable, replicated queue based on the Raft consensus algorithm",
+          "added": "2026-10-10"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "url": "https://kafka.apache.org/intro",
+      "title": "",
+      "accessed": "2026-10-10",
+      "quotes": [
+        {
+          "text": "Events in a topic can be read as often as needed",
+          "added": "2026-10-10"
+        }
+      ]
+    }
+  ]
+}

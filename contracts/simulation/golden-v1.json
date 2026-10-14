@@ -1,0 +1,6355 @@
+{
+  "contractVersion": "1.0.0",
+  "fixtureRevision": "foundation-2",
+  "rules": {
+    "numericUnit": "millipixel",
+    "ticksPerSecond": 60,
+    "inputTick": "Each step call advances one tick; frames are applied on that tick; input sequence contiguous; multiple FLAPs in one call apply one impulse.",
+    "canonical": "Recursively sorted ASCII object keys; arrays preserve order; safe integers only; no absent or null runtime fields.",
+    "generation": {
+      "firstPipeX": 420000,
+      "spacing": 220000,
+      "patternBlockSize": 4,
+      "patternSelection": "fmix32(uint32(seed XOR imul(floor(pipeIndex/4)+1,0x9e3779b9))) modulo catalog length; index modulo 4 selects gap",
+      "cursor": "rng cursor advances by uint32(0x9e3779b9) for each generated pipe, and once per evaluated pipe index >=2 spawn opportunity, including NONE and capacity suppression"
+    },
+    "spawn": "Filter eligibility/spacing, cumulative half-open NONE-first buckets; total zero after filtering means NONE; one opportunity per pipe. Existing items move once; newly spawned items stay aligned with their post-movement pipe. Capacity suppresses spawn without retry.",
+    "ordering": "input/integration/world move; lethal collision; if alive score ordered pipes; generate; spawn opportunities in pipe order; collect in stored array order; cleanup. Lethal tick does not move/collect items or generate.",
+    "configIdentity": "dd-v1-default iff config content equals current DEFAULT_CONFIG. Otherwise dd-v1-config: followed by canonical JSON of {configuration,patterns}. No hash collision and no implicit historical registry. Pre-release fixture replaces obsolete never-released tuning.",
+    "limits": "Counter increments checked before Number.MAX_SAFE_INTEGER-1. Object window stays local; no accumulated distance coordinate. Unsupported configs are experiments, not guaranteed reachable."
+  },
+  "defaultConfig": {
+    "flight": {
+      "gravity": 80,
+      "flapVelocity": -4200,
+      "maxFallSpeed": 6000,
+      "duckX": 160000,
+      "duckHalfWidth": 12000,
+      "duckHalfHeight": 10000
+    },
+    "pipes": {
+      "speed": 2400,
+      "spacing": 220000,
+      "width": 52000,
+      "gapHeight": 176000,
+      "safeLeadIn": 420000,
+      "horizon": 960000,
+      "floorY": 580000,
+      "ceilingY": 0
+    },
+    "limits": {
+      "maxActivePipes": 8,
+      "maxActiveCollectibles": 2
+    },
+    "collectibles": [
+      {
+        "typeId": "FEATHER",
+        "version": 1,
+        "weight": 18,
+        "minPipeIndex": 2,
+        "minSpacingPipes": 3,
+        "amount": 1,
+        "radius": 7000,
+        "appearance": "feather-v1"
+      },
+      {
+        "typeId": "GAME_STAR",
+        "version": 1,
+        "weight": 4,
+        "minPipeIndex": 5,
+        "minSpacingPipes": 5,
+        "amount": 1,
+        "radius": 7000,
+        "appearance": "game-star-v1"
+      }
+    ],
+    "spawnNoneWeight": 78
+  },
+  "patternCatalog": [
+    {
+      "id": "center",
+      "gaps": [
+        280000,
+        280000,
+        280000,
+        280000
+      ]
+    },
+    {
+      "id": "rise-fall",
+      "gaps": [
+        260000,
+        280000,
+        300000,
+        280000
+      ]
+    },
+    {
+      "id": "fall-rise",
+      "gaps": [
+        300000,
+        280000,
+        260000,
+        280000
+      ]
+    }
+  ],
+  "mixerVectors": [
+    {
+      "input": 0,
+      "output": 0
+    },
+    {
+      "input": 1,
+      "output": 1364076727
+    },
+    {
+      "input": 305419896,
+      "output": 3816608188
+    },
+    {
+      "input": 4294967295,
+      "output": 2180083513
+    }
+  ],
+  "reachabilityWitness": {
+    "controller": "first tick FLAP; thereafter FLAP when previous y>=333000 and vy>0",
+    "firstPipeContactTick": 93,
+    "commonSafeCenterIntervalExclusive": [
+      222000,
+      338000
+    ],
+    "observedOrbitYRange": [
+      227440,
+      335600
+    ],
+    "cycleStartTick": 115,
+    "cycleEndTick": 219,
+    "cyclePeriod": 104,
+    "testedLongRunTicks": 24000,
+    "note": "Closed vertical orbit lies strictly inside every supported default gap; establishes a default-physics surviving strategy across arbitrary catalog transitions, not all player states or custom configs."
+  },
+  "cases": [
+    {
+      "name": "lifecycle",
+      "syntheticInitialState": false,
+      "initialState": {
+        "collectibles": [],
+        "config": {
+          "collectibles": [
+            {
+              "amount": 1,
+              "appearance": "feather-v1",
+              "minPipeIndex": 2,
+              "minSpacingPipes": 3,
+              "radius": 7000,
+              "typeId": "FEATHER",
+              "version": 1,
+              "weight": 18
+            },
+            {
+              "amount": 1,
+              "appearance": "game-star-v1",
+              "minPipeIndex": 5,
+              "minSpacingPipes": 5,
+              "radius": 7000,
+              "typeId": "GAME_STAR",
+              "version": 1,
+              "weight": 4
+            }
+          ],
+          "flight": {
+            "duckHalfHeight": 10000,
+            "duckHalfWidth": 12000,
+            "duckX": 160000,
+            "flapVelocity": -4200,
+            "gravity": 80,
+            "maxFallSpeed": 6000
+          },
+          "limits": {
+            "maxActiveCollectibles": 2,
+            "maxActivePipes": 8
+          },
+          "pipes": {
+            "ceilingY": 0,
+            "floorY": 580000,
+            "gapHeight": 176000,
+            "horizon": 960000,
+            "safeLeadIn": 420000,
+            "spacing": 220000,
+            "speed": 2400,
+            "width": 52000
+          },
+          "spawnNoneWeight": 78
+        },
+        "descriptor": {
+          "configId": "dd-v1-default",
+          "generatorVersion": "1.0.0",
+          "runId": "lifecycle",
+          "seed": 1,
+          "simulationVersion": "1.0.0"
+        },
+        "duck": {
+          "vy": 0,
+          "x": 160000,
+          "y": 290000
+        },
+        "finalizationCount": 0,
+        "inputHistory": [],
+        "lastCollectiblePipe": -1000000,
+        "nextInputSequence": 0,
+        "nextPipeIndex": 3,
+        "nextSpawnPipeIndex": 0,
+        "phase": "READY",
+        "pipes": [
+          {
+            "gapCenter": 260000,
+            "id": "pipe-0",
+            "index": 0,
+            "scored": false,
+            "x": 420000
+          },
+          {
+            "gapCenter": 280000,
+            "id": "pipe-1",
+            "index": 1,
+            "scored": false,
+            "x": 640000
+          },
+          {
+            "gapCenter": 300000,
+            "id": "pipe-2",
+            "index": 2,
+            "scored": false,
+            "x": 860000
+          }
+        ],
+        "rngState": 3668340012,
+        "score": 0,
+        "tick": 0,
+        "totals": {}
+      },
+      "operations": [
+        {
+          "kind": "step",
+          "frames": [
+            {
+              "sequence": 0,
+              "action": "FLAP"
+            }
+          ],
+          "expectedState": {
+            "collectibles": [],
+            "config": {
+              "collectibles": [
+                {
+                  "amount": 1,
+                  "appearance": "feather-v1",
+                  "minPipeIndex": 2,
+                  "minSpacingPipes": 3,
+                  "radius": 7000,
+                  "typeId": "FEATHER",
+                  "version": 1,
+                  "weight": 18
+                },
+                {
+                  "amount": 1,
+                  "appearance": "game-star-v1",
+                  "minPipeIndex": 5,
+                  "minSpacingPipes": 5,
+                  "radius": 7000,
+                  "typeId": "GAME_STAR",
+                  "version": 1,
+                  "weight": 4
+                }
+              ],
+              "flight": {
+                "duckHalfHeight": 10000,
+                "duckHalfWidth": 12000,
+                "duckX": 160000,
+                "flapVelocity": -4200,
+                "gravity": 80,
+                "maxFallSpeed": 6000
+              },
+              "limits": {
+                "maxActiveCollectibles": 2,
+                "maxActivePipes": 8
+              },
+              "pipes": {
+                "ceilingY": 0,
+                "floorY": 580000,
+                "gapHeight": 176000,
+                "horizon": 960000,
+                "safeLeadIn": 420000,
+                "spacing": 220000,
+                "speed": 2400,
+                "width": 52000
+              },
+              "spawnNoneWeight": 78
+            },
+            "descriptor": {
+              "configId": "dd-v1-default",
+              "generatorVersion": "1.0.0",
+              "runId": "lifecycle",
+              "seed": 1,
+              "simulationVersion": "1.0.0"
+            },
+            "duck": {
+              "vy": -4120,
+              "x": 160000,
+              "y": 285880
+            },
+            "finalizationCount": 0,
+            "inputHistory": [],
+            "lastCollectiblePipe": -1000000,
+            "nextInputSequence": 1,
+            "nextPipeIndex": 3,
+            "nextSpawnPipeIndex": 3,
+            "phase": "RUNNING",
+            "pipes": [
+              {
+                "gapCenter": 260000,
+                "id": "pipe-0",
+                "index": 0,
+                "scored": false,
+                "x": 417600
+              },
+              {
+                "gapCenter": 280000,
+                "id": "pipe-1",
+                "index": 1,
+                "scored": false,
+                "x": 637600
+              },
+              {
+                "gapCenter": 300000,
+                "id": "pipe-2",
+                "index": 2,
+                "scored": false,
+                "x": 857600
+              }
+            ],
+            "rngState": 2027808485,
+            "score": 0,
+            "tick": 1,
+            "totals": {}
+          },
+          "expectedEvents": [
+            {
+              "type": "RunStarted",
+              "runId": "lifecycle",
+              "tick": 1
+            }
+          ]
+        },
+        {
+          "kind": "step",
+          "frames": [],
+          "expectedState": {
+            "collectibles": [],
+            "config": {
+              "collectibles": [
+                {
+                  "amount": 1,
+                  "appearance": "feather-v1",
+                  "minPipeIndex": 2,
+                  "minSpacingPipes": 3,
+                  "radius": 7000,
+                  "typeId": "FEATHER",
+                  "version": 1,
+                  "weight": 18
+                },
+                {
+                  "amount": 1,
+                  "appearance": "game-star-v1",
+                  "minPipeIndex": 5,
+                  "minSpacingPipes": 5,
+                  "radius": 7000,
+                  "typeId": "GAME_STAR",
+                  "version": 1,
+                  "weight": 4
+                }
+              ],
+              "flight": {
+                "duckHalfHeight": 10000,
+                "duckHalfWidth": 12000,
+                "duckX": 160000,
+                "flapVelocity": -4200,
+                "gravity": 80,
+                "maxFallSpeed": 6000
+              },
+              "limits": {
+                "maxActiveCollectibles": 2,
+                "maxActivePipes": 8
+              },
+              "pipes": {
+                "ceilingY": 0,
+                "floorY": 580000,
+                "gapHeight": 176000,
+                "horizon": 960000,
+                "safeLeadIn": 420000,
+                "spacing": 220000,
+                "speed": 2400,
+                "width": 52000
+              },
+              "spawnNoneWeight": 78
+            },
+            "descriptor": {
+              "configId": "dd-v1-default",
+              "generatorVersion": "1.0.0",
+              "runId": "lifecycle",
+              "seed": 1,
+              "simulationVersion": "1.0.0"
+            },
+            "duck": {
+              "vy": -4040,
+              "x": 160000,
+              "y": 281840
+            },
+            "finalizationCount": 0,
+            "inputHistory": [],
+            "lastCollectiblePipe": -1000000,
+            "nextInputSequence": 1,
+            "nextPipeIndex": 3,
+            "nextSpawnPipeIndex": 3,
+            "phase": "RUNNING",
+            "pipes": [
+              {
+                "gapCenter": 260000,
+                "id": "pipe-0",
+                "index": 0,
+                "scored": false,
+                "x": 415200
+              },
+              {
+                "gapCenter": 280000,
+                "id": "pipe-1",
+                "index": 1,
+                "scored": false,
+                "x": 635200
+              },
+              {
+                "gapCenter": 300000,
+                "id": "pipe-2",
+                "index": 2,
+                "scored": false,
+                "x": 855200
+              }
+            ],
+            "rngState": 2027808485,
+            "score": 0,
+            "tick": 2,
+            "totals": {}
+          },
+          "expectedEvents": []
+        },
+        {
+          "kind": "step",
+          "frames": [],
+          "expectedState": {
+            "collectibles": [],
+            "config": {
+              "collectibles": [
+                {
+                  "amount": 1,
+                  "appearance": "feather-v1",
+                  "minPipeIndex": 2,
+                  "minSpacingPipes": 3,
+                  "radius": 7000,
+                  "typeId": "FEATHER",
+                  "version": 1,
+                  "weight": 18
+                },
+                {
+                  "amount": 1,
+                  "appearance": "game-star-v1",
+                  "minPipeIndex": 5,
+                  "minSpacingPipes": 5,
+                  "radius": 7000,
+                  "typeId": "GAME_STAR",
+                  "version": 1,
+                  "weight": 4
+                }
+              ],
+              "flight": {
+                "duckHalfHeight": 10000,
+                "duckHalfWidth": 12000,
+                "duckX": 160000,
+                "flapVelocity": -4200,
+                "gravity": 80,
+                "maxFallSpeed": 6000
+              },
+              "limits": {
+                "maxActiveCollectibles": 2,
+                "maxActivePipes": 8
+              },
+              "pipes": {
+                "ceilingY": 0,
+                "floorY": 580000,
+                "gapHeight": 176000,
+                "horizon": 960000,
+                "safeLeadIn": 420000,
+                "spacing": 220000,
+                "speed": 2400,
+                "width": 52000
+              },
+              "spawnNoneWeight": 78
+            },
+            "descriptor": {
+              "configId": "dd-v1-default",
+              "generatorVersion": "1.0.0",
+              "runId": "lifecycle",
+              "seed": 1,
+              "simulationVersion": "1.0.0"
+            },
+            "duck": {
+              "vy": -3960,
+              "x": 160000,
+              "y": 277880
+            },
+            "finalizationCount": 0,
+            "inputHistory": [],
+            "lastCollectiblePipe": -1000000,
+            "nextInputSequence": 1,
+            "nextPipeIndex": 3,
+            "nextSpawnPipeIndex": 3,
+            "phase": "RUNNING",
+            "pipes": [
+              {
+                "gapCenter": 260000,
+                "id": "pipe-0",
+                "index": 0,
+                "scored": false,
+                "x": 412800
+              },
+              {
+                "gapCenter": 280000,
+                "id": "pipe-1",
+                "index": 1,
+                "scored": false,
+                "x": 632800
+              },
+              {
+                "gapCenter": 300000,
+                "id": "pipe-2",
+                "index": 2,
+                "scored": false,
+                "x": 852800
+              }
+            ],
+            "rngState": 2027808485,
+            "score": 0,
+            "tick": 3,
+            "totals": {}
+          },
+          "expectedEvents": []
+        },
+        {
+          "kind": "step",
+          "frames": [],
+          "expectedState": {
+            "collectibles": [],
+            "config": {
+              "collectibles": [
+                {
+                  "amount": 1,
+                  "appearance": "feather-v1",
+                  "minPipeIndex": 2,
+                  "minSpacingPipes": 3,
+                  "radius": 7000,
+                  "typeId": "FEATHER",
+                  "version": 1,
+                  "weight": 18
+                },
+                {
+                  "amount": 1,
+                  "appearance": "game-star-v1",
+                  "minPipeIndex": 5,
+                  "minSpacingPipes": 5,
+                  "radius": 7000,
+                  "typeId": "GAME_STAR",
+                  "version": 1,
+                  "weight": 4
+                }
+              ],
+              "flight": {
+                "duckHalfHeight": 10000,
+                "duckHalfWidth": 12000,
+                "duckX": 160000,
+                "flapVelocity": -4200,
+                "gravity": 80,
+                "maxFallSpeed": 6000
+              },
+              "limits": {
+                "maxActiveCollectibles": 2,
+                "maxActivePipes": 8
+              },
+              "pipes": {
+                "ceilingY": 0,
+                "floorY": 580000,
+                "gapHeight": 176000,
+                "horizon": 960000,
+                "safeLeadIn": 420000,
+                "spacing": 220000,
+                "speed": 2400,
+                "width": 52000
+              },
+              "spawnNoneWeight": 78
+            },
+            "descriptor": {
+              "configId": "dd-v1-default",
+              "generatorVersion": "1.0.0",
+              "runId": "lifecycle",
+              "seed": 1,
+              "simulationVersion": "1.0.0"
+            },
+            "duck": {
+              "vy": -3880,
+              "x": 160000,
+              "y": 274000
+            },
+            "finalizationCount": 0,
+            "inputHistory": [],
+            "lastCollectiblePipe": -1000000,
+            "nextInputSequence": 1,
+            "nextPipeIndex": 3,
+            "nextSpawnPipeIndex": 3,
+            "phase": "RUNNING",
+            "pipes": [
+              {
+                "gapCenter": 260000,
+                "id": "pipe-0",
+                "index": 0,
+                "scored": false,
+                "x": 410400
+              },
+              {
+                "gapCenter": 280000,
+                "id": "pipe-1",
+                "index": 1,
+                "scored": false,
+                "x": 630400
+              },
+              {
+                "gapCenter": 300000,
+                "id": "pipe-2",
+                "index": 2,
+                "scored": false,
+                "x": 850400
+              }
+            ],
+            "rngState": 2027808485,
+            "score": 0,
+            "tick": 4,
+            "totals": {}
+          },
+          "expectedEvents": []
+        },
+        {
+          "kind": "pause",
+          "expectedState": {
+            "collectibles": [],
+            "config": {
+              "collectibles": [
+                {
+                  "amount": 1,
+                  "appearance": "feather-v1",
+                  "minPipeIndex": 2,
+                  "minSpacingPipes": 3,
+                  "radius": 7000,
+                  "typeId": "FEATHER",
+                  "version": 1,
+                  "weight": 18
+                },
+                {
+                  "amount": 1,
+                  "appearance": "game-star-v1",
+                  "minPipeIndex": 5,
+                  "minSpacingPipes": 5,
+                  "radius": 7000,
+                  "typeId": "GAME_STAR",
+                  "version": 1,
+                  "weight": 4
+                }
+              ],
+              "flight": {
+                "duckHalfHeight": 10000,
+                "duckHalfWidth": 12000,
+                "duckX": 160000,
+                "flapVelocity": -4200,
+                "gravity": 80,
+                "maxFallSpeed": 6000
+              },
+              "limits": {
+                "maxActiveCollectibles": 2,
+                "maxActivePipes": 8
+              },
+              "pipes": {
+                "ceilingY": 0,
+                "floorY": 580000,
+                "gapHeight": 176000,
+                "horizon": 960000,
+                "safeLeadIn": 420000,
+                "spacing": 220000,
+                "speed": 2400,
+                "width": 52000
+              },
+              "spawnNoneWeight": 78
+            },
+            "descriptor": {
+              "configId": "dd-v1-default",
+              "generatorVersion": "1.0.0",
+              "runId": "lifecycle",
+              "seed": 1,
+              "simulationVersion": "1.0.0"
+            },
+            "duck": {
+              "vy": -3880,
+              "x": 160000,
+              "y": 274000
+            },
+            "finalizationCount": 0,
+            "inputHistory": [],
+            "lastCollectiblePipe": -1000000,
+            "nextInputSequence": 1,
+            "nextPipeIndex": 3,
+            "nextSpawnPipeIndex": 3,
+            "phase": "PAUSED",
+            "pipes": [
+              {
+                "gapCenter": 260000,
+                "id": "pipe-0",
+                "index": 0,
+                "scored": false,
+                "x": 410400
+              },
+              {
+                "gapCenter": 280000,
+                "id": "pipe-1",
+                "index": 1,
+                "scored": false,
+                "x": 630400
+              },
+              {
+                "gapCenter": 300000,
+                "id": "pipe-2",
+                "index": 2,
+                "scored": false,
+                "x": 850400
+              }
+            ],
+            "rngState": 2027808485,
+            "score": 0,
+            "tick": 4,
+            "totals": {}
+          },
+          "expectedEvents": []
+        },
+        {
+          "kind": "step",
+          "frames": [],
+          "expectedState": {
+            "collectibles": [],
+            "config": {
+              "collectibles": [
+                {
+                  "amount": 1,
+                  "appearance": "feather-v1",
+                  "minPipeIndex": 2,
+                  "minSpacingPipes": 3,
+                  "radius": 7000,
+                  "typeId": "FEATHER",
+                  "version": 1,
+                  "weight": 18
+                },
+                {
+                  "amount": 1,
+                  "appearance": "game-star-v1",
+                  "minPipeIndex": 5,
+                  "minSpacingPipes": 5,
+                  "radius": 7000,
+                  "typeId": "GAME_STAR",
+                  "version": 1,
+                  "weight": 4
+                }
+              ],
+              "flight": {
+                "duckHalfHeight": 10000,
+                "duckHalfWidth": 12000,
+                "duckX": 160000,
+                "flapVelocity": -4200,
+                "gravity": 80,
+                "maxFallSpeed": 6000
+              },
+              "limits": {
+                "maxActiveCollectibles": 2,
+                "maxActivePipes": 8
+              },
+              "pipes": {
+                "ceilingY": 0,
+                "floorY": 580000,
+                "gapHeight": 176000,
+                "horizon": 960000,
+                "safeLeadIn": 420000,
+                "spacing": 220000,
+                "speed": 2400,
+                "width": 52000
+              },
+              "spawnNoneWeight": 78
+            },
+            "descriptor": {
+              "configId": "dd-v1-default",
+              "generatorVersion": "1.0.0",
+              "runId": "lifecycle",
+              "seed": 1,
+              "simulationVersion": "1.0.0"
+            },
+            "duck": {
+              "vy": -3880,
+              "x": 160000,
+              "y": 274000
+            },
+            "finalizationCount": 0,
+            "inputHistory": [],
+            "lastCollectiblePipe": -1000000,
+            "nextInputSequence": 1,
+            "nextPipeIndex": 3,
+            "nextSpawnPipeIndex": 3,
+            "phase": "PAUSED",
+            "pipes": [
+              {
+                "gapCenter": 260000,
+                "id": "pipe-0",
+                "index": 0,
+                "scored": false,
+                "x": 410400
+              },
+              {
+                "gapCenter": 280000,
+                "id": "pipe-1",
+                "index": 1,
+                "scored": false,
+                "x": 630400
+              },
+              {
+                "gapCenter": 300000,
+                "id": "pipe-2",
+                "index": 2,
+                "scored": false,
+                "x": 850400
+              }
+            ],
+            "rngState": 2027808485,
+            "score": 0,
+            "tick": 4,
+            "totals": {}
+          },
+          "expectedEvents": []
+        },
+        {
+          "kind": "resume",
+          "expectedState": {
+            "collectibles": [],
+            "config": {
+              "collectibles": [
+                {
+                  "amount": 1,
+                  "appearance": "feather-v1",
+                  "minPipeIndex": 2,
+                  "minSpacingPipes": 3,
+                  "radius": 7000,
+                  "typeId": "FEATHER",
+                  "version": 1,
+                  "weight": 18
+                },
+                {
+                  "amount": 1,
+                  "appearance": "game-star-v1",
+                  "minPipeIndex": 5,
+                  "minSpacingPipes": 5,
+                  "radius": 7000,
+                  "typeId": "GAME_STAR",
+                  "version": 1,
+                  "weight": 4
+                }
+              ],
+              "flight": {
+                "duckHalfHeight": 10000,
+                "duckHalfWidth": 12000,
+                "duckX": 160000,
+                "flapVelocity": -4200,
+                "gravity": 80,
+                "maxFallSpeed": 6000
+              },
+              "limits": {
+                "maxActiveCollectibles": 2,
+                "maxActivePipes": 8
+              },
+              "pipes": {
+                "ceilingY": 0,
+                "floorY": 580000,
+                "gapHeight": 176000,
+                "horizon": 960000,
+                "safeLeadIn": 420000,
+                "spacing": 220000,
+                "speed": 2400,
+                "width": 52000
+              },
+              "spawnNoneWeight": 78
+            },
+            "descriptor": {
+              "configId": "dd-v1-default",
+              "generatorVersion": "1.0.0",
+              "runId": "lifecycle",
+              "seed": 1,
+              "simulationVersion": "1.0.0"
+            },
+            "duck": {
+              "vy": -3880,
+              "x": 160000,
+              "y": 274000
+            },
+            "finalizationCount": 0,
+            "inputHistory": [],
+            "lastCollectiblePipe": -1000000,
+            "nextInputSequence": 1,
+            "nextPipeIndex": 3,
+            "nextSpawnPipeIndex": 3,
+            "phase": "RUNNING",
+            "pipes": [
+              {
+                "gapCenter": 260000,
+                "id": "pipe-0",
+                "index": 0,
+                "scored": false,
+                "x": 410400
+              },
+              {
+                "gapCenter": 280000,
+                "id": "pipe-1",
+                "index": 1,
+                "scored": false,
+                "x": 630400
+              },
+              {
+                "gapCenter": 300000,
+                "id": "pipe-2",
+                "index": 2,
+                "scored": false,
+                "x": 850400
+              }
+            ],
+            "rngState": 2027808485,
+            "score": 0,
+            "tick": 4,
+            "totals": {}
+          },
+          "expectedEvents": []
+        },
+        {
+          "kind": "step",
+          "frames": [
+            {
+              "sequence": 1,
+              "action": "FLAP"
+            }
+          ],
+          "expectedState": {
+            "collectibles": [],
+            "config": {
+              "collectibles": [
+                {
+                  "amount": 1,
+                  "appearance": "feather-v1",
+                  "minPipeIndex": 2,
+                  "minSpacingPipes": 3,
+                  "radius": 7000,
+                  "typeId": "FEATHER",
+                  "version": 1,
+                  "weight": 18
+                },
+                {
+                  "amount": 1,
+                  "appearance": "game-star-v1",
+                  "minPipeIndex": 5,
+                  "minSpacingPipes": 5,
+                  "radius": 7000,
+                  "typeId": "GAME_STAR",
+                  "version": 1,
+                  "weight": 4
+                }
+              ],
+              "flight": {
+                "duckHalfHeight": 10000,
+                "duckHalfWidth": 12000,
+                "duckX": 160000,
+                "flapVelocity": -4200,
+                "gravity": 80,
+                "maxFallSpeed": 6000
+              },
+              "limits": {
+                "maxActiveCollectibles": 2,
+                "maxActivePipes": 8
+              },
+              "pipes": {
+                "ceilingY": 0,
+                "floorY": 580000,
+                "gapHeight": 176000,
+                "horizon": 960000,
+                "safeLeadIn": 420000,
+                "spacing": 220000,
+                "speed": 2400,
+                "width": 52000
+              },
+              "spawnNoneWeight": 78
+            },
+            "descriptor": {
+              "configId": "dd-v1-default",
+              "generatorVersion": "1.0.0",
+              "runId": "lifecycle",
+              "seed": 1,
+              "simulationVersion": "1.0.0"
+            },
+            "duck": {
+              "vy": -4120,
+              "x": 160000,
+              "y": 269880
+            },
+            "finalizationCount": 0,
+            "inputHistory": [],
+            "lastCollectiblePipe": -1000000,
+            "nextInputSequence": 2,
+            "nextPipeIndex": 3,
+            "nextSpawnPipeIndex": 3,
+            "phase": "RUNNING",
+            "pipes": [
+              {
+                "gapCenter": 260000,
+                "id": "pipe-0",
+                "index": 0,
+                "scored": false,
+                "x": 408000
+              },
+              {
+                "gapCenter": 280000,
+                "id": "pipe-1",
+                "index": 1,
+                "scored": false,
+                "x": 628000
+              },
+              {
+                "gapCenter": 300000,
+                "id": "pipe-2",
+                "index": 2,
+                "scored": false,
+                "x": 848000
+              }
+            ],
+            "rngState": 2027808485,
+            "score": 0,
+            "tick": 5,
+            "totals": {}
+          },
+          "expectedEvents": []
+        },
+        {
+          "kind": "restart",
+          "descriptor": {
+            "runId": "lifecycle-restarted",
+            "seed": 7,
+            "simulationVersion": "1.0.0",
+            "generatorVersion": "1.0.0",
+            "configId": "dd-v1-default"
+          },
+          "expectedState": {
+            "collectibles": [],
+            "config": {
+              "collectibles": [
+                {
+                  "amount": 1,
+                  "appearance": "feather-v1",
+                  "minPipeIndex": 2,
+                  "minSpacingPipes": 3,
+                  "radius": 7000,
+                  "typeId": "FEATHER",
+                  "version": 1,
+                  "weight": 18
+                },
+                {
+                  "amount": 1,
+                  "appearance": "game-star-v1",
+                  "minPipeIndex": 5,
+                  "minSpacingPipes": 5,
+                  "radius": 7000,
+                  "typeId": "GAME_STAR",
+                  "version": 1,
+                  "weight": 4
+                }
+              ],
+              "flight": {
+                "duckHalfHeight": 10000,
+                "duckHalfWidth": 12000,
+                "duckX": 160000,
+                "flapVelocity": -4200,
+                "gravity": 80,
+                "maxFallSpeed": 6000
+              },
+              "limits": {
+                "maxActiveCollectibles": 2,
+                "maxActivePipes": 8
+              },
+              "pipes": {
+                "ceilingY": 0,
+                "floorY": 580000,
+                "gapHeight": 176000,
+                "horizon": 960000,
+                "safeLeadIn": 420000,
+                "spacing": 220000,
+                "speed": 2400,
+                "width": 52000
+              },
+              "spawnNoneWeight": 78
+            },
+            "descriptor": {
+              "configId": "dd-v1-default",
+              "generatorVersion": "1.0.0",
+              "runId": "lifecycle-restarted",
+              "seed": 7,
+              "simulationVersion": "1.0.0"
+            },
+            "duck": {
+              "vy": 0,
+              "x": 160000,
+              "y": 290000
+            },
+            "finalizationCount": 0,
+            "inputHistory": [],
+            "lastCollectiblePipe": -1000000,
+            "nextInputSequence": 0,
+            "nextPipeIndex": 3,
+            "nextSpawnPipeIndex": 0,
+            "phase": "READY",
+            "pipes": [
+              {
+                "gapCenter": 260000,
+                "id": "pipe-0",
+                "index": 0,
+                "scored": false,
+                "x": 420000
+              },
+              {
+                "gapCenter": 280000,
+                "id": "pipe-1",
+                "index": 1,
+                "scored": false,
+                "x": 640000
+              },
+              {
+                "gapCenter": 300000,
+                "id": "pipe-2",
+                "index": 2,
+                "scored": false,
+                "x": 860000
+              }
+            ],
+            "rngState": 3668340018,
+            "score": 0,
+            "tick": 0,
+            "totals": {}
+          },
+          "expectedEvents": []
+        }
+      ]
+    },
+    {
+      "name": "terminal-death",
+      "syntheticInitialState": false,
+      "initialState": {
+        "collectibles": [],
+        "config": {
+          "collectibles": [
+            {
+              "amount": 1,
+              "appearance": "feather-v1",
+              "minPipeIndex": 2,
+              "minSpacingPipes": 3,
+              "radius": 7000,
+              "typeId": "FEATHER",
+              "version": 1,
+              "weight": 18
+            },
+            {
+              "amount": 1,
+              "appearance": "game-star-v1",
+              "minPipeIndex": 5,
+              "minSpacingPipes": 5,
+              "radius": 7000,
+              "typeId": "GAME_STAR",
+              "version": 1,
+              "weight": 4
+            }
+          ],
+          "flight": {
+            "duckHalfHeight": 10000,
+            "duckHalfWidth": 12000,
+            "duckX": 160000,
+            "flapVelocity": -4200,
+            "gravity": 80,
+            "maxFallSpeed": 6000
+          },
+          "limits": {
+            "maxActiveCollectibles": 2,
+            "maxActivePipes": 8
+          },
+          "pipes": {
+            "ceilingY": 0,
+            "floorY": 580000,
+            "gapHeight": 176000,
+            "horizon": 960000,
+            "safeLeadIn": 420000,
+            "spacing": 220000,
+            "speed": 2400,
+            "width": 52000
+          },
+          "spawnNoneWeight": 78
+        },
+        "descriptor": {
+          "configId": "dd-v1-default",
+          "generatorVersion": "1.0.0",
+          "runId": "terminal-death",
+          "seed": 1,
+          "simulationVersion": "1.0.0"
+        },
+        "duck": {
+          "vy": 0,
+          "x": 160000,
+          "y": 290000
+        },
+        "finalizationCount": 0,
+        "inputHistory": [],
+        "lastCollectiblePipe": -1000000,
+        "nextInputSequence": 0,
+        "nextPipeIndex": 3,
+        "nextSpawnPipeIndex": 0,
+        "phase": "READY",
+        "pipes": [
+          {
+            "gapCenter": 260000,
+            "id": "pipe-0",
+            "index": 0,
+            "scored": false,
+            "x": 420000
+          },
+          {
+            "gapCenter": 280000,
+            "id": "pipe-1",
+            "index": 1,
+            "scored": false,
+            "x": 640000
+          },
+          {
+            "gapCenter": 300000,
+            "id": "pipe-2",
+            "index": 2,
+            "scored": false,
+            "x": 860000
+          }
+        ],
+        "rngState": 3668340012,
+        "score": 0,
+        "tick": 0,
+        "totals": {}
+      },
+      "operations": [
+        {
+          "kind": "advance",
+          "ticks": 200,
+          "flapTicks": [
+            1
+          ],
+          "expectedState": {
+            "collectibles": [],
+            "config": {
+              "collectibles": [
+                {
+                  "amount": 1,
+                  "appearance": "feather-v1",
+                  "minPipeIndex": 2,
+                  "minSpacingPipes": 3,
+                  "radius": 7000,
+                  "typeId": "FEATHER",
+                  "version": 1,
+                  "weight": 18
+                },
+                {
+                  "amount": 1,
+                  "appearance": "game-star-v1",
+                  "minPipeIndex": 5,
+                  "minSpacingPipes": 5,
+                  "radius": 7000,
+                  "typeId": "GAME_STAR",
+                  "version": 1,
+                  "weight": 4
+                }
+              ],
+              "flight": {
+                "duckHalfHeight": 10000,
+                "duckHalfWidth": 12000,
+                "duckX": 160000,
+                "flapVelocity": -4200,
+                "gravity": 80,
+                "maxFallSpeed": 6000
+              },
+              "limits": {
+                "maxActiveCollectibles": 2,
+                "maxActivePipes": 8
+              },
+              "pipes": {
+                "ceilingY": 0,
+                "floorY": 580000,
+                "gapHeight": 176000,
+                "horizon": 960000,
+                "safeLeadIn": 420000,
+                "spacing": 220000,
+                "speed": 2400,
+                "width": 52000
+              },
+              "spawnNoneWeight": 78
+            },
+            "descriptor": {
+              "configId": "dd-v1-default",
+              "generatorVersion": "1.0.0",
+              "runId": "terminal-death",
+              "seed": 1,
+              "simulationVersion": "1.0.0"
+            },
+            "duck": {
+              "vy": 5000,
+              "x": 160000,
+              "y": 340600
+            },
+            "finalizationCount": 1,
+            "inputHistory": [],
+            "lastCollectiblePipe": -1000000,
+            "nextInputSequence": 1,
+            "nextPipeIndex": 4,
+            "nextSpawnPipeIndex": 4,
+            "phase": "DEAD",
+            "pipes": [
+              {
+                "gapCenter": 260000,
+                "id": "pipe-0",
+                "index": 0,
+                "scored": false,
+                "x": 144000
+              },
+              {
+                "gapCenter": 280000,
+                "id": "pipe-1",
+                "index": 1,
+                "scored": false,
+                "x": 364000
+              },
+              {
+                "gapCenter": 300000,
+                "id": "pipe-2",
+                "index": 2,
+                "scored": false,
+                "x": 584000
+              },
+              {
+                "gapCenter": 280000,
+                "id": "pipe-3",
+                "index": 3,
+                "scored": false,
+                "x": 804000
+              }
+            ],
+            "rngState": 3041712727,
+            "score": 0,
+            "tick": 115,
+            "totals": {}
+          },
+          "expectedEvents": [
+            {
+              "type": "RunStarted",
+              "runId": "terminal-death",
+              "tick": 1
+            },
+            {
+              "type": "RunEnded",
+              "runId": "terminal-death",
+              "score": 0,
+              "totals": {},
+              "tick": 115
+            }
+          ]
+        },
+        {
+          "kind": "step",
+          "frames": [
+            {
+              "sequence": 1,
+              "action": "FLAP"
+            }
+          ],
+          "expectedState": {
+            "collectibles": [],
+            "config": {
+              "collectibles": [
+                {
+                  "amount": 1,
+                  "appearance": "feather-v1",
+                  "minPipeIndex": 2,
+                  "minSpacingPipes": 3,
+                  "radius": 7000,
+                  "typeId": "FEATHER",
+                  "version": 1,
+                  "weight": 18
+                },
+                {
+                  "amount": 1,
+                  "appearance": "game-star-v1",
+                  "minPipeIndex": 5,
+                  "minSpacingPipes": 5,
+                  "radius": 7000,
+                  "typeId": "GAME_STAR",
+                  "version": 1,
+                  "weight": 4
+                }
+              ],
+              "flight": {
+                "duckHalfHeight": 10000,
+                "duckHalfWidth": 12000,
+                "duckX": 160000,
+                "flapVelocity": -4200,
+                "gravity": 80,
+                "maxFallSpeed": 6000
+              },
+              "limits": {
+                "maxActiveCollectibles": 2,
+                "maxActivePipes": 8
+              },
+              "pipes": {
+                "ceilingY": 0,
+                "floorY": 580000,
+                "gapHeight": 176000,
+                "horizon": 960000,
+                "safeLeadIn": 420000,
+                "spacing": 220000,
+                "speed": 2400,
+                "width": 52000
+              },
+              "spawnNoneWeight": 78
+            },
+            "descriptor": {
+              "configId": "dd-v1-default",
+              "generatorVersion": "1.0.0",
+              "runId": "terminal-death",
+              "seed": 1,
+              "simulationVersion": "1.0.0"
+            },
+            "duck": {
+              "vy": 5000,
+              "x": 160000,
+              "y": 340600
+            },
+            "finalizationCount": 1,
+            "inputHistory": [],
+            "lastCollectiblePipe": -1000000,
+            "nextInputSequence": 1,
+            "nextPipeIndex": 4,
+            "nextSpawnPipeIndex": 4,
+            "phase": "DEAD",
+            "pipes": [
+              {
+                "gapCenter": 260000,
+                "id": "pipe-0",
+                "index": 0,
+                "scored": false,
+                "x": 144000
+              },
+              {
+                "gapCenter": 280000,
+                "id": "pipe-1",
+                "index": 1,
+                "scored": false,
+                "x": 364000
+              },
+              {
+                "gapCenter": 300000,
+                "id": "pipe-2",
+                "index": 2,
+                "scored": false,
+                "x": 584000
+              },
+              {
+                "gapCenter": 280000,
+                "id": "pipe-3",
+                "index": 3,
+                "scored": false,
+                "x": 804000
+              }
+            ],
+            "rngState": 3041712727,
+            "score": 0,
+            "tick": 115,
+            "totals": {}
+          },
+          "expectedEvents": []
+        }
+      ]
+    },
+    {
+      "name": "score-edge",
+      "syntheticInitialState": true,
+      "initialState": {
+        "collectibles": [],
+        "config": {
+          "collectibles": [
+            {
+              "amount": 1,
+              "appearance": "feather-v1",
+              "minPipeIndex": 2,
+              "minSpacingPipes": 3,
+              "radius": 7000,
+              "typeId": "FEATHER",
+              "version": 1,
+              "weight": 18
+            },
+            {
+              "amount": 1,
+              "appearance": "game-star-v1",
+              "minPipeIndex": 5,
+              "minSpacingPipes": 5,
+              "radius": 7000,
+              "typeId": "GAME_STAR",
+              "version": 1,
+              "weight": 4
+            }
+          ],
+          "flight": {
+            "duckHalfHeight": 10000,
+            "duckHalfWidth": 12000,
+            "duckX": 160000,
+            "flapVelocity": -4200,
+            "gravity": 80,
+            "maxFallSpeed": 6000
+          },
+          "limits": {
+            "maxActiveCollectibles": 2,
+            "maxActivePipes": 8
+          },
+          "pipes": {
+            "ceilingY": 0,
+            "floorY": 580000,
+            "gapHeight": 176000,
+            "horizon": 960000,
+            "safeLeadIn": 420000,
+            "spacing": 220000,
+            "speed": 2400,
+            "width": 52000
+          },
+          "spawnNoneWeight": 78
+        },
+        "descriptor": {
+          "configId": "dd-v1-default",
+          "generatorVersion": "1.0.0",
+          "runId": "score-edge",
+          "seed": 2,
+          "simulationVersion": "1.0.0"
+        },
+        "duck": {
+          "vy": 0,
+          "x": 160000,
+          "y": 290000
+        },
+        "finalizationCount": 0,
+        "inputHistory": [],
+        "lastCollectiblePipe": -1000000,
+        "nextInputSequence": 0,
+        "nextPipeIndex": 3,
+        "nextSpawnPipeIndex": 0,
+        "phase": "RUNNING",
+        "pipes": [
+          {
+            "gapCenter": 280000,
+            "id": "edge-pipe",
+            "index": 0,
+            "scored": false,
+            "x": 124400
+          }
+        ],
+        "rngState": 3668340013,
+        "score": 0,
+        "tick": 0,
+        "totals": {}
+      },
+      "operations": [
+        {
+          "kind": "step",
+          "frames": [],
+          "expectedState": {
+            "collectibles": [
+              {
+                "amount": 1,
+                "collected": false,
+                "id": "collectible-5",
+                "radius": 7000,
+                "typeId": "GAME_STAR",
+                "x": 782000,
+                "y": 280000
+              }
+            ],
+            "config": {
+              "collectibles": [
+                {
+                  "amount": 1,
+                  "appearance": "feather-v1",
+                  "minPipeIndex": 2,
+                  "minSpacingPipes": 3,
+                  "radius": 7000,
+                  "typeId": "FEATHER",
+                  "version": 1,
+                  "weight": 18
+                },
+                {
+                  "amount": 1,
+                  "appearance": "game-star-v1",
+                  "minPipeIndex": 5,
+                  "minSpacingPipes": 5,
+                  "radius": 7000,
+                  "typeId": "GAME_STAR",
+                  "version": 1,
+                  "weight": 4
+                }
+              ],
+              "flight": {
+                "duckHalfHeight": 10000,
+                "duckHalfWidth": 12000,
+                "duckX": 160000,
+                "flapVelocity": -4200,
+                "gravity": 80,
+                "maxFallSpeed": 6000
+              },
+              "limits": {
+                "maxActiveCollectibles": 2,
+                "maxActivePipes": 8
+              },
+              "pipes": {
+                "ceilingY": 0,
+                "floorY": 580000,
+                "gapHeight": 176000,
+                "horizon": 960000,
+                "safeLeadIn": 420000,
+                "spacing": 220000,
+                "speed": 2400,
+                "width": 52000
+              },
+              "spawnNoneWeight": 78
+            },
+            "descriptor": {
+              "configId": "dd-v1-default",
+              "generatorVersion": "1.0.0",
+              "runId": "score-edge",
+              "seed": 2,
+              "simulationVersion": "1.0.0"
+            },
+            "duck": {
+              "vy": 80,
+              "x": 160000,
+              "y": 290080
+            },
+            "finalizationCount": 0,
+            "inputHistory": [],
+            "lastCollectiblePipe": 5,
+            "nextInputSequence": 0,
+            "nextPipeIndex": 6,
+            "nextSpawnPipeIndex": 6,
+            "phase": "RUNNING",
+            "pipes": [
+              {
+                "gapCenter": 280000,
+                "id": "edge-pipe",
+                "index": 0,
+                "scored": false,
+                "x": 122000
+              },
+              {
+                "gapCenter": 280000,
+                "id": "pipe-3",
+                "index": 3,
+                "scored": false,
+                "x": 342000
+              },
+              {
+                "gapCenter": 280000,
+                "id": "pipe-4",
+                "index": 4,
+                "scored": false,
+                "x": 562000
+              },
+              {
+                "gapCenter": 280000,
+                "id": "pipe-5",
+                "index": 5,
+                "scored": false,
+                "x": 782000
+              }
+            ],
+            "rngState": 2415085443,
+            "score": 0,
+            "tick": 1,
+            "totals": {}
+          },
+          "expectedEvents": []
+        },
+        {
+          "kind": "step",
+          "frames": [],
+          "expectedState": {
+            "collectibles": [
+              {
+                "amount": 1,
+                "collected": false,
+                "id": "collectible-5",
+                "radius": 7000,
+                "typeId": "GAME_STAR",
+                "x": 779600,
+                "y": 280000
+              }
+            ],
+            "config": {
+              "collectibles": [
+                {
+                  "amount": 1,
+                  "appearance": "feather-v1",
+                  "minPipeIndex": 2,
+                  "minSpacingPipes": 3,
+                  "radius": 7000,
+                  "typeId": "FEATHER",
+                  "version": 1,
+                  "weight": 18
+                },
+                {
+                  "amount": 1,
+                  "appearance": "game-star-v1",
+                  "minPipeIndex": 5,
+                  "minSpacingPipes": 5,
+                  "radius": 7000,
+                  "typeId": "GAME_STAR",
+                  "version": 1,
+                  "weight": 4
+                }
+              ],
+              "flight": {
+                "duckHalfHeight": 10000,
+                "duckHalfWidth": 12000,
+                "duckX": 160000,
+                "flapVelocity": -4200,
+                "gravity": 80,
+                "maxFallSpeed": 6000
+              },
+              "limits": {
+                "maxActiveCollectibles": 2,
+                "maxActivePipes": 8
+              },
+              "pipes": {
+                "ceilingY": 0,
+                "floorY": 580000,
+                "gapHeight": 176000,
+                "horizon": 960000,
+                "safeLeadIn": 420000,
+                "spacing": 220000,
+                "speed": 2400,
+                "width": 52000
+              },
+              "spawnNoneWeight": 78
+            },
+            "descriptor": {
+              "configId": "dd-v1-default",
+              "generatorVersion": "1.0.0",
+              "runId": "score-edge",
+              "seed": 2,
+              "simulationVersion": "1.0.0"
+            },
+            "duck": {
+              "vy": 160,
+              "x": 160000,
+              "y": 290240
+            },
+            "finalizationCount": 0,
+            "inputHistory": [],
+            "lastCollectiblePipe": 5,
+            "nextInputSequence": 0,
+            "nextPipeIndex": 6,
+            "nextSpawnPipeIndex": 6,
+            "phase": "RUNNING",
+            "pipes": [
+              {
+                "gapCenter": 280000,
+                "id": "edge-pipe",
+                "index": 0,
+                "scored": true,
+                "x": 119600
+              },
+              {
+                "gapCenter": 280000,
+                "id": "pipe-3",
+                "index": 3,
+                "scored": false,
+                "x": 339600
+              },
+              {
+                "gapCenter": 280000,
+                "id": "pipe-4",
+                "index": 4,
+                "scored": false,
+                "x": 559600
+              },
+              {
+                "gapCenter": 280000,
+                "id": "pipe-5",
+                "index": 5,
+                "scored": false,
+                "x": 779600
+              }
+            ],
+            "rngState": 2415085443,
+            "score": 1,
+            "tick": 2,
+            "totals": {}
+          },
+          "expectedEvents": [
+            {
+              "type": "PipePassed",
+              "runId": "score-edge",
+              "pipeId": "edge-pipe",
+              "score": 1,
+              "tick": 2
+            }
+          ]
+        },
+        {
+          "kind": "step",
+          "frames": [],
+          "expectedState": {
+            "collectibles": [
+              {
+                "amount": 1,
+                "collected": false,
+                "id": "collectible-5",
+                "radius": 7000,
+                "typeId": "GAME_STAR",
+                "x": 777200,
+                "y": 280000
+              }
+            ],
+            "config": {
+              "collectibles": [
+                {
+                  "amount": 1,
+                  "appearance": "feather-v1",
+                  "minPipeIndex": 2,
+                  "minSpacingPipes": 3,
+                  "radius": 7000,
+                  "typeId": "FEATHER",
+                  "version": 1,
+                  "weight": 18
+                },
+                {
+                  "amount": 1,
+                  "appearance": "game-star-v1",
+                  "minPipeIndex": 5,
+                  "minSpacingPipes": 5,
+                  "radius": 7000,
+                  "typeId": "GAME_STAR",
+                  "version": 1,
+                  "weight": 4
+                }
+              ],
+              "flight": {
+                "duckHalfHeight": 10000,
+                "duckHalfWidth": 12000,
+                "duckX": 160000,
+                "flapVelocity": -4200,
+                "gravity": 80,
+                "maxFallSpeed": 6000
+              },
+              "limits": {
+                "maxActiveCollectibles": 2,
+                "maxActivePipes": 8
+              },
+              "pipes": {
+                "ceilingY": 0,
+                "floorY": 580000,
+                "gapHeight": 176000,
+                "horizon": 960000,
+                "safeLeadIn": 420000,
+                "spacing": 220000,
+                "speed": 2400,
+                "width": 52000
+              },
+              "spawnNoneWeight": 78
+            },
+            "descriptor": {
+              "configId": "dd-v1-default",
+              "generatorVersion": "1.0.0",
+              "runId": "score-edge",
+              "seed": 2,
+              "simulationVersion": "1.0.0"
+            },
+            "duck": {
+              "vy": 240,
+              "x": 160000,
+              "y": 290480
+            },
+            "finalizationCount": 0,
+            "inputHistory": [],
+            "lastCollectiblePipe": 5,
+            "nextInputSequence": 0,
+            "nextPipeIndex": 6,
+            "nextSpawnPipeIndex": 6,
+            "phase": "RUNNING",
+            "pipes": [
+              {
+                "gapCenter": 280000,
+                "id": "edge-pipe",
+                "index": 0,
+                "scored": true,
+                "x": 117200
+              },
+              {
+                "gapCenter": 280000,
+                "id": "pipe-3",
+                "index": 3,
+                "scored": false,
+                "x": 337200
+              },
+              {
+                "gapCenter": 280000,
+                "id": "pipe-4",
+                "index": 4,
+                "scored": false,
+                "x": 557200
+              },
+              {
+                "gapCenter": 280000,
+                "id": "pipe-5",
+                "index": 5,
+                "scored": false,
+                "x": 777200
+              }
+            ],
+            "rngState": 2415085443,
+            "score": 1,
+            "tick": 3,
+            "totals": {}
+          },
+          "expectedEvents": []
+        }
+      ]
+    },
+    {
+      "name": "lethal-suppresses-score-and-pickup",
+      "syntheticInitialState": true,
+      "initialState": {
+        "collectibles": [
+          {
+            "amount": 1,
+            "collected": false,
+            "id": "lethal-item",
+            "radius": 7000,
+            "typeId": "FEATHER",
+            "x": 162400,
+            "y": 570000
+          }
+        ],
+        "config": {
+          "collectibles": [
+            {
+              "amount": 1,
+              "appearance": "feather-v1",
+              "minPipeIndex": 2,
+              "minSpacingPipes": 3,
+              "radius": 7000,
+              "typeId": "FEATHER",
+              "version": 1,
+              "weight": 18
+            },
+            {
+              "amount": 1,
+              "appearance": "game-star-v1",
+              "minPipeIndex": 5,
+              "minSpacingPipes": 5,
+              "radius": 7000,
+              "typeId": "GAME_STAR",
+              "version": 1,
+              "weight": 4
+            }
+          ],
+          "flight": {
+            "duckHalfHeight": 10000,
+            "duckHalfWidth": 12000,
+            "duckX": 160000,
+            "flapVelocity": -4200,
+            "gravity": 80,
+            "maxFallSpeed": 6000
+          },
+          "limits": {
+            "maxActiveCollectibles": 2,
+            "maxActivePipes": 8
+          },
+          "pipes": {
+            "ceilingY": 0,
+            "floorY": 580000,
+            "gapHeight": 176000,
+            "horizon": 960000,
+            "safeLeadIn": 420000,
+            "spacing": 220000,
+            "speed": 2400,
+            "width": 52000
+          },
+          "spawnNoneWeight": 78
+        },
+        "descriptor": {
+          "configId": "dd-v1-default",
+          "generatorVersion": "1.0.0",
+          "runId": "lethal-suppresses-score-and-pickup",
+          "seed": 3,
+          "simulationVersion": "1.0.0"
+        },
+        "duck": {
+          "vy": 1000,
+          "x": 160000,
+          "y": 569999
+        },
+        "finalizationCount": 0,
+        "inputHistory": [],
+        "lastCollectiblePipe": -1000000,
+        "nextInputSequence": 0,
+        "nextPipeIndex": 3,
+        "nextSpawnPipeIndex": 0,
+        "phase": "RUNNING",
+        "pipes": [
+          {
+            "gapCenter": 280000,
+            "id": "past-pipe",
+            "index": 0,
+            "scored": false,
+            "x": 0
+          }
+        ],
+        "rngState": 3668340014,
+        "score": 0,
+        "tick": 0,
+        "totals": {}
+      },
+      "operations": [
+        {
+          "kind": "step",
+          "frames": [],
+          "expectedState": {
+            "collectibles": [
+              {
+                "amount": 1,
+                "collected": false,
+                "id": "lethal-item",
+                "radius": 7000,
+                "typeId": "FEATHER",
+                "x": 162400,
+                "y": 570000
+              }
+            ],
+            "config": {
+              "collectibles": [
+                {
+                  "amount": 1,
+                  "appearance": "feather-v1",
+                  "minPipeIndex": 2,
+                  "minSpacingPipes": 3,
+                  "radius": 7000,
+                  "typeId": "FEATHER",
+                  "version": 1,
+                  "weight": 18
+                },
+                {
+                  "amount": 1,
+                  "appearance": "game-star-v1",
+                  "minPipeIndex": 5,
+                  "minSpacingPipes": 5,
+                  "radius": 7000,
+                  "typeId": "GAME_STAR",
+                  "version": 1,
+                  "weight": 4
+                }
+              ],
+              "flight": {
+                "duckHalfHeight": 10000,
+                "duckHalfWidth": 12000,
+                "duckX": 160000,
+                "flapVelocity": -4200,
+                "gravity": 80,
+                "maxFallSpeed": 6000
+              },
+              "limits": {
+                "maxActiveCollectibles": 2,
+                "maxActivePipes": 8
+              },
+              "pipes": {
+                "ceilingY": 0,
+                "floorY": 580000,
+                "gapHeight": 176000,
+                "horizon": 960000,
+                "safeLeadIn": 420000,
+                "spacing": 220000,
+                "speed": 2400,
+                "width": 52000
+              },
+              "spawnNoneWeight": 78
+            },
+            "descriptor": {
+              "configId": "dd-v1-default",
+              "generatorVersion": "1.0.0",
+              "runId": "lethal-suppresses-score-and-pickup",
+              "seed": 3,
+              "simulationVersion": "1.0.0"
+            },
+            "duck": {
+              "vy": 1080,
+              "x": 160000,
+              "y": 571079
+            },
+            "finalizationCount": 1,
+            "inputHistory": [],
+            "lastCollectiblePipe": -1000000,
+            "nextInputSequence": 0,
+            "nextPipeIndex": 3,
+            "nextSpawnPipeIndex": 0,
+            "phase": "DEAD",
+            "pipes": [
+              {
+                "gapCenter": 280000,
+                "id": "past-pipe",
+                "index": 0,
+                "scored": false,
+                "x": -2400
+              }
+            ],
+            "rngState": 3668340014,
+            "score": 0,
+            "tick": 1,
+            "totals": {}
+          },
+          "expectedEvents": [
+            {
+              "type": "RunEnded",
+              "runId": "lethal-suppresses-score-and-pickup",
+              "score": 0,
+              "totals": {},
+              "tick": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "once-only-pickups",
+      "syntheticInitialState": true,
+      "initialState": {
+        "collectibles": [
+          {
+            "amount": 1,
+            "collected": false,
+            "id": "test-item-0",
+            "radius": 7000,
+            "typeId": "FEATHER",
+            "x": 162400,
+            "y": 290000
+          },
+          {
+            "amount": 2,
+            "collected": false,
+            "id": "test-item-1",
+            "radius": 7000,
+            "typeId": "GAME_STAR",
+            "x": 162400,
+            "y": 290000
+          }
+        ],
+        "config": {
+          "collectibles": [
+            {
+              "amount": 1,
+              "appearance": "feather-v1",
+              "minPipeIndex": 2,
+              "minSpacingPipes": 3,
+              "radius": 7000,
+              "typeId": "FEATHER",
+              "version": 1,
+              "weight": 18
+            },
+            {
+              "amount": 1,
+              "appearance": "game-star-v1",
+              "minPipeIndex": 5,
+              "minSpacingPipes": 5,
+              "radius": 7000,
+              "typeId": "GAME_STAR",
+              "version": 1,
+              "weight": 4
+            }
+          ],
+          "flight": {
+            "duckHalfHeight": 10000,
+            "duckHalfWidth": 12000,
+            "duckX": 160000,
+            "flapVelocity": -4200,
+            "gravity": 80,
+            "maxFallSpeed": 6000
+          },
+          "limits": {
+            "maxActiveCollectibles": 2,
+            "maxActivePipes": 8
+          },
+          "pipes": {
+            "ceilingY": 0,
+            "floorY": 580000,
+            "gapHeight": 176000,
+            "horizon": 960000,
+            "safeLeadIn": 420000,
+            "spacing": 220000,
+            "speed": 2400,
+            "width": 52000
+          },
+          "spawnNoneWeight": 78
+        },
+        "descriptor": {
+          "configId": "dd-v1-default",
+          "generatorVersion": "1.0.0",
+          "runId": "once-only-pickups",
+          "seed": 4,
+          "simulationVersion": "1.0.0"
+        },
+        "duck": {
+          "vy": 0,
+          "x": 160000,
+          "y": 290000
+        },
+        "finalizationCount": 0,
+        "inputHistory": [],
+        "lastCollectiblePipe": -1000000,
+        "nextInputSequence": 0,
+        "nextPipeIndex": 3,
+        "nextSpawnPipeIndex": 0,
+        "phase": "RUNNING",
+        "pipes": [
+          {
+            "gapCenter": 280000,
+            "id": "pipe-0",
+            "index": 0,
+            "scored": false,
+            "x": 420000
+          },
+          {
+            "gapCenter": 280000,
+            "id": "pipe-1",
+            "index": 1,
+            "scored": false,
+            "x": 640000
+          },
+          {
+            "gapCenter": 280000,
+            "id": "pipe-2",
+            "index": 2,
+            "scored": false,
+            "x": 860000
+          }
+        ],
+        "rngState": 3668340015,
+        "score": 0,
+        "tick": 0,
+        "totals": {}
+      },
+      "operations": [
+        {
+          "kind": "step",
+          "frames": [],
+          "expectedState": {
+            "collectibles": [],
+            "config": {
+              "collectibles": [
+                {
+                  "amount": 1,
+                  "appearance": "feather-v1",
+                  "minPipeIndex": 2,
+                  "minSpacingPipes": 3,
+                  "radius": 7000,
+                  "typeId": "FEATHER",
+                  "version": 1,
+                  "weight": 18
+                },
+                {
+                  "amount": 1,
+                  "appearance": "game-star-v1",
+                  "minPipeIndex": 5,
+                  "minSpacingPipes": 5,
+                  "radius": 7000,
+                  "typeId": "GAME_STAR",
+                  "version": 1,
+                  "weight": 4
+                }
+              ],
+              "flight": {
+                "duckHalfHeight": 10000,
+                "duckHalfWidth": 12000,
+                "duckX": 160000,
+                "flapVelocity": -4200,
+                "gravity": 80,
+                "maxFallSpeed": 6000
+              },
+              "limits": {
+                "maxActiveCollectibles": 2,
+                "maxActivePipes": 8
+              },
+              "pipes": {
+                "ceilingY": 0,
+                "floorY": 580000,
+                "gapHeight": 176000,
+                "horizon": 960000,
+                "safeLeadIn": 420000,
+                "spacing": 220000,
+                "speed": 2400,
+                "width": 52000
+              },
+              "spawnNoneWeight": 78
+            },
+            "descriptor": {
+              "configId": "dd-v1-default",
+              "generatorVersion": "1.0.0",
+              "runId": "once-only-pickups",
+              "seed": 4,
+              "simulationVersion": "1.0.0"
+            },
+            "duck": {
+              "vy": 80,
+              "x": 160000,
+              "y": 290080
+            },
+            "finalizationCount": 0,
+            "inputHistory": [],
+            "lastCollectiblePipe": -1000000,
+            "nextInputSequence": 0,
+            "nextPipeIndex": 3,
+            "nextSpawnPipeIndex": 3,
+            "phase": "RUNNING",
+            "pipes": [
+              {
+                "gapCenter": 280000,
+                "id": "pipe-0",
+                "index": 0,
+                "scored": false,
+                "x": 417600
+              },
+              {
+                "gapCenter": 280000,
+                "id": "pipe-1",
+                "index": 1,
+                "scored": false,
+                "x": 637600
+              },
+              {
+                "gapCenter": 280000,
+                "id": "pipe-2",
+                "index": 2,
+                "scored": false,
+                "x": 857600
+              }
+            ],
+            "rngState": 2027808488,
+            "score": 0,
+            "tick": 1,
+            "totals": {
+              "FEATHER": 1,
+              "GAME_STAR": 2
+            }
+          },
+          "expectedEvents": [
+            {
+              "type": "CurrencyCollected",
+              "runId": "once-only-pickups",
+              "collectibleId": "test-item-0",
+              "typeId": "FEATHER",
+              "amount": 1,
+              "tick": 1
+            },
+            {
+              "type": "CurrencyCollected",
+              "runId": "once-only-pickups",
+              "collectibleId": "test-item-1",
+              "typeId": "GAME_STAR",
+              "amount": 2,
+              "tick": 1
+            }
+          ]
+        },
+        {
+          "kind": "step",
+          "frames": [],
+          "expectedState": {
+            "collectibles": [],
+            "config": {
+              "collectibles": [
+                {
+                  "amount": 1,
+                  "appearance": "feather-v1",
+                  "minPipeIndex": 2,
+                  "minSpacingPipes": 3,
+                  "radius": 7000,
+                  "typeId": "FEATHER",
+                  "version": 1,
+                  "weight": 18
+                },
+                {
+                  "amount": 1,
+                  "appearance": "game-star-v1",
+                  "minPipeIndex": 5,
+                  "minSpacingPipes": 5,
+                  "radius": 7000,
+                  "typeId": "GAME_STAR",
+                  "version": 1,
+                  "weight": 4
+                }
+              ],
+              "flight": {
+                "duckHalfHeight": 10000,
+                "duckHalfWidth": 12000,
+                "duckX": 160000,
+                "flapVelocity": -4200,
+                "gravity": 80,
+                "maxFallSpeed": 6000
+              },
+              "limits": {
+                "maxActiveCollectibles": 2,
+                "maxActivePipes": 8
+              },
+              "pipes": {
+                "ceilingY": 0,
+                "floorY": 580000,
+                "gapHeight": 176000,
+                "horizon": 960000,
+                "safeLeadIn": 420000,
+                "spacing": 220000,
+                "speed": 2400,
+                "width": 52000
+              },
+              "spawnNoneWeight": 78
+            },
+            "descriptor": {
+              "configId": "dd-v1-default",
+              "generatorVersion": "1.0.0",
+              "runId": "once-only-pickups",
+              "seed": 4,
+              "simulationVersion": "1.0.0"
+            },
+            "duck": {
+              "vy": 160,
+              "x": 160000,
+              "y": 290240
+            },
+            "finalizationCount": 0,
+            "inputHistory": [],
+            "lastCollectiblePipe": -1000000,
+            "nextInputSequence": 0,
+            "nextPipeIndex": 3,
+            "nextSpawnPipeIndex": 3,
+            "phase": "RUNNING",
+            "pipes": [
+              {
+                "gapCenter": 280000,
+                "id": "pipe-0",
+                "index": 0,
+                "scored": false,
+                "x": 415200
+              },
+              {
+                "gapCenter": 280000,
+                "id": "pipe-1",
+                "index": 1,
+                "scored": false,
+                "x": 635200
+              },
+              {
+                "gapCenter": 280000,
+                "id": "pipe-2",
+                "index": 2,
+                "scored": false,
+                "x": 855200
+              }
+            ],
+            "rngState": 2027808488,
+            "score": 0,
+            "tick": 2,
+            "totals": {
+              "FEATHER": 1,
+              "GAME_STAR": 2
+            }
+          },
+          "expectedEvents": []
+        }
+      ]
+    },
+    {
+      "name": "none-bucket",
+      "syntheticInitialState": false,
+      "initialState": {
+        "collectibles": [],
+        "config": {
+          "collectibles": [
+            {
+              "amount": 1,
+              "appearance": "feather-v1",
+              "minPipeIndex": 2,
+              "minSpacingPipes": 3,
+              "radius": 7000,
+              "typeId": "FEATHER",
+              "version": 1,
+              "weight": 18
+            },
+            {
+              "amount": 1,
+              "appearance": "game-star-v1",
+              "minPipeIndex": 5,
+              "minSpacingPipes": 5,
+              "radius": 7000,
+              "typeId": "GAME_STAR",
+              "version": 1,
+              "weight": 4
+            }
+          ],
+          "flight": {
+            "duckHalfHeight": 10000,
+            "duckHalfWidth": 12000,
+            "duckX": 160000,
+            "flapVelocity": -4200,
+            "gravity": 80,
+            "maxFallSpeed": 6000
+          },
+          "limits": {
+            "maxActiveCollectibles": 2,
+            "maxActivePipes": 8
+          },
+          "pipes": {
+            "ceilingY": 0,
+            "floorY": 580000,
+            "gapHeight": 176000,
+            "horizon": 960000,
+            "safeLeadIn": 420000,
+            "spacing": 220000,
+            "speed": 2400,
+            "width": 52000
+          },
+          "spawnNoneWeight": 4294967273
+        },
+        "descriptor": {
+          "configId": "dd-v1-config:{\"configuration\":{\"collectibles\":[{\"amount\":1,\"appearance\":\"feather-v1\",\"minPipeIndex\":2,\"minSpacingPipes\":3,\"radius\":7000,\"typeId\":\"FEATHER\",\"version\":1,\"weight\":18},{\"amount\":1,\"appearance\":\"game-star-v1\",\"minPipeIndex\":5,\"minSpacingPipes\":5,\"radius\":7000,\"typeId\":\"GAME_STAR\",\"version\":1,\"weight\":4}],\"flight\":{\"duckHalfHeight\":10000,\"duckHalfWidth\":12000,\"duckX\":160000,\"flapVelocity\":-4200,\"gravity\":80,\"maxFallSpeed\":6000},\"limits\":{\"maxActiveCollectibles\":2,\"maxActivePipes\":8},\"pipes\":{\"ceilingY\":0,\"floorY\":580000,\"gapHeight\":176000,\"horizon\":960000,\"safeLeadIn\":420000,\"spacing\":220000,\"speed\":2400,\"width\":52000},\"spawnNoneWeight\":4294967273},\"patterns\":[{\"gaps\":[280000,280000,280000,280000],\"id\":\"center\"},{\"gaps\":[260000,280000,300000,280000],\"id\":\"rise-fall\"},{\"gaps\":[300000,280000,260000,280000],\"id\":\"fall-rise\"}]}",
+          "generatorVersion": "1.0.0",
+          "runId": "none-bucket",
+          "seed": 1,
+          "simulationVersion": "1.0.0"
+        },
+        "duck": {
+          "vy": 0,
+          "x": 160000,
+          "y": 290000
+        },
+        "finalizationCount": 0,
+        "inputHistory": [],
+        "lastCollectiblePipe": -1000000,
+        "nextInputSequence": 0,
+        "nextPipeIndex": 3,
+        "nextSpawnPipeIndex": 0,
+        "phase": "READY",
+        "pipes": [
+          {
+            "gapCenter": 260000,
+            "id": "pipe-0",
+            "index": 0,
+            "scored": false,
+            "x": 420000
+          },
+          {
+            "gapCenter": 280000,
+            "id": "pipe-1",
+            "index": 1,
+            "scored": false,
+            "x": 640000
+          },
+          {
+            "gapCenter": 300000,
+            "id": "pipe-2",
+            "index": 2,
+            "scored": false,
+            "x": 860000
+          }
+        ],
+        "rngState": 3668340012,
+        "score": 0,
+        "tick": 0,
+        "totals": {}
+      },
+      "operations": [
+        {
+          "kind": "step",
+          "frames": [
+            {
+              "sequence": 0,
+              "action": "FLAP"
+            }
+          ],
+          "expectedState": {
+            "collectibles": [],
+            "config": {
+              "collectibles": [
+                {
+                  "amount": 1,
+                  "appearance": "feather-v1",
+                  "minPipeIndex": 2,
+                  "minSpacingPipes": 3,
+                  "radius": 7000,
+                  "typeId": "FEATHER",
+                  "version": 1,
+                  "weight": 18
+                },
+                {
+                  "amount": 1,
+                  "appearance": "game-star-v1",
+                  "minPipeIndex": 5,
+                  "minSpacingPipes": 5,
+                  "radius": 7000,
+                  "typeId": "GAME_STAR",
+                  "version": 1,
+                  "weight": 4
+                }
+              ],
+              "flight": {
+                "duckHalfHeight": 10000,
+                "duckHalfWidth": 12000,
+                "duckX": 160000,
+                "flapVelocity": -4200,
+                "gravity": 80,
+                "maxFallSpeed": 6000
+              },
+              "limits": {
+                "maxActiveCollectibles": 2,
+                "maxActivePipes": 8
+              },
+              "pipes": {
+                "ceilingY": 0,
+                "floorY": 580000,
+                "gapHeight": 176000,
+                "horizon": 960000,
+                "safeLeadIn": 420000,
+                "spacing": 220000,
+                "speed": 2400,
+                "width": 52000
+              },
+              "spawnNoneWeight": 4294967273
+            },
+            "descriptor": {
+              "configId": "dd-v1-config:{\"configuration\":{\"collectibles\":[{\"amount\":1,\"appearance\":\"feather-v1\",\"minPipeIndex\":2,\"minSpacingPipes\":3,\"radius\":7000,\"typeId\":\"FEATHER\",\"version\":1,\"weight\":18},{\"amount\":1,\"appearance\":\"game-star-v1\",\"minPipeIndex\":5,\"minSpacingPipes\":5,\"radius\":7000,\"typeId\":\"GAME_STAR\",\"version\":1,\"weight\":4}],\"flight\":{\"duckHalfHeight\":10000,\"duckHalfWidth\":12000,\"duckX\":160000,\"flapVelocity\":-4200,\"gravity\":80,\"maxFallSpeed\":6000},\"limits\":{\"maxActiveCollectibles\":2,\"maxActivePipes\":8},\"pipes\":{\"ceilingY\":0,\"floorY\":580000,\"gapHeight\":176000,\"horizon\":960000,\"safeLeadIn\":420000,\"spacing\":220000,\"speed\":2400,\"width\":52000},\"spawnNoneWeight\":4294967273},\"patterns\":[{\"gaps\":[280000,280000,280000,280000],\"id\":\"center\"},{\"gaps\":[260000,280000,300000,280000],\"id\":\"rise-fall\"},{\"gaps\":[300000,280000,260000,280000],\"id\":\"fall-rise\"}]}",
+              "generatorVersion": "1.0.0",
+              "runId": "none-bucket",
+              "seed": 1,
+              "simulationVersion": "1.0.0"
+            },
+            "duck": {
+              "vy": -4120,
+              "x": 160000,
+              "y": 285880
+            },
+            "finalizationCount": 0,
+            "inputHistory": [],
+            "lastCollectiblePipe": -1000000,
+            "nextInputSequence": 1,
+            "nextPipeIndex": 3,
+            "nextSpawnPipeIndex": 3,
+            "phase": "RUNNING",
+            "pipes": [
+              {
+                "gapCenter": 260000,
+                "id": "pipe-0",
+                "index": 0,
+                "scored": false,
+                "x": 417600
+              },
+              {
+                "gapCenter": 280000,
+                "id": "pipe-1",
+                "index": 1,
+                "scored": false,
+                "x": 637600
+              },
+              {
+                "gapCenter": 300000,
+                "id": "pipe-2",
+                "index": 2,
+                "scored": false,
+                "x": 857600
+              }
+            ],
+            "rngState": 2027808485,
+            "score": 0,
+            "tick": 1,
+            "totals": {}
+          },
+          "expectedEvents": [
+            {
+              "type": "RunStarted",
+              "runId": "none-bucket",
+              "tick": 1
+            }
+          ]
+        },
+        {
+          "kind": "step",
+          "frames": [],
+          "expectedState": {
+            "collectibles": [],
+            "config": {
+              "collectibles": [
+                {
+                  "amount": 1,
+                  "appearance": "feather-v1",
+                  "minPipeIndex": 2,
+                  "minSpacingPipes": 3,
+                  "radius": 7000,
+                  "typeId": "FEATHER",
+                  "version": 1,
+                  "weight": 18
+                },
+                {
+                  "amount": 1,
+                  "appearance": "game-star-v1",
+                  "minPipeIndex": 5,
+                  "minSpacingPipes": 5,
+                  "radius": 7000,
+                  "typeId": "GAME_STAR",
+                  "version": 1,
+                  "weight": 4
+                }
+              ],
+              "flight": {
+                "duckHalfHeight": 10000,
+                "duckHalfWidth": 12000,
+                "duckX": 160000,
+                "flapVelocity": -4200,
+                "gravity": 80,
+                "maxFallSpeed": 6000
+              },
+              "limits": {
+                "maxActiveCollectibles": 2,
+                "maxActivePipes": 8
+              },
+              "pipes": {
+                "ceilingY": 0,
+                "floorY": 580000,
+                "gapHeight": 176000,
+                "horizon": 960000,
+                "safeLeadIn": 420000,
+                "spacing": 220000,
+                "speed": 2400,
+                "width": 52000
+              },
+              "spawnNoneWeight": 4294967273
+            },
+            "descriptor": {
+              "configId": "dd-v1-config:{\"configuration\":{\"collectibles\":[{\"amount\":1,\"appearance\":\"feather-v1\",\"minPipeIndex\":2,\"minSpacingPipes\":3,\"radius\":7000,\"typeId\":\"FEATHER\",\"version\":1,\"weight\":18},{\"amount\":1,\"appearance\":\"game-star-v1\",\"minPipeIndex\":5,\"minSpacingPipes\":5,\"radius\":7000,\"typeId\":\"GAME_STAR\",\"version\":1,\"weight\":4}],\"flight\":{\"duckHalfHeight\":10000,\"duckHalfWidth\":12000,\"duckX\":160000,\"flapVelocity\":-4200,\"gravity\":80,\"maxFallSpeed\":6000},\"limits\":{\"maxActiveCollectibles\":2,\"maxActivePipes\":8},\"pipes\":{\"ceilingY\":0,\"floorY\":580000,\"gapHeight\":176000,\"horizon\":960000,\"safeLeadIn\":420000,\"spacing\":220000,\"speed\":2400,\"width\":52000},\"spawnNoneWeight\":4294967273},\"patterns\":[{\"gaps\":[280000,280000,280000,280000],\"id\":\"center\"},{\"gaps\":[260000,280000,300000,280000],\"id\":\"rise-fall\"},{\"gaps\":[300000,280000,260000,280000],\"id\":\"fall-rise\"}]}",
+              "generatorVersion": "1.0.0",
+              "runId": "none-bucket",
+              "seed": 1,
+              "simulationVersion": "1.0.0"
+            },
+            "duck": {
+              "vy": -4040,
+              "x": 160000,
+              "y": 281840
+            },
+            "finalizationCount": 0,
+            "inputHistory": [],
+            "lastCollectiblePipe": -1000000,
+            "nextInputSequence": 1,
+            "nextPipeIndex": 3,
+            "nextSpawnPipeIndex": 3,
+            "phase": "RUNNING",
+            "pipes": [
+              {
+                "gapCenter": 260000,
+                "id": "pipe-0",
+                "index": 0,
+                "scored": false,
+                "x": 415200
+              },
+              {
+                "gapCenter": 280000,
+                "id": "pipe-1",
+                "index": 1,
+                "scored": false,
+                "x": 635200
+              },
+              {
+                "gapCenter": 300000,
+                "id": "pipe-2",
+                "index": 2,
+                "scored": false,
+                "x": 855200
+              }
+            ],
+            "rngState": 2027808485,
+            "score": 0,
+            "tick": 2,
+            "totals": {}
+          },
+          "expectedEvents": []
+        }
+      ]
+    },
+    {
+      "name": "disabled-currencies",
+      "syntheticInitialState": false,
+      "initialState": {
+        "collectibles": [],
+        "config": {
+          "collectibles": [
+            {
+              "amount": 1,
+              "appearance": "feather-v1",
+              "minPipeIndex": 2,
+              "minSpacingPipes": 3,
+              "radius": 7000,
+              "typeId": "FEATHER",
+              "version": 1,
+              "weight": 0
+            },
+            {
+              "amount": 1,
+              "appearance": "game-star-v1",
+              "minPipeIndex": 5,
+              "minSpacingPipes": 5,
+              "radius": 7000,
+              "typeId": "GAME_STAR",
+              "version": 1,
+              "weight": 0
+            }
+          ],
+          "flight": {
+            "duckHalfHeight": 10000,
+            "duckHalfWidth": 12000,
+            "duckX": 160000,
+            "flapVelocity": -4200,
+            "gravity": 80,
+            "maxFallSpeed": 6000
+          },
+          "limits": {
+            "maxActiveCollectibles": 2,
+            "maxActivePipes": 8
+          },
+          "pipes": {
+            "ceilingY": 0,
+            "floorY": 580000,
+            "gapHeight": 176000,
+            "horizon": 960000,
+            "safeLeadIn": 420000,
+            "spacing": 220000,
+            "speed": 2400,
+            "width": 52000
+          },
+          "spawnNoneWeight": 78
+        },
+        "descriptor": {
+          "configId": "dd-v1-config:{\"configuration\":{\"collectibles\":[{\"amount\":1,\"appearance\":\"feather-v1\",\"minPipeIndex\":2,\"minSpacingPipes\":3,\"radius\":7000,\"typeId\":\"FEATHER\",\"version\":1,\"weight\":0},{\"amount\":1,\"appearance\":\"game-star-v1\",\"minPipeIndex\":5,\"minSpacingPipes\":5,\"radius\":7000,\"typeId\":\"GAME_STAR\",\"version\":1,\"weight\":0}],\"flight\":{\"duckHalfHeight\":10000,\"duckHalfWidth\":12000,\"duckX\":160000,\"flapVelocity\":-4200,\"gravity\":80,\"maxFallSpeed\":6000},\"limits\":{\"maxActiveCollectibles\":2,\"maxActivePipes\":8},\"pipes\":{\"ceilingY\":0,\"floorY\":580000,\"gapHeight\":176000,\"horizon\":960000,\"safeLeadIn\":420000,\"spacing\":220000,\"speed\":2400,\"width\":52000},\"spawnNoneWeight\":78},\"patterns\":[{\"gaps\":[280000,280000,280000,280000],\"id\":\"center\"},{\"gaps\":[260000,280000,300000,280000],\"id\":\"rise-fall\"},{\"gaps\":[300000,280000,260000,280000],\"id\":\"fall-rise\"}]}",
+          "generatorVersion": "1.0.0",
+          "runId": "disabled-currencies",
+          "seed": 1,
+          "simulationVersion": "1.0.0"
+        },
+        "duck": {
+          "vy": 0,
+          "x": 160000,
+          "y": 290000
+        },
+        "finalizationCount": 0,
+        "inputHistory": [],
+        "lastCollectiblePipe": -1000000,
+        "nextInputSequence": 0,
+        "nextPipeIndex": 3,
+        "nextSpawnPipeIndex": 0,
+        "phase": "READY",
+        "pipes": [
+          {
+            "gapCenter": 260000,
+            "id": "pipe-0",
+            "index": 0,
+            "scored": false,
+            "x": 420000
+          },
+          {
+            "gapCenter": 280000,
+            "id": "pipe-1",
+            "index": 1,
+            "scored": false,
+            "x": 640000
+          },
+          {
+            "gapCenter": 300000,
+            "id": "pipe-2",
+            "index": 2,
+            "scored": false,
+            "x": 860000
+          }
+        ],
+        "rngState": 3668340012,
+        "score": 0,
+        "tick": 0,
+        "totals": {}
+      },
+      "operations": [
+        {
+          "kind": "step",
+          "frames": [
+            {
+              "sequence": 0,
+              "action": "FLAP"
+            }
+          ],
+          "expectedState": {
+            "collectibles": [],
+            "config": {
+              "collectibles": [
+                {
+                  "amount": 1,
+                  "appearance": "feather-v1",
+                  "minPipeIndex": 2,
+                  "minSpacingPipes": 3,
+                  "radius": 7000,
+                  "typeId": "FEATHER",
+                  "version": 1,
+                  "weight": 0
+                },
+                {
+                  "amount": 1,
+                  "appearance": "game-star-v1",
+                  "minPipeIndex": 5,
+                  "minSpacingPipes": 5,
+                  "radius": 7000,
+                  "typeId": "GAME_STAR",
+                  "version": 1,
+                  "weight": 0
+                }
+              ],
+              "flight": {
+                "duckHalfHeight": 10000,
+                "duckHalfWidth": 12000,
+                "duckX": 160000,
+                "flapVelocity": -4200,
+                "gravity": 80,
+                "maxFallSpeed": 6000
+              },
+              "limits": {
+                "maxActiveCollectibles": 2,
+                "maxActivePipes": 8
+              },
+              "pipes": {
+                "ceilingY": 0,
+                "floorY": 580000,
+                "gapHeight": 176000,
+                "horizon": 960000,
+                "safeLeadIn": 420000,
+                "spacing": 220000,
+                "speed": 2400,
+                "width": 52000
+              },
+              "spawnNoneWeight": 78
+            },
+            "descriptor": {
+              "configId": "dd-v1-config:{\"configuration\":{\"collectibles\":[{\"amount\":1,\"appearance\":\"feather-v1\",\"minPipeIndex\":2,\"minSpacingPipes\":3,\"radius\":7000,\"typeId\":\"FEATHER\",\"version\":1,\"weight\":0},{\"amount\":1,\"appearance\":\"game-star-v1\",\"minPipeIndex\":5,\"minSpacingPipes\":5,\"radius\":7000,\"typeId\":\"GAME_STAR\",\"version\":1,\"weight\":0}],\"flight\":{\"duckHalfHeight\":10000,\"duckHalfWidth\":12000,\"duckX\":160000,\"flapVelocity\":-4200,\"gravity\":80,\"maxFallSpeed\":6000},\"limits\":{\"maxActiveCollectibles\":2,\"maxActivePipes\":8},\"pipes\":{\"ceilingY\":0,\"floorY\":580000,\"gapHeight\":176000,\"horizon\":960000,\"safeLeadIn\":420000,\"spacing\":220000,\"speed\":2400,\"width\":52000},\"spawnNoneWeight\":78},\"patterns\":[{\"gaps\":[280000,280000,280000,280000],\"id\":\"center\"},{\"gaps\":[260000,280000,300000,280000],\"id\":\"rise-fall\"},{\"gaps\":[300000,280000,260000,280000],\"id\":\"fall-rise\"}]}",
+              "generatorVersion": "1.0.0",
+              "runId": "disabled-currencies",
+              "seed": 1,
+              "simulationVersion": "1.0.0"
+            },
+            "duck": {
+              "vy": -4120,
+              "x": 160000,
+              "y": 285880
+            },
+            "finalizationCount": 0,
+            "inputHistory": [],
+            "lastCollectiblePipe": -1000000,
+            "nextInputSequence": 1,
+            "nextPipeIndex": 3,
+            "nextSpawnPipeIndex": 3,
+            "phase": "RUNNING",
+            "pipes": [
+              {
+                "gapCenter": 260000,
+                "id": "pipe-0",
+                "index": 0,
+                "scored": false,
+                "x": 417600
+              },
+              {
+                "gapCenter": 280000,
+                "id": "pipe-1",
+                "index": 1,
+                "scored": false,
+                "x": 637600
+              },
+              {
+                "gapCenter": 300000,
+                "id": "pipe-2",
+                "index": 2,
+                "scored": false,
+                "x": 857600
+              }
+            ],
+            "rngState": 2027808485,
+            "score": 0,
+            "tick": 1,
+            "totals": {}
+          },
+          "expectedEvents": [
+            {
+              "type": "RunStarted",
+              "runId": "disabled-currencies",
+              "tick": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "temporarily-ineligible",
+      "syntheticInitialState": false,
+      "initialState": {
+        "collectibles": [],
+        "config": {
+          "collectibles": [
+            {
+              "amount": 1,
+              "appearance": "game-star-v1",
+              "minPipeIndex": 100,
+              "minSpacingPipes": 5,
+              "radius": 7000,
+              "typeId": "GAME_STAR",
+              "version": 1,
+              "weight": 4
+            }
+          ],
+          "flight": {
+            "duckHalfHeight": 10000,
+            "duckHalfWidth": 12000,
+            "duckX": 160000,
+            "flapVelocity": -4200,
+            "gravity": 80,
+            "maxFallSpeed": 6000
+          },
+          "limits": {
+            "maxActiveCollectibles": 2,
+            "maxActivePipes": 8
+          },
+          "pipes": {
+            "ceilingY": 0,
+            "floorY": 580000,
+            "gapHeight": 176000,
+            "horizon": 960000,
+            "safeLeadIn": 420000,
+            "spacing": 220000,
+            "speed": 2400,
+            "width": 52000
+          },
+          "spawnNoneWeight": 0
+        },
+        "descriptor": {
+          "configId": "dd-v1-config:{\"configuration\":{\"collectibles\":[{\"amount\":1,\"appearance\":\"game-star-v1\",\"minPipeIndex\":100,\"minSpacingPipes\":5,\"radius\":7000,\"typeId\":\"GAME_STAR\",\"version\":1,\"weight\":4}],\"flight\":{\"duckHalfHeight\":10000,\"duckHalfWidth\":12000,\"duckX\":160000,\"flapVelocity\":-4200,\"gravity\":80,\"maxFallSpeed\":6000},\"limits\":{\"maxActiveCollectibles\":2,\"maxActivePipes\":8},\"pipes\":{\"ceilingY\":0,\"floorY\":580000,\"gapHeight\":176000,\"horizon\":960000,\"safeLeadIn\":420000,\"spacing\":220000,\"speed\":2400,\"width\":52000},\"spawnNoneWeight\":0},\"patterns\":[{\"gaps\":[280000,280000,280000,280000],\"id\":\"center\"},{\"gaps\":[260000,280000,300000,280000],\"id\":\"rise-fall\"},{\"gaps\":[300000,280000,260000,280000],\"id\":\"fall-rise\"}]}",
+          "generatorVersion": "1.0.0",
+          "runId": "temporarily-ineligible",
+          "seed": 1,
+          "simulationVersion": "1.0.0"
+        },
+        "duck": {
+          "vy": 0,
+          "x": 160000,
+          "y": 290000
+        },
+        "finalizationCount": 0,
+        "inputHistory": [],
+        "lastCollectiblePipe": -1000000,
+        "nextInputSequence": 0,
+        "nextPipeIndex": 3,
+        "nextSpawnPipeIndex": 0,
+        "phase": "READY",
+        "pipes": [
+          {
+            "gapCenter": 260000,
+            "id": "pipe-0",
+            "index": 0,
+            "scored": false,
+            "x": 420000
+          },
+          {
+            "gapCenter": 280000,
+            "id": "pipe-1",
+            "index": 1,
+            "scored": false,
+            "x": 640000
+          },
+          {
+            "gapCenter": 300000,
+            "id": "pipe-2",
+            "index": 2,
+            "scored": false,
+            "x": 860000
+          }
+        ],
+        "rngState": 3668340012,
+        "score": 0,
+        "tick": 0,
+        "totals": {}
+      },
+      "operations": [
+        {
+          "kind": "step",
+          "frames": [
+            {
+              "sequence": 0,
+              "action": "FLAP"
+            }
+          ],
+          "expectedState": {
+            "collectibles": [],
+            "config": {
+              "collectibles": [
+                {
+                  "amount": 1,
+                  "appearance": "game-star-v1",
+                  "minPipeIndex": 100,
+                  "minSpacingPipes": 5,
+                  "radius": 7000,
+                  "typeId": "GAME_STAR",
+                  "version": 1,
+                  "weight": 4
+                }
+              ],
+              "flight": {
+                "duckHalfHeight": 10000,
+                "duckHalfWidth": 12000,
+                "duckX": 160000,
+                "flapVelocity": -4200,
+                "gravity": 80,
+                "maxFallSpeed": 6000
+              },
+              "limits": {
+                "maxActiveCollectibles": 2,
+                "maxActivePipes": 8
+              },
+              "pipes": {
+                "ceilingY": 0,
+                "floorY": 580000,
+                "gapHeight": 176000,
+                "horizon": 960000,
+                "safeLeadIn": 420000,
+                "spacing": 220000,
+                "speed": 2400,
+                "width": 52000
+              },
+              "spawnNoneWeight": 0
+            },
+            "descriptor": {
+              "configId": "dd-v1-config:{\"configuration\":{\"collectibles\":[{\"amount\":1,\"appearance\":\"game-star-v1\",\"minPipeIndex\":100,\"minSpacingPipes\":5,\"radius\":7000,\"typeId\":\"GAME_STAR\",\"version\":1,\"weight\":4}],\"flight\":{\"duckHalfHeight\":10000,\"duckHalfWidth\":12000,\"duckX\":160000,\"flapVelocity\":-4200,\"gravity\":80,\"maxFallSpeed\":6000},\"limits\":{\"maxActiveCollectibles\":2,\"maxActivePipes\":8},\"pipes\":{\"ceilingY\":0,\"floorY\":580000,\"gapHeight\":176000,\"horizon\":960000,\"safeLeadIn\":420000,\"spacing\":220000,\"speed\":2400,\"width\":52000},\"spawnNoneWeight\":0},\"patterns\":[{\"gaps\":[280000,280000,280000,280000],\"id\":\"center\"},{\"gaps\":[260000,280000,300000,280000],\"id\":\"rise-fall\"},{\"gaps\":[300000,280000,260000,280000],\"id\":\"fall-rise\"}]}",
+              "generatorVersion": "1.0.0",
+              "runId": "temporarily-ineligible",
+              "seed": 1,
+              "simulationVersion": "1.0.0"
+            },
+            "duck": {
+              "vy": -4120,
+              "x": 160000,
+              "y": 285880
+            },
+            "finalizationCount": 0,
+            "inputHistory": [],
+            "lastCollectiblePipe": -1000000,
+            "nextInputSequence": 1,
+            "nextPipeIndex": 3,
+            "nextSpawnPipeIndex": 3,
+            "phase": "RUNNING",
+            "pipes": [
+              {
+                "gapCenter": 260000,
+                "id": "pipe-0",
+                "index": 0,
+                "scored": false,
+                "x": 417600
+              },
+              {
+                "gapCenter": 280000,
+                "id": "pipe-1",
+                "index": 1,
+                "scored": false,
+                "x": 637600
+              },
+              {
+                "gapCenter": 300000,
+                "id": "pipe-2",
+                "index": 2,
+                "scored": false,
+                "x": 857600
+              }
+            ],
+            "rngState": 2027808485,
+            "score": 0,
+            "tick": 1,
+            "totals": {}
+          },
+          "expectedEvents": [
+            {
+              "type": "RunStarted",
+              "runId": "temporarily-ineligible",
+              "tick": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "default-long-run",
+      "syntheticInitialState": false,
+      "initialState": {
+        "collectibles": [],
+        "config": {
+          "collectibles": [
+            {
+              "amount": 1,
+              "appearance": "feather-v1",
+              "minPipeIndex": 2,
+              "minSpacingPipes": 3,
+              "radius": 7000,
+              "typeId": "FEATHER",
+              "version": 1,
+              "weight": 18
+            },
+            {
+              "amount": 1,
+              "appearance": "game-star-v1",
+              "minPipeIndex": 5,
+              "minSpacingPipes": 5,
+              "radius": 7000,
+              "typeId": "GAME_STAR",
+              "version": 1,
+              "weight": 4
+            }
+          ],
+          "flight": {
+            "duckHalfHeight": 10000,
+            "duckHalfWidth": 12000,
+            "duckX": 160000,
+            "flapVelocity": -4200,
+            "gravity": 80,
+            "maxFallSpeed": 6000
+          },
+          "limits": {
+            "maxActiveCollectibles": 2,
+            "maxActivePipes": 8
+          },
+          "pipes": {
+            "ceilingY": 0,
+            "floorY": 580000,
+            "gapHeight": 176000,
+            "horizon": 960000,
+            "safeLeadIn": 420000,
+            "spacing": 220000,
+            "speed": 2400,
+            "width": 52000
+          },
+          "spawnNoneWeight": 78
+        },
+        "descriptor": {
+          "configId": "dd-v1-default",
+          "generatorVersion": "1.0.0",
+          "runId": "default-long-run",
+          "seed": 3,
+          "simulationVersion": "1.0.0"
+        },
+        "duck": {
+          "vy": 0,
+          "x": 160000,
+          "y": 290000
+        },
+        "finalizationCount": 0,
+        "inputHistory": [],
+        "lastCollectiblePipe": -1000000,
+        "nextInputSequence": 0,
+        "nextPipeIndex": 3,
+        "nextSpawnPipeIndex": 0,
+        "phase": "READY",
+        "pipes": [
+          {
+            "gapCenter": 280000,
+            "id": "pipe-0",
+            "index": 0,
+            "scored": false,
+            "x": 420000
+          },
+          {
+            "gapCenter": 280000,
+            "id": "pipe-1",
+            "index": 1,
+            "scored": false,
+            "x": 640000
+          },
+          {
+            "gapCenter": 280000,
+            "id": "pipe-2",
+            "index": 2,
+            "scored": false,
+            "x": 860000
+          }
+        ],
+        "rngState": 3668340014,
+        "score": 0,
+        "tick": 0,
+        "totals": {}
+      },
+      "operations": [
+        {
+          "kind": "advance",
+          "ticks": 219,
+          "flapTicks": [
+            1,
+            115,
+            219
+          ],
+          "expectedState": {
+            "collectibles": [],
+            "config": {
+              "collectibles": [
+                {
+                  "amount": 1,
+                  "appearance": "feather-v1",
+                  "minPipeIndex": 2,
+                  "minSpacingPipes": 3,
+                  "radius": 7000,
+                  "typeId": "FEATHER",
+                  "version": 1,
+                  "weight": 18
+                },
+                {
+                  "amount": 1,
+                  "appearance": "game-star-v1",
+                  "minPipeIndex": 5,
+                  "minSpacingPipes": 5,
+                  "radius": 7000,
+                  "typeId": "GAME_STAR",
+                  "version": 1,
+                  "weight": 4
+                }
+              ],
+              "flight": {
+                "duckHalfHeight": 10000,
+                "duckHalfWidth": 12000,
+                "duckX": 160000,
+                "flapVelocity": -4200,
+                "gravity": 80,
+                "maxFallSpeed": 6000
+              },
+              "limits": {
+                "maxActiveCollectibles": 2,
+                "maxActivePipes": 8
+              },
+              "pipes": {
+                "ceilingY": 0,
+                "floorY": 580000,
+                "gapHeight": 176000,
+                "horizon": 960000,
+                "safeLeadIn": 420000,
+                "spacing": 220000,
+                "speed": 2400,
+                "width": 52000
+              },
+              "spawnNoneWeight": 78
+            },
+            "descriptor": {
+              "configId": "dd-v1-default",
+              "generatorVersion": "1.0.0",
+              "runId": "default-long-run",
+              "seed": 3,
+              "simulationVersion": "1.0.0"
+            },
+            "duck": {
+              "vy": -4120,
+              "x": 160000,
+              "y": 331480
+            },
+            "finalizationCount": 0,
+            "inputHistory": [],
+            "lastCollectiblePipe": -1000000,
+            "nextInputSequence": 3,
+            "nextPipeIndex": 5,
+            "nextSpawnPipeIndex": 5,
+            "phase": "RUNNING",
+            "pipes": [
+              {
+                "gapCenter": 280000,
+                "id": "pipe-1",
+                "index": 1,
+                "scored": true,
+                "x": 114400
+              },
+              {
+                "gapCenter": 280000,
+                "id": "pipe-2",
+                "index": 2,
+                "scored": false,
+                "x": 334400
+              },
+              {
+                "gapCenter": 280000,
+                "id": "pipe-3",
+                "index": 3,
+                "scored": false,
+                "x": 554400
+              },
+              {
+                "gapCenter": 280000,
+                "id": "pipe-4",
+                "index": 4,
+                "scored": false,
+                "x": 774400
+              }
+            ],
+            "rngState": 4055616971,
+            "score": 2,
+            "tick": 219,
+            "totals": {}
+          },
+          "expectedEvents": [
+            {
+              "type": "RunStarted",
+              "runId": "default-long-run",
+              "tick": 1
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-0",
+              "score": 1,
+              "tick": 125
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-1",
+              "score": 2,
+              "tick": 216
+            }
+          ]
+        },
+        {
+          "kind": "advance",
+          "ticks": 781,
+          "flapTicks": [
+            104,
+            208,
+            312,
+            416,
+            520,
+            624,
+            728
+          ],
+          "expectedState": {
+            "collectibles": [
+              {
+                "amount": 1,
+                "collected": false,
+                "id": "collectible-10",
+                "radius": 7000,
+                "typeId": "FEATHER",
+                "x": 220000,
+                "y": 260000
+              },
+              {
+                "amount": 1,
+                "collected": false,
+                "id": "collectible-13",
+                "radius": 7000,
+                "typeId": "FEATHER",
+                "x": 880000,
+                "y": 280000
+              }
+            ],
+            "config": {
+              "collectibles": [
+                {
+                  "amount": 1,
+                  "appearance": "feather-v1",
+                  "minPipeIndex": 2,
+                  "minSpacingPipes": 3,
+                  "radius": 7000,
+                  "typeId": "FEATHER",
+                  "version": 1,
+                  "weight": 18
+                },
+                {
+                  "amount": 1,
+                  "appearance": "game-star-v1",
+                  "minPipeIndex": 5,
+                  "minSpacingPipes": 5,
+                  "radius": 7000,
+                  "typeId": "GAME_STAR",
+                  "version": 1,
+                  "weight": 4
+                }
+              ],
+              "flight": {
+                "duckHalfHeight": 10000,
+                "duckHalfWidth": 12000,
+                "duckX": 160000,
+                "flapVelocity": -4200,
+                "gravity": 80,
+                "maxFallSpeed": 6000
+              },
+              "limits": {
+                "maxActiveCollectibles": 2,
+                "maxActivePipes": 8
+              },
+              "pipes": {
+                "ceilingY": 0,
+                "floorY": 580000,
+                "gapHeight": 176000,
+                "horizon": 960000,
+                "safeLeadIn": 420000,
+                "spacing": 220000,
+                "speed": 2400,
+                "width": 52000
+              },
+              "spawnNoneWeight": 78
+            },
+            "descriptor": {
+              "configId": "dd-v1-default",
+              "generatorVersion": "1.0.0",
+              "runId": "default-long-run",
+              "seed": 3,
+              "simulationVersion": "1.0.0"
+            },
+            "duck": {
+              "vy": 120,
+              "x": 160000,
+              "y": 227600
+            },
+            "finalizationCount": 0,
+            "inputHistory": [],
+            "lastCollectiblePipe": 13,
+            "nextInputSequence": 10,
+            "nextPipeIndex": 14,
+            "nextSpawnPipeIndex": 14,
+            "phase": "RUNNING",
+            "pipes": [
+              {
+                "gapCenter": 280000,
+                "id": "pipe-9",
+                "index": 9,
+                "scored": true,
+                "x": 0
+              },
+              {
+                "gapCenter": 260000,
+                "id": "pipe-10",
+                "index": 10,
+                "scored": false,
+                "x": 220000
+              },
+              {
+                "gapCenter": 280000,
+                "id": "pipe-11",
+                "index": 11,
+                "scored": false,
+                "x": 440000
+              },
+              {
+                "gapCenter": 280000,
+                "id": "pipe-12",
+                "index": 12,
+                "scored": false,
+                "x": 660000
+              },
+              {
+                "gapCenter": 280000,
+                "id": "pipe-13",
+                "index": 13,
+                "scored": false,
+                "x": 880000
+              }
+            ],
+            "rngState": 295853261,
+            "score": 10,
+            "tick": 1000,
+            "totals": {
+              "GAME_STAR": 1
+            }
+          },
+          "expectedEvents": [
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-2",
+              "score": 3,
+              "tick": 308
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-3",
+              "score": 4,
+              "tick": 400
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-4",
+              "score": 5,
+              "tick": 491
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-5",
+              "score": 6,
+              "tick": 583
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-6",
+              "score": 7,
+              "tick": 675
+            },
+            {
+              "type": "CurrencyCollected",
+              "runId": "default-long-run",
+              "collectibleId": "collectible-7",
+              "typeId": "GAME_STAR",
+              "amount": 1,
+              "tick": 749
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-7",
+              "score": 8,
+              "tick": 766
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-8",
+              "score": 9,
+              "tick": 858
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-9",
+              "score": 10,
+              "tick": 950
+            }
+          ]
+        },
+        {
+          "kind": "advance",
+          "ticks": 23000,
+          "flapTicks": [
+            51,
+            155,
+            259,
+            363,
+            467,
+            571,
+            675,
+            779,
+            883,
+            987,
+            1091,
+            1195,
+            1299,
+            1403,
+            1507,
+            1611,
+            1715,
+            1819,
+            1923,
+            2027,
+            2131,
+            2235,
+            2339,
+            2443,
+            2547,
+            2651,
+            2755,
+            2859,
+            2963,
+            3067,
+            3171,
+            3275,
+            3379,
+            3483,
+            3587,
+            3691,
+            3795,
+            3899,
+            4003,
+            4107,
+            4211,
+            4315,
+            4419,
+            4523,
+            4627,
+            4731,
+            4835,
+            4939,
+            5043,
+            5147,
+            5251,
+            5355,
+            5459,
+            5563,
+            5667,
+            5771,
+            5875,
+            5979,
+            6083,
+            6187,
+            6291,
+            6395,
+            6499,
+            6603,
+            6707,
+            6811,
+            6915,
+            7019,
+            7123,
+            7227,
+            7331,
+            7435,
+            7539,
+            7643,
+            7747,
+            7851,
+            7955,
+            8059,
+            8163,
+            8267,
+            8371,
+            8475,
+            8579,
+            8683,
+            8787,
+            8891,
+            8995,
+            9099,
+            9203,
+            9307,
+            9411,
+            9515,
+            9619,
+            9723,
+            9827,
+            9931,
+            10035,
+            10139,
+            10243,
+            10347,
+            10451,
+            10555,
+            10659,
+            10763,
+            10867,
+            10971,
+            11075,
+            11179,
+            11283,
+            11387,
+            11491,
+            11595,
+            11699,
+            11803,
+            11907,
+            12011,
+            12115,
+            12219,
+            12323,
+            12427,
+            12531,
+            12635,
+            12739,
+            12843,
+            12947,
+            13051,
+            13155,
+            13259,
+            13363,
+            13467,
+            13571,
+            13675,
+            13779,
+            13883,
+            13987,
+            14091,
+            14195,
+            14299,
+            14403,
+            14507,
+            14611,
+            14715,
+            14819,
+            14923,
+            15027,
+            15131,
+            15235,
+            15339,
+            15443,
+            15547,
+            15651,
+            15755,
+            15859,
+            15963,
+            16067,
+            16171,
+            16275,
+            16379,
+            16483,
+            16587,
+            16691,
+            16795,
+            16899,
+            17003,
+            17107,
+            17211,
+            17315,
+            17419,
+            17523,
+            17627,
+            17731,
+            17835,
+            17939,
+            18043,
+            18147,
+            18251,
+            18355,
+            18459,
+            18563,
+            18667,
+            18771,
+            18875,
+            18979,
+            19083,
+            19187,
+            19291,
+            19395,
+            19499,
+            19603,
+            19707,
+            19811,
+            19915,
+            20019,
+            20123,
+            20227,
+            20331,
+            20435,
+            20539,
+            20643,
+            20747,
+            20851,
+            20955,
+            21059,
+            21163,
+            21267,
+            21371,
+            21475,
+            21579,
+            21683,
+            21787,
+            21891,
+            21995,
+            22099,
+            22203,
+            22307,
+            22411,
+            22515,
+            22619,
+            22723,
+            22827,
+            22931
+          ],
+          "expectedState": {
+            "collectibles": [
+              {
+                "amount": 1,
+                "collected": false,
+                "id": "collectible-263",
+                "radius": 7000,
+                "typeId": "FEATHER",
+                "x": 680000,
+                "y": 280000
+              }
+            ],
+            "config": {
+              "collectibles": [
+                {
+                  "amount": 1,
+                  "appearance": "feather-v1",
+                  "minPipeIndex": 2,
+                  "minSpacingPipes": 3,
+                  "radius": 7000,
+                  "typeId": "FEATHER",
+                  "version": 1,
+                  "weight": 18
+                },
+                {
+                  "amount": 1,
+                  "appearance": "game-star-v1",
+                  "minPipeIndex": 5,
+                  "minSpacingPipes": 5,
+                  "radius": 7000,
+                  "typeId": "GAME_STAR",
+                  "version": 1,
+                  "weight": 4
+                }
+              ],
+              "flight": {
+                "duckHalfHeight": 10000,
+                "duckHalfWidth": 12000,
+                "duckX": 160000,
+                "flapVelocity": -4200,
+                "gravity": 80,
+                "maxFallSpeed": 6000
+              },
+              "limits": {
+                "maxActiveCollectibles": 2,
+                "maxActivePipes": 8
+              },
+              "pipes": {
+                "ceilingY": 0,
+                "floorY": 580000,
+                "gapHeight": 176000,
+                "horizon": 960000,
+                "safeLeadIn": 420000,
+                "spacing": 220000,
+                "speed": 2400,
+                "width": 52000
+              },
+              "spawnNoneWeight": 78
+            },
+            "descriptor": {
+              "configId": "dd-v1-default",
+              "generatorVersion": "1.0.0",
+              "runId": "default-long-run",
+              "seed": 3,
+              "simulationVersion": "1.0.0"
+            },
+            "duck": {
+              "vy": 1400,
+              "x": 160000,
+              "y": 240400
+            },
+            "finalizationCount": 0,
+            "inputHistory": [],
+            "lastCollectiblePipe": 263,
+            "nextInputSequence": 231,
+            "nextPipeIndex": 265,
+            "nextSpawnPipeIndex": 265,
+            "phase": "RUNNING",
+            "pipes": [
+              {
+                "gapCenter": 280000,
+                "id": "pipe-260",
+                "index": 260,
+                "scored": true,
+                "x": 20000
+              },
+              {
+                "gapCenter": 280000,
+                "id": "pipe-261",
+                "index": 261,
+                "scored": false,
+                "x": 240000
+              },
+              {
+                "gapCenter": 280000,
+                "id": "pipe-262",
+                "index": 262,
+                "scored": false,
+                "x": 460000
+              },
+              {
+                "gapCenter": 280000,
+                "id": "pipe-263",
+                "index": 263,
+                "scored": false,
+                "x": 680000
+              },
+              {
+                "gapCenter": 280000,
+                "id": "pipe-264",
+                "index": 264,
+                "scored": false,
+                "x": 900000
+              }
+            ],
+            "rngState": 1382747539,
+            "score": 261,
+            "tick": 24000,
+            "totals": {
+              "FEATHER": 22,
+              "GAME_STAR": 3
+            }
+          },
+          "expectedEvents": [
+            {
+              "type": "CurrencyCollected",
+              "runId": "default-long-run",
+              "collectibleId": "collectible-10",
+              "typeId": "FEATHER",
+              "amount": 1,
+              "tick": 1018
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-10",
+              "score": 11,
+              "tick": 1041
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-11",
+              "score": 12,
+              "tick": 1133
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-12",
+              "score": 13,
+              "tick": 1225
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-13",
+              "score": 14,
+              "tick": 1316
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-14",
+              "score": 15,
+              "tick": 1408
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-15",
+              "score": 16,
+              "tick": 1500
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-16",
+              "score": 17,
+              "tick": 1591
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-17",
+              "score": 18,
+              "tick": 1683
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-18",
+              "score": 19,
+              "tick": 1775
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-19",
+              "score": 20,
+              "tick": 1866
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-20",
+              "score": 21,
+              "tick": 1958
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-21",
+              "score": 22,
+              "tick": 2050
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-22",
+              "score": 23,
+              "tick": 2141
+            },
+            {
+              "type": "CurrencyCollected",
+              "runId": "default-long-run",
+              "collectibleId": "collectible-23",
+              "typeId": "FEATHER",
+              "amount": 1,
+              "tick": 2209
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-23",
+              "score": 24,
+              "tick": 2233
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-24",
+              "score": 25,
+              "tick": 2325
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-25",
+              "score": 26,
+              "tick": 2416
+            },
+            {
+              "type": "CurrencyCollected",
+              "runId": "default-long-run",
+              "collectibleId": "collectible-26",
+              "typeId": "FEATHER",
+              "amount": 1,
+              "tick": 2484
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-26",
+              "score": 27,
+              "tick": 2508
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-27",
+              "score": 28,
+              "tick": 2600
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-28",
+              "score": 29,
+              "tick": 2691
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-29",
+              "score": 30,
+              "tick": 2783
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-30",
+              "score": 31,
+              "tick": 2875
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-31",
+              "score": 32,
+              "tick": 2966
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-32",
+              "score": 33,
+              "tick": 3058
+            },
+            {
+              "type": "CurrencyCollected",
+              "runId": "default-long-run",
+              "collectibleId": "collectible-33",
+              "typeId": "FEATHER",
+              "amount": 1,
+              "tick": 3141
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-33",
+              "score": 34,
+              "tick": 3150
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-34",
+              "score": 35,
+              "tick": 3241
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-35",
+              "score": 36,
+              "tick": 3333
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-36",
+              "score": 37,
+              "tick": 3425
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-37",
+              "score": 38,
+              "tick": 3516
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-38",
+              "score": 39,
+              "tick": 3608
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-39",
+              "score": 40,
+              "tick": 3700
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-40",
+              "score": 41,
+              "tick": 3791
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-41",
+              "score": 42,
+              "tick": 3883
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-42",
+              "score": 43,
+              "tick": 3975
+            },
+            {
+              "type": "CurrencyCollected",
+              "runId": "default-long-run",
+              "collectibleId": "collectible-43",
+              "typeId": "FEATHER",
+              "amount": 1,
+              "tick": 4044
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-43",
+              "score": 44,
+              "tick": 4066
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-44",
+              "score": 45,
+              "tick": 4158
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-45",
+              "score": 46,
+              "tick": 4250
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-46",
+              "score": 47,
+              "tick": 4341
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-47",
+              "score": 48,
+              "tick": 4433
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-48",
+              "score": 49,
+              "tick": 4525
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-49",
+              "score": 50,
+              "tick": 4616
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-50",
+              "score": 51,
+              "tick": 4708
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-51",
+              "score": 52,
+              "tick": 4800
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-52",
+              "score": 53,
+              "tick": 4891
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-53",
+              "score": 54,
+              "tick": 4983
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-54",
+              "score": 55,
+              "tick": 5075
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-55",
+              "score": 56,
+              "tick": 5166
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-56",
+              "score": 57,
+              "tick": 5258
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-57",
+              "score": 58,
+              "tick": 5350
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-58",
+              "score": 59,
+              "tick": 5441
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-59",
+              "score": 60,
+              "tick": 5533
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-60",
+              "score": 61,
+              "tick": 5625
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-61",
+              "score": 62,
+              "tick": 5716
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-62",
+              "score": 63,
+              "tick": 5808
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-63",
+              "score": 64,
+              "tick": 5900
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-64",
+              "score": 65,
+              "tick": 5991
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-65",
+              "score": 66,
+              "tick": 6083
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-66",
+              "score": 67,
+              "tick": 6175
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-67",
+              "score": 68,
+              "tick": 6266
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-68",
+              "score": 69,
+              "tick": 6358
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-69",
+              "score": 70,
+              "tick": 6450
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-70",
+              "score": 71,
+              "tick": 6541
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-71",
+              "score": 72,
+              "tick": 6633
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-72",
+              "score": 73,
+              "tick": 6725
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-73",
+              "score": 74,
+              "tick": 6816
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-74",
+              "score": 75,
+              "tick": 6908
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-75",
+              "score": 76,
+              "tick": 7000
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-76",
+              "score": 77,
+              "tick": 7091
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-77",
+              "score": 78,
+              "tick": 7183
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-78",
+              "score": 79,
+              "tick": 7275
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-79",
+              "score": 80,
+              "tick": 7366
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-80",
+              "score": 81,
+              "tick": 7458
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-81",
+              "score": 82,
+              "tick": 7550
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-82",
+              "score": 83,
+              "tick": 7641
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-83",
+              "score": 84,
+              "tick": 7733
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-84",
+              "score": 85,
+              "tick": 7825
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-85",
+              "score": 86,
+              "tick": 7916
+            },
+            {
+              "type": "CurrencyCollected",
+              "runId": "default-long-run",
+              "collectibleId": "collectible-86",
+              "typeId": "GAME_STAR",
+              "amount": 1,
+              "tick": 7996
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-86",
+              "score": 87,
+              "tick": 8008
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-87",
+              "score": 88,
+              "tick": 8100
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-88",
+              "score": 89,
+              "tick": 8191
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-89",
+              "score": 90,
+              "tick": 8283
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-90",
+              "score": 91,
+              "tick": 8375
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-91",
+              "score": 92,
+              "tick": 8466
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-92",
+              "score": 93,
+              "tick": 8558
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-93",
+              "score": 94,
+              "tick": 8650
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-94",
+              "score": 95,
+              "tick": 8741
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-95",
+              "score": 96,
+              "tick": 8833
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-96",
+              "score": 97,
+              "tick": 8925
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-97",
+              "score": 98,
+              "tick": 9016
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-98",
+              "score": 99,
+              "tick": 9108
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-99",
+              "score": 100,
+              "tick": 9200
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-100",
+              "score": 101,
+              "tick": 9291
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-101",
+              "score": 102,
+              "tick": 9383
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-102",
+              "score": 103,
+              "tick": 9475
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-103",
+              "score": 104,
+              "tick": 9566
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-104",
+              "score": 105,
+              "tick": 9658
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-105",
+              "score": 106,
+              "tick": 9750
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-106",
+              "score": 107,
+              "tick": 9841
+            },
+            {
+              "type": "CurrencyCollected",
+              "runId": "default-long-run",
+              "collectibleId": "collectible-107",
+              "typeId": "FEATHER",
+              "amount": 1,
+              "tick": 9909
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-107",
+              "score": 108,
+              "tick": 9933
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-108",
+              "score": 109,
+              "tick": 10025
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-109",
+              "score": 110,
+              "tick": 10116
+            },
+            {
+              "type": "CurrencyCollected",
+              "runId": "default-long-run",
+              "collectibleId": "collectible-110",
+              "typeId": "FEATHER",
+              "amount": 1,
+              "tick": 10188
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-110",
+              "score": 111,
+              "tick": 10208
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-111",
+              "score": 112,
+              "tick": 10300
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-112",
+              "score": 113,
+              "tick": 10391
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-113",
+              "score": 114,
+              "tick": 10483
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-114",
+              "score": 115,
+              "tick": 10575
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-115",
+              "score": 116,
+              "tick": 10666
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-116",
+              "score": 117,
+              "tick": 10758
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-117",
+              "score": 118,
+              "tick": 10850
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-118",
+              "score": 119,
+              "tick": 10941
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-119",
+              "score": 120,
+              "tick": 11033
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-120",
+              "score": 121,
+              "tick": 11125
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-121",
+              "score": 122,
+              "tick": 11216
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-122",
+              "score": 123,
+              "tick": 11308
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-123",
+              "score": 124,
+              "tick": 11400
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-124",
+              "score": 125,
+              "tick": 11491
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-125",
+              "score": 126,
+              "tick": 11583
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-126",
+              "score": 127,
+              "tick": 11675
+            },
+            {
+              "type": "CurrencyCollected",
+              "runId": "default-long-run",
+              "collectibleId": "collectible-127",
+              "typeId": "FEATHER",
+              "amount": 1,
+              "tick": 11743
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-127",
+              "score": 128,
+              "tick": 11766
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-128",
+              "score": 129,
+              "tick": 11858
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-129",
+              "score": 130,
+              "tick": 11950
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-130",
+              "score": 131,
+              "tick": 12041
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-131",
+              "score": 132,
+              "tick": 12133
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-132",
+              "score": 133,
+              "tick": 12225
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-133",
+              "score": 134,
+              "tick": 12316
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-134",
+              "score": 135,
+              "tick": 12408
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-135",
+              "score": 136,
+              "tick": 12500
+            },
+            {
+              "type": "CurrencyCollected",
+              "runId": "default-long-run",
+              "collectibleId": "collectible-136",
+              "typeId": "FEATHER",
+              "amount": 1,
+              "tick": 12568
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-136",
+              "score": 137,
+              "tick": 12591
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-137",
+              "score": 138,
+              "tick": 12683
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-138",
+              "score": 139,
+              "tick": 12775
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-139",
+              "score": 140,
+              "tick": 12866
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-140",
+              "score": 141,
+              "tick": 12958
+            },
+            {
+              "type": "CurrencyCollected",
+              "runId": "default-long-run",
+              "collectibleId": "collectible-141",
+              "typeId": "FEATHER",
+              "amount": 1,
+              "tick": 13026
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-141",
+              "score": 142,
+              "tick": 13050
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-142",
+              "score": 143,
+              "tick": 13141
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-143",
+              "score": 144,
+              "tick": 13233
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-144",
+              "score": 145,
+              "tick": 13325
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-145",
+              "score": 146,
+              "tick": 13416
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-146",
+              "score": 147,
+              "tick": 13508
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-147",
+              "score": 148,
+              "tick": 13600
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-148",
+              "score": 149,
+              "tick": 13691
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-149",
+              "score": 150,
+              "tick": 13783
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-150",
+              "score": 151,
+              "tick": 13875
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-151",
+              "score": 152,
+              "tick": 13966
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-152",
+              "score": 153,
+              "tick": 14058
+            },
+            {
+              "type": "CurrencyCollected",
+              "runId": "default-long-run",
+              "collectibleId": "collectible-153",
+              "typeId": "FEATHER",
+              "amount": 1,
+              "tick": 14132
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-153",
+              "score": 154,
+              "tick": 14150
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-154",
+              "score": 155,
+              "tick": 14241
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-155",
+              "score": 156,
+              "tick": 14333
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-156",
+              "score": 157,
+              "tick": 14425
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-157",
+              "score": 158,
+              "tick": 14516
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-158",
+              "score": 159,
+              "tick": 14608
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-159",
+              "score": 160,
+              "tick": 14700
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-160",
+              "score": 161,
+              "tick": 14791
+            },
+            {
+              "type": "CurrencyCollected",
+              "runId": "default-long-run",
+              "collectibleId": "collectible-161",
+              "typeId": "FEATHER",
+              "amount": 1,
+              "tick": 14860
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-161",
+              "score": 162,
+              "tick": 14883
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-162",
+              "score": 163,
+              "tick": 14975
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-163",
+              "score": 164,
+              "tick": 15066
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-164",
+              "score": 165,
+              "tick": 15158
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-165",
+              "score": 166,
+              "tick": 15250
+            },
+            {
+              "type": "CurrencyCollected",
+              "runId": "default-long-run",
+              "collectibleId": "collectible-166",
+              "typeId": "FEATHER",
+              "amount": 1,
+              "tick": 15318
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-166",
+              "score": 167,
+              "tick": 15341
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-167",
+              "score": 168,
+              "tick": 15433
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-168",
+              "score": 169,
+              "tick": 15525
+            },
+            {
+              "type": "CurrencyCollected",
+              "runId": "default-long-run",
+              "collectibleId": "collectible-169",
+              "typeId": "FEATHER",
+              "amount": 1,
+              "tick": 15593
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-169",
+              "score": 170,
+              "tick": 15616
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-170",
+              "score": 171,
+              "tick": 15708
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-171",
+              "score": 172,
+              "tick": 15800
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-172",
+              "score": 173,
+              "tick": 15891
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-173",
+              "score": 174,
+              "tick": 15983
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-174",
+              "score": 175,
+              "tick": 16075
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-175",
+              "score": 176,
+              "tick": 16166
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-176",
+              "score": 177,
+              "tick": 16258
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-177",
+              "score": 178,
+              "tick": 16350
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-178",
+              "score": 179,
+              "tick": 16441
+            },
+            {
+              "type": "CurrencyCollected",
+              "runId": "default-long-run",
+              "collectibleId": "collectible-179",
+              "typeId": "FEATHER",
+              "amount": 1,
+              "tick": 16524
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-179",
+              "score": 180,
+              "tick": 16533
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-180",
+              "score": 181,
+              "tick": 16625
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-181",
+              "score": 182,
+              "tick": 16716
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-182",
+              "score": 183,
+              "tick": 16808
+            },
+            {
+              "type": "CurrencyCollected",
+              "runId": "default-long-run",
+              "collectibleId": "collectible-183",
+              "typeId": "FEATHER",
+              "amount": 1,
+              "tick": 16876
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-183",
+              "score": 184,
+              "tick": 16900
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-184",
+              "score": 185,
+              "tick": 16991
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-185",
+              "score": 186,
+              "tick": 17083
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-186",
+              "score": 187,
+              "tick": 17175
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-187",
+              "score": 188,
+              "tick": 17266
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-188",
+              "score": 189,
+              "tick": 17358
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-189",
+              "score": 190,
+              "tick": 17450
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-190",
+              "score": 191,
+              "tick": 17541
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-191",
+              "score": 192,
+              "tick": 17633
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-192",
+              "score": 193,
+              "tick": 17725
+            },
+            {
+              "type": "CurrencyCollected",
+              "runId": "default-long-run",
+              "collectibleId": "collectible-193",
+              "typeId": "FEATHER",
+              "amount": 1,
+              "tick": 17805
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-193",
+              "score": 194,
+              "tick": 17816
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-194",
+              "score": 195,
+              "tick": 17908
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-195",
+              "score": 196,
+              "tick": 18000
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-196",
+              "score": 197,
+              "tick": 18091
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-197",
+              "score": 198,
+              "tick": 18183
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-198",
+              "score": 199,
+              "tick": 18275
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-199",
+              "score": 200,
+              "tick": 18366
+            },
+            {
+              "type": "CurrencyCollected",
+              "runId": "default-long-run",
+              "collectibleId": "collectible-200",
+              "typeId": "FEATHER",
+              "amount": 1,
+              "tick": 18434
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-200",
+              "score": 201,
+              "tick": 18458
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-201",
+              "score": 202,
+              "tick": 18550
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-202",
+              "score": 203,
+              "tick": 18641
+            },
+            {
+              "type": "CurrencyCollected",
+              "runId": "default-long-run",
+              "collectibleId": "collectible-203",
+              "typeId": "FEATHER",
+              "amount": 1,
+              "tick": 18709
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-203",
+              "score": 204,
+              "tick": 18733
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-204",
+              "score": 205,
+              "tick": 18825
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-205",
+              "score": 206,
+              "tick": 18916
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-206",
+              "score": 207,
+              "tick": 19008
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-207",
+              "score": 208,
+              "tick": 19100
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-208",
+              "score": 209,
+              "tick": 19191
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-209",
+              "score": 210,
+              "tick": 19283
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-210",
+              "score": 211,
+              "tick": 19375
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-211",
+              "score": 212,
+              "tick": 19466
+            },
+            {
+              "type": "CurrencyCollected",
+              "runId": "default-long-run",
+              "collectibleId": "collectible-212",
+              "typeId": "GAME_STAR",
+              "amount": 1,
+              "tick": 19548
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-212",
+              "score": 213,
+              "tick": 19558
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-213",
+              "score": 214,
+              "tick": 19650
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-214",
+              "score": 215,
+              "tick": 19741
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-215",
+              "score": 216,
+              "tick": 19833
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-216",
+              "score": 217,
+              "tick": 19925
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-217",
+              "score": 218,
+              "tick": 20016
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-218",
+              "score": 219,
+              "tick": 20108
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-219",
+              "score": 220,
+              "tick": 20200
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-220",
+              "score": 221,
+              "tick": 20291
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-221",
+              "score": 222,
+              "tick": 20383
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-222",
+              "score": 223,
+              "tick": 20475
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-223",
+              "score": 224,
+              "tick": 20566
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-224",
+              "score": 225,
+              "tick": 20658
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-225",
+              "score": 226,
+              "tick": 20750
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-226",
+              "score": 227,
+              "tick": 20841
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-227",
+              "score": 228,
+              "tick": 20933
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-228",
+              "score": 229,
+              "tick": 21025
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-229",
+              "score": 230,
+              "tick": 21116
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-230",
+              "score": 231,
+              "tick": 21208
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-231",
+              "score": 232,
+              "tick": 21300
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-232",
+              "score": 233,
+              "tick": 21391
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-233",
+              "score": 234,
+              "tick": 21483
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-234",
+              "score": 235,
+              "tick": 21575
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-235",
+              "score": 236,
+              "tick": 21666
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-236",
+              "score": 237,
+              "tick": 21758
+            },
+            {
+              "type": "CurrencyCollected",
+              "runId": "default-long-run",
+              "collectibleId": "collectible-237",
+              "typeId": "FEATHER",
+              "amount": 1,
+              "tick": 21828
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-237",
+              "score": 238,
+              "tick": 21850
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-238",
+              "score": 239,
+              "tick": 21941
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-239",
+              "score": 240,
+              "tick": 22033
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-240",
+              "score": 241,
+              "tick": 22125
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-241",
+              "score": 242,
+              "tick": 22216
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-242",
+              "score": 243,
+              "tick": 22308
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-243",
+              "score": 244,
+              "tick": 22400
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-244",
+              "score": 245,
+              "tick": 22491
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-245",
+              "score": 246,
+              "tick": 22583
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-246",
+              "score": 247,
+              "tick": 22675
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-247",
+              "score": 248,
+              "tick": 22766
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-248",
+              "score": 249,
+              "tick": 22858
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-249",
+              "score": 250,
+              "tick": 22950
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-250",
+              "score": 251,
+              "tick": 23041
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-251",
+              "score": 252,
+              "tick": 23133
+            },
+            {
+              "type": "CurrencyCollected",
+              "runId": "default-long-run",
+              "collectibleId": "collectible-252",
+              "typeId": "FEATHER",
+              "amount": 1,
+              "tick": 23207
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-252",
+              "score": 253,
+              "tick": 23225
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-253",
+              "score": 254,
+              "tick": 23316
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-254",
+              "score": 255,
+              "tick": 23408
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-255",
+              "score": 256,
+              "tick": 23500
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-256",
+              "score": 257,
+              "tick": 23591
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-257",
+              "score": 258,
+              "tick": 23683
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-258",
+              "score": 259,
+              "tick": 23775
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-259",
+              "score": 260,
+              "tick": 23866
+            },
+            {
+              "type": "CurrencyCollected",
+              "runId": "default-long-run",
+              "collectibleId": "collectible-260",
+              "typeId": "FEATHER",
+              "amount": 1,
+              "tick": 23941
+            },
+            {
+              "type": "PipePassed",
+              "runId": "default-long-run",
+              "pipeId": "pipe-260",
+              "score": 261,
+              "tick": 23958
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "invalidCases": [
+    {
+      "name": "unsupported-simulation",
+      "kind": "create",
+      "descriptor": {
+        "runId": "invalid-base",
+        "seed": 1,
+        "simulationVersion": "99.0.0",
+        "generatorVersion": "1.0.0",
+        "configId": "dd-v1-default"
+      },
+      "config": {
+        "flight": {
+          "gravity": 80,
+          "flapVelocity": -4200,
+          "maxFallSpeed": 6000,
+          "duckX": 160000,
+          "duckHalfWidth": 12000,
+          "duckHalfHeight": 10000
+        },
+        "pipes": {
+          "speed": 2400,
+          "spacing": 220000,
+          "width": 52000,
+          "gapHeight": 176000,
+          "safeLeadIn": 420000,
+          "horizon": 960000,
+          "floorY": 580000,
+          "ceilingY": 0
+        },
+        "limits": {
+          "maxActivePipes": 8,
+          "maxActiveCollectibles": 2
+        },
+        "collectibles": [
+          {
+            "typeId": "FEATHER",
+            "version": 1,
+            "weight": 18,
+            "minPipeIndex": 2,
+            "minSpacingPipes": 3,
+            "amount": 1,
+            "radius": 7000,
+            "appearance": "feather-v1"
+          },
+          {
+            "typeId": "GAME_STAR",
+            "version": 1,
+            "weight": 4,
+            "minPipeIndex": 5,
+            "minSpacingPipes": 5,
+            "amount": 1,
+            "radius": 7000,
+            "appearance": "game-star-v1"
+          }
+        ],
+        "spawnNoneWeight": 78
+      }
+    },
+    {
+      "name": "negative-seed",
+      "kind": "create",
+      "descriptor": {
+        "runId": "invalid-base",
+        "seed": -1,
+        "simulationVersion": "1.0.0",
+        "generatorVersion": "1.0.0",
+        "configId": "dd-v1-default"
+      },
+      "config": {
+        "flight": {
+          "gravity": 80,
+          "flapVelocity": -4200,
+          "maxFallSpeed": 6000,
+          "duckX": 160000,
+          "duckHalfWidth": 12000,
+          "duckHalfHeight": 10000
+        },
+        "pipes": {
+          "speed": 2400,
+          "spacing": 220000,
+          "width": 52000,
+          "gapHeight": 176000,
+          "safeLeadIn": 420000,
+          "horizon": 960000,
+          "floorY": 580000,
+          "ceilingY": 0
+        },
+        "limits": {
+          "maxActivePipes": 8,
+          "maxActiveCollectibles": 2
+        },
+        "collectibles": [
+          {
+            "typeId": "FEATHER",
+            "version": 1,
+            "weight": 18,
+            "minPipeIndex": 2,
+            "minSpacingPipes": 3,
+            "amount": 1,
+            "radius": 7000,
+            "appearance": "feather-v1"
+          },
+          {
+            "typeId": "GAME_STAR",
+            "version": 1,
+            "weight": 4,
+            "minPipeIndex": 5,
+            "minSpacingPipes": 5,
+            "amount": 1,
+            "radius": 7000,
+            "appearance": "game-star-v1"
+          }
+        ],
+        "spawnNoneWeight": 78
+      }
+    },
+    {
+      "name": "config-mismatch",
+      "kind": "create",
+      "descriptor": {
+        "runId": "invalid-base",
+        "seed": 1,
+        "simulationVersion": "1.0.0",
+        "generatorVersion": "1.0.0",
+        "configId": "dd-v1-default"
+      },
+      "config": {
+        "flight": {
+          "gravity": 81,
+          "flapVelocity": -4200,
+          "maxFallSpeed": 6000,
+          "duckX": 160000,
+          "duckHalfWidth": 12000,
+          "duckHalfHeight": 10000
+        },
+        "pipes": {
+          "speed": 2400,
+          "spacing": 220000,
+          "width": 52000,
+          "gapHeight": 176000,
+          "safeLeadIn": 420000,
+          "horizon": 960000,
+          "floorY": 580000,
+          "ceilingY": 0
+        },
+        "limits": {
+          "maxActivePipes": 8,
+          "maxActiveCollectibles": 2
+        },
+        "collectibles": [
+          {
+            "typeId": "FEATHER",
+            "version": 1,
+            "weight": 18,
+            "minPipeIndex": 2,
+            "minSpacingPipes": 3,
+            "amount": 1,
+            "radius": 7000,
+            "appearance": "feather-v1"
+          },
+          {
+            "typeId": "GAME_STAR",
+            "version": 1,
+            "weight": 4,
+            "minPipeIndex": 5,
+            "minSpacingPipes": 5,
+            "amount": 1,
+            "radius": 7000,
+            "appearance": "game-star-v1"
+          }
+        ],
+        "spawnNoneWeight": 78
+      }
+    },
+    {
+      "name": "sequence-gap",
+      "kind": "step",
+      "initialState": {
+        "collectibles": [],
+        "config": {
+          "collectibles": [
+            {
+              "amount": 1,
+              "appearance": "feather-v1",
+              "minPipeIndex": 2,
+              "minSpacingPipes": 3,
+              "radius": 7000,
+              "typeId": "FEATHER",
+              "version": 1,
+              "weight": 18
+            },
+            {
+              "amount": 1,
+              "appearance": "game-star-v1",
+              "minPipeIndex": 5,
+              "minSpacingPipes": 5,
+              "radius": 7000,
+              "typeId": "GAME_STAR",
+              "version": 1,
+              "weight": 4
+            }
+          ],
+          "flight": {
+            "duckHalfHeight": 10000,
+            "duckHalfWidth": 12000,
+            "duckX": 160000,
+            "flapVelocity": -4200,
+            "gravity": 80,
+            "maxFallSpeed": 6000
+          },
+          "limits": {
+            "maxActiveCollectibles": 2,
+            "maxActivePipes": 8
+          },
+          "pipes": {
+            "ceilingY": 0,
+            "floorY": 580000,
+            "gapHeight": 176000,
+            "horizon": 960000,
+            "safeLeadIn": 420000,
+            "spacing": 220000,
+            "speed": 2400,
+            "width": 52000
+          },
+          "spawnNoneWeight": 78
+        },
+        "descriptor": {
+          "configId": "dd-v1-default",
+          "generatorVersion": "1.0.0",
+          "runId": "invalid-base",
+          "seed": 1,
+          "simulationVersion": "1.0.0"
+        },
+        "duck": {
+          "vy": 0,
+          "x": 160000,
+          "y": 290000
+        },
+        "finalizationCount": 0,
+        "inputHistory": [],
+        "lastCollectiblePipe": -1000000,
+        "nextInputSequence": 0,
+        "nextPipeIndex": 3,
+        "nextSpawnPipeIndex": 0,
+        "phase": "READY",
+        "pipes": [
+          {
+            "gapCenter": 260000,
+            "id": "pipe-0",
+            "index": 0,
+            "scored": false,
+            "x": 420000
+          },
+          {
+            "gapCenter": 280000,
+            "id": "pipe-1",
+            "index": 1,
+            "scored": false,
+            "x": 640000
+          },
+          {
+            "gapCenter": 300000,
+            "id": "pipe-2",
+            "index": 2,
+            "scored": false,
+            "x": 860000
+          }
+        ],
+        "rngState": 3668340012,
+        "score": 0,
+        "tick": 0,
+        "totals": {}
+      },
+      "frames": [
+        {
+          "sequence": 2,
+          "action": "FLAP"
+        }
+      ]
+    },
+    {
+      "name": "tick-overflow",
+      "kind": "step",
+      "initialState": {
+        "collectibles": [],
+        "config": {
+          "collectibles": [
+            {
+              "amount": 1,
+              "appearance": "feather-v1",
+              "minPipeIndex": 2,
+              "minSpacingPipes": 3,
+              "radius": 7000,
+              "typeId": "FEATHER",
+              "version": 1,
+              "weight": 18
+            },
+            {
+              "amount": 1,
+              "appearance": "game-star-v1",
+              "minPipeIndex": 5,
+              "minSpacingPipes": 5,
+              "radius": 7000,
+              "typeId": "GAME_STAR",
+              "version": 1,
+              "weight": 4
+            }
+          ],
+          "flight": {
+            "duckHalfHeight": 10000,
+            "duckHalfWidth": 12000,
+            "duckX": 160000,
+            "flapVelocity": -4200,
+            "gravity": 80,
+            "maxFallSpeed": 6000
+          },
+          "limits": {
+            "maxActiveCollectibles": 2,
+            "maxActivePipes": 8
+          },
+          "pipes": {
+            "ceilingY": 0,
+            "floorY": 580000,
+            "gapHeight": 176000,
+            "horizon": 960000,
+            "safeLeadIn": 420000,
+            "spacing": 220000,
+            "speed": 2400,
+            "width": 52000
+          },
+          "spawnNoneWeight": 78
+        },
+        "descriptor": {
+          "configId": "dd-v1-default",
+          "generatorVersion": "1.0.0",
+          "runId": "invalid-base",
+          "seed": 1,
+          "simulationVersion": "1.0.0"
+        },
+        "duck": {
+          "vy": 0,
+          "x": 160000,
+          "y": 290000
+        },
+        "finalizationCount": 0,
+        "inputHistory": [],
+        "lastCollectiblePipe": -1000000,
+        "nextInputSequence": 0,
+        "nextPipeIndex": 3,
+        "nextSpawnPipeIndex": 0,
+        "phase": "RUNNING",
+        "pipes": [
+          {
+            "gapCenter": 260000,
+            "id": "pipe-0",
+            "index": 0,
+            "scored": false,
+            "x": 420000
+          },
+          {
+            "gapCenter": 280000,
+            "id": "pipe-1",
+            "index": 1,
+            "scored": false,
+            "x": 640000
+          },
+          {
+            "gapCenter": 300000,
+            "id": "pipe-2",
+            "index": 2,
+            "scored": false,
+            "x": 860000
+          }
+        ],
+        "rngState": 3668340012,
+        "score": 0,
+        "tick": 9007199254740991,
+        "totals": {}
+      },
+      "frames": []
+    }
+  ]
+}

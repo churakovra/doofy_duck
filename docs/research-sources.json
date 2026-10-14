@@ -1,0 +1,161 @@
+{
+  "version": 1,
+  "sources": [
+    {
+      "id": 1,
+      "url": "https://core.telegram.org/bots/payments-stars",
+      "title": "",
+      "accessed": "2026-10-09",
+      "quotes": [
+        {
+          "text": "all transactions must be carried out in Telegram Stars, with currency tag XTR.",
+          "added": "2026-10-09"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "url": "https://core.telegram.org/bots/webapps",
+      "title": "",
+      "accessed": "2026-10-09",
+      "quotes": [
+        {
+          "text": "Data from this field should not be trusted.",
+          "added": "2026-10-09"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "url": "https://telegram.org/tos/stars",
+      "title": "",
+      "accessed": "2026-10-09",
+      "quotes": [
+        {
+          "text": "You may not sell, withdraw, transfer or use Stars in your personal balance for any other purpose",
+          "added": "2026-10-09"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "url": "https://telegram.org/tos/bot-developers",
+      "title": "",
+      "accessed": "2026-10-09",
+      "quotes": [
+        {
+          "text": "Developers can receive an equivalent of 0.013 USD worth of rewards for each Telegram Star.",
+          "added": "2026-10-09"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "url": "https://core.telegram.org/bots/api",
+      "title": "",
+      "accessed": "2026-10-09",
+      "quotes": [
+        {
+          "text": "The gift can't be converted to Telegram Stars by the receiver.",
+          "added": "2026-10-09"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "url": "https://pixijs.com/8.x/guides/getting-started/quick-start",
+      "title": "",
+      "accessed": "2026-10-09",
+      "quotes": [
+        {
+          "text": "We recommended using the Vite + PixiJS template for most projects when using bundler templates",
+          "added": "2026-10-09"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "url": "https://fastify.dev/docs/latest/Guides/Testing",
+      "title": "",
+      "accessed": "2026-10-09",
+      "quotes": [
+        {
+          "text": "inject ensures all registered plugins have booted up",
+          "added": "2026-10-09"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "url": "https://grammy.dev/guide/getting-started",
+      "title": "",
+      "accessed": "2026-10-09",
+      "quotes": [
+        {
+          "text": "npm install grammy",
+          "added": "2026-10-09"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "url": "https://playwright.dev/docs/emulation",
+      "title": "",
+      "accessed": "2026-10-09",
+      "quotes": [
+        {
+          "text": "emulate a real device such as a mobile phone or tablet.",
+          "added": "2026-10-09"
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "url": "https://vitest.dev/guide/coverage",
+      "title": "",
+      "accessed": "2026-10-09",
+      "quotes": [
+        {
+          "text": "Vitest supports Native code coverage via v8 and instrumented code coverage via istanbul.",
+          "added": "2026-10-09"
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "url": "https://developer.apple.com/app-store/review/guidelines",
+      "title": "",
+      "accessed": "2026-10-09",
+      "quotes": [
+        {
+          "text": "must disclose the odds of receiving each type of item to customers prior to purchase.",
+          "added": "2026-10-09"
+        }
+      ]
+    },
+    {
+      "id": 17,
+      "url": "https://github.com/rwrrioe/qaless-releases",
+      "title": "",
+      "accessed": "2026-10-09",
+      "quotes": [
+        {
+          "text": "Not a test runner — it generates scenarios; you decide where they execute",
+          "added": "2026-10-09"
+        }
+      ]
+    },
+    {
+      "id": 18,
+      "url": "https://api.github.com/repos/rwrrioe/qaless-releases/releases/latest",
+      "title": "",
+      "accessed": "2026-10-09",
+      "quotes": [
+        {
+          "text": "Binaries for macOS (Apple Silicon) and Windows.",
+          "added": "2026-10-09"
+        }
+      ]
+    }
+  ]
+}
