@@ -9,3 +9,5 @@ apps/web/playwright-report/
 .env
 .env.*
 !.env.example
+
+/local-docs/

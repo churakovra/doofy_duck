@@ -1,5 +1,9 @@
 # Web implementation handoff
 
+> Historical frontend foundation handoff. The hook ownership, local wallet, and
+> current rules have evolved since this checkpoint. Use the
+> [code map](ARCHITECTURE.md) and [documentation map](README.md) for current routing.
+
 **Parent verification update:** the current combined suite passed66 unit/contract tests, root typecheck and lint. An initial browser run exposed a development renderer failure (Pixi batcher null during draw) and showed the test harness was reusing the development server despite a production-build claim. The harness now starts a dedicated non-reused preview on127.0.0.1:4174; a fresh production build and all8 browser checks passed. Development server remains127.0.0.1:4173. Renderer initialization/destruction is now serialized with a deterministic lifecycle regression; the parent also ran10 development-page reloads with one canvas and no console/page errors. The original exception's exact root cause was not independently reproduced, so this does not establish it conclusively. Earlier transient core/lint/type failures below were from concurrent work and do not describe the latest parent checkpoint.
 
 ## Delivered

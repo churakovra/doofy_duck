@@ -1,5 +1,10 @@
 # Arcade tuning: research and implementation rationale
 
+> Rationale recorded during the tuning/integration iteration. Pending or intended
+> implementation statements below describe that checkpoint. Final mechanics are
+> in [Arcade simulation](ARCADE_SIMULATION.md); subsequent checks are recorded in
+> [Arcade fixes results](ARCADE_FIXES_RESULTS.md).
+
 This is a tuning iteration, not a claim to have surpassed the original Flappy Bird. No original Flappy Bird proprietary code or assets were obtained. Earlier work added presentation effects while retaining slow, broad flight arcs; that was insufficient to meet the requested tactile change.
 
 ## Primary reference code inspected

@@ -1,5 +1,9 @@
 # Go simulation independent review
 
+> Historical initial review. Its findings were addressed in the scoped
+> [Go review follow-up](GO_REVIEW_FOLLOWUP.md). Current contract and verification
+> records are indexed in the [documentation map](README.md).
+
 **Verdict: `passed: false`.** Initial-source review (the workspace has no Git metadata, so there is no revision diff/baseline). Production implementation files and fixtures were not modified.
 
 ## Findings (priority order)

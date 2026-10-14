@@ -1,5 +1,9 @@
 # Independent pure-core review
 
+> Historical foundation review. The serializer finding was subsequently addressed
+> in [Integration verification](INTEGRATION_VERIFICATION.md). Current rules and
+> recorded checks are indexed in the [documentation map](README.md).
+
 **Verdict: gameplay review passes for the documented default configuration; canonical serializer has a reproducible contract defect to resolve before treating it as a general canonical-JSON boundary.** No implementation or fixture files were changed. This workspace has no Git repository, so there is no revision baseline; review covered the complete exported core and current tests/contract files.
 
 ## Findings

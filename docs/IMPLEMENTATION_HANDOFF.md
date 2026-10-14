@@ -1,5 +1,10 @@
 # Doofy Duck — local foundation implementation handoff
 
+> Historical foundation handoff. Its catalog description, tooling/repository
+> observations, and process status describe that checkpoint. Start with the
+> [root README](../README.md), [current rules](ARCADE_SIMULATION.md), and
+> [latest recorded verification](ARCADE_FIXES_RESULTS.md) for the current project.
+
 Status: local practice implementation and automated verification complete; not tagged/released as v1.0.0. Physical Telegram/mobile acceptance and named-device performance assessment remain pending. No agents are required to keep the app running; the Vite process is separate.
 
 ## Implemented

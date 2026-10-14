@@ -1,5 +1,9 @@
 # Agent implementation brief — Doofy Duck v1 foundation
 
+> Historical initial implementation brief. Its repository inventory and workflow
+> describe the pre-implementation checkpoint. Use [root AGENTS.md](../AGENTS.md)
+> for current instructions and the [documentation map](README.md) for task context.
+
 ## Authority and scope
 
 The owner requested implementing the plan with agents. Read `docs/GAME_V1_SPEC.md` and `docs/GAME_V1_TECH_PLAN.md` in full before changes; they supersede the broad product research for this milestone. This is a simple endless pipe game: tap flight, collision/death, one point per passed pair, occasional Feather/GameStar subclasses, pause/restart, personal best, deterministic rules. No shop, real currencies/rewards, boosters, social features, backend HTTP, broker, database, full Python service scaffold, final art, or production release.
