@@ -1,5 +1,9 @@
 # Independent web frontend review
 
+> Historical initial review. The viewport finding was addressed before the
+> [Final web review](FINAL_WEB_REVIEW.md). See [Arcade fixes results](ARCADE_FIXES_RESULTS.md)
+> for the latest recorded integration checks.
+
 **Verdict: `passed: false`** — one reproducible viewport correctness defect. No frontend security concern identified in the reviewed source. This is an initial-source review (workspace is not a Git repository), not a change-diff review.
 
 ## Release-blocking correctness issue

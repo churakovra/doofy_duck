@@ -1,6 +1,6 @@
 # Doofy Duck — gameplay foundation v1.0.0
 
-Status: proposed acceptance specification based on the owner's latest scope correction. This is the target version, not an assertion that a game has been built or released. This document supersedes the broader near-term feature sequencing in PRODUCT_DIRECTION.md. Commercial objectives and later feature ideas remain backlog context.
+Status: proposed acceptance specification based on the owner's latest scope correction. This is the target version, not an assertion that a game has been built or released. This document supersedes the broader near-term feature sequencing in the archived product direction notes. Commercial objectives and later feature ideas remain backlog context.
 
 ## Product definition
 

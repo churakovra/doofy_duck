@@ -4,6 +4,13 @@ A locally playable endless pipe game: tap to flap, pass pipes for points, collec
 
 This is a development foundation targeting v1.0.0, **not a commercial release**. No accounts, authoritative wallet, payments, gift redemption, paid advantages, leaderboards, or live valuable rewards. Art is placeholder work, not an approved visual direction.
 
+## Project navigation
+
+- [Agent instructions](AGENTS.md): working conventions and task-based model routing.
+- [Code map](docs/ARCHITECTURE.md): runtime flow, file ownership, and checks by task.
+- [Documentation map](docs/README.md): current rules, baseline requirements, future decisions, and historical reports.
+- [Latest recorded verification](docs/ARCADE_FIXES_RESULTS.md): executed checks and remaining acceptance work.
+
 ## Requirements
 
 Verified local tools: Node.js26.7.0, npm11.19.0, Go1.27.2. Direct JavaScript dependencies are exact-pinned in package.json/package-lock.json; Go uses only the standard library. The package engine requirements currently need Node26, not an arbitrary older LTS. No Python, PostgreSQL, RabbitMQ, Docker, bot token, or cloud server is needed for this slice.

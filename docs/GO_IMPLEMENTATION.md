@@ -1,5 +1,9 @@
 # Go simulation implementation
 
+> Historical `foundation-2` implementation checkpoint. Current arcade mechanics
+> are in [Arcade simulation](ARCADE_SIMULATION.md); the shared
+> [fixture contract](../contracts/simulation/README.md) records current identities.
+
 The standalone standard-library Go module is `services/core/simulation` (`module doofyduck/simulation`). It implements the frozen `foundation-2` rules as a pure native library; it is not an HTTP service and has no database, broker, auth, wallet, or payment integration.
 
 ## API

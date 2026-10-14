@@ -1,5 +1,10 @@
 # Core simulation implementation handoff
 
+> Historical foundation handoff, including intermediate failures and pending
+> gates. The “current parent update” below was current at that checkpoint.
+> Today's mechanics and contract are in [Arcade simulation](ARCADE_SIMULATION.md)
+> and the [fixture contract](../contracts/simulation/README.md).
+
 **Current parent update:** see `PARENT_CORE_VERIFICATION.md` and `../contracts/simulation/README.md` for stabilized foundation-2 rules and executed checks. Historical partial handoff notes below are retained, but no longer describe the current fixture, map selection, safe lead-in, configuration identity, or resolved spawning/counter defects. Independent review and Go parity are still separate gates.
 
 Status: standalone deterministic TypeScript core, **incomplete foundation; not V1-ready**. This update adds one-shot pipe-index collectible opportunities, an explicit finite gap-pattern catalog, spacing configuration, formatted source, and stricter geometry checks. It does not establish default-config reachability, a complete supported-config identity registry, full canonical trace parity, or Go parity. Do not treat this contract as frozen for a Go verifier.

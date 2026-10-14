@@ -1,5 +1,10 @@
 # Parent core stabilization evidence
 
+> Historical foundation stabilization checkpoint. Pending review/parity statements
+> below describe that stage. See [Go review follow-up](GO_REVIEW_FOLLOWUP.md) for
+> later scoped corrections and [Arcade fixes results](ARCADE_FIXES_RESULTS.md)
+> for the latest recorded integration checks.
+
 Status: implemented and locally checked; independent review and native Go parity pending. This supersedes prior partial core handoff limitations where specifically resolved below. No version release or real Telegram/device evidence is claimed.
 
 ## Observed regression cycles

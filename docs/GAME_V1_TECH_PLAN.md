@@ -1,5 +1,10 @@
 # Doofy Duck v1.0.0 — technical requirements and implementation plan
 
+> Baseline planning contract, retained with its original status and milestones.
+> Later wallet/audio/speed scope amendments and current arcade mechanics are
+> explained in the [documentation authority map](README.md#requirements-and-authority).
+> This plan's status is not a live implementation or release report.
+
 Status: proposed implementation contract, not implemented or released. Product scope: GAME_V1_SPEC.md. This plan keeps the owner's four pillars: generated pipe patterns, tap-to-fly duck/death, one point per passed pipe pair, and occasional configurable currency subclasses. Add only lifecycle, reproducibility, presentation, persistence, and tests needed for a reliable foundation.
 
 ## 1. Scope and runtime
