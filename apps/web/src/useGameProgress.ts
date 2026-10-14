@@ -1,71 +1,48 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { GameEvent } from '@doofy-duck/game-sim';
-import { acquireWalletSession, browserWalletLocks } from './wallet-session';
-import { loadWallet, settleWalletRun, type WalletBalances } from './wallet';
-import { readBest, writeBest } from './storage';
+import { createLocalProgressSession, type LocalProgressSession, type LocalProgressSnapshot } from './local-progress';
+import { browserWalletLocks } from './wallet-session';
+import { readBest, type StorageLike } from './storage';
 
-type WalletSessionStatus = 'pending' | 'owned' | 'memory' | 'busy';
+function browserStorage(): StorageLike | null {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+function initialSnapshot(): LocalProgressSnapshot {
+  return Object.freeze({
+    wallet: Object.freeze({ FEATHER: 0, GAME_STAR: 0 }),
+    walletPersistent: false,
+    walletSessionStatus: 'pending',
+    lastGain: null,
+    best: readBest(),
+  });
+}
 
 export function useGameProgress() {
-  const [wallet, setWallet] = useState<WalletBalances>({ FEATHER: 0, GAME_STAR: 0 });
-  const walletRef = useRef<WalletBalances>({ FEATHER: 0, GAME_STAR: 0 });
-  const settledRunIdsRef = useRef<string[]>([]);
-  const [walletPersistent, setWalletPersistent] = useState(false);
-  const [walletSessionStatus, setWalletSessionStatus] = useState<WalletSessionStatus>('pending');
-  const walletSessionStatusRef = useRef<WalletSessionStatus>('pending');
-  const walletWritesEnabledRef = useRef(false);
-  const [lastGain, setLastGain] = useState<WalletBalances | null>(null);
-  const [best, setBest] = useState(readBest);
+  const [progress, setProgress] = useState<LocalProgressSnapshot>(initialSnapshot);
+  const sessionRef = useRef<LocalProgressSession | null>(null);
 
-  useEffect(() => acquireWalletSession(browserWalletLocks(), {
-    owned: () => {
-      const loaded = loadWallet();
-      walletRef.current = loaded.wallet;
-      settledRunIdsRef.current = loaded.settledRunIds;
-      walletWritesEnabledRef.current = loaded.persistent;
-      setWallet(loaded.wallet);
-      setWalletPersistent(loaded.persistent);
-      walletSessionStatusRef.current = 'owned';
-      setWalletSessionStatus('owned');
-    },
-    busy: () => {
-      walletSessionStatusRef.current = 'busy';
-      setWalletSessionStatus('busy');
-    },
-    memoryOnly: () => {
-      walletWritesEnabledRef.current = false;
-      setWalletPersistent(false);
-      walletSessionStatusRef.current = 'memory';
-      setWalletSessionStatus('memory');
-    },
-  }).dispose, []);
-
-  const canPlay = useCallback(() => walletSessionStatusRef.current !== 'pending' && walletSessionStatusRef.current !== 'busy', []);
-  const settleRun = useCallback((event: Extract<GameEvent, { type: 'RunEnded' }>) => {
-    const settlement = settleWalletRun(
-      walletRef.current,
-      { runId: event.runId, totals: event.totals },
-      walletWritesEnabledRef.current ? undefined : null,
-      settledRunIdsRef.current,
-    );
-    walletRef.current = settlement.wallet;
-    settledRunIdsRef.current = settlement.settledRunIds;
-    walletWritesEnabledRef.current = walletWritesEnabledRef.current && settlement.persistent;
-    setWallet(settlement.wallet);
-    setLastGain(settlement.gain);
-    setWalletPersistent(settlement.persistent);
-    if (!settlement.persistent) {
-      walletSessionStatusRef.current = 'memory';
-      setWalletSessionStatus('memory');
-    }
-
-    const nextBest = Math.max(readBest(), event.score);
-    let browserStore: Storage | undefined;
-    try { browserStore = window.localStorage; } catch { browserStore = undefined; }
-    writeBest(browserStore, nextBest);
-    setBest(nextBest);
+  useEffect(() => {
+    const session = createLocalProgressSession({ storage: browserStorage(), locks: browserWalletLocks() });
+    sessionRef.current = session;
+    const unsubscribe = session.subscribe(() => setProgress(session.getSnapshot()));
+    setProgress(session.getSnapshot());
+    return () => {
+      unsubscribe();
+      if (sessionRef.current === session) sessionRef.current = null;
+      session.dispose();
+    };
   }, []);
 
-  const refreshBest = useCallback(() => setBest(readBest()), []);
-  return { wallet, walletPersistent, walletSessionStatus, lastGain, best, canPlay, settleRun, refreshBest };
+  const canPlay = useCallback(() => sessionRef.current?.canPlay() ?? false, []);
+  const settleRun = useCallback((event: Extract<GameEvent, { type: 'RunEnded' }>) => {
+    sessionRef.current?.settleCompletedRun(event);
+  }, []);
+  const refreshBest = useCallback(() => sessionRef.current?.refreshBest(), []);
+
+  return { ...progress, canPlay, settleRun, refreshBest };
 }

@@ -6,6 +6,7 @@ import {
 } from '@doofy-duck/game-sim';
 import { FixedStepClock } from './clock';
 import { createInputController } from './input';
+import { messages } from './messages.ru';
 
 const MAX_QUEUED_INPUTS = 8;
 type RunCallbacks = {
@@ -38,6 +39,7 @@ export function useGameRun(canPlay: () => boolean, callbacks: RunCallbacks) {
   const canPlayRef = useRef(canPlay);
   const feedbackRef = useRef({ flapSerial: 0, pickupSerial: 0, deathSerial: 0 });
   const clockRef = useRef<FixedStepClock | null>(null);
+  const resetClockOriginRef = useRef(true);
 
   callbacksRef.current = callbacks;
   canPlayRef.current = canPlay;
@@ -69,6 +71,10 @@ export function useGameRun(canPlay: () => boolean, callbacks: RunCallbacks) {
   const flap = useCallback(() => {
     const current = runRef.current;
     if (!canPlayRef.current() || !rendererReadyRef.current || current.phase === 'DEAD' || current.phase === 'PAUSED' || queuedRef.current.length >= MAX_QUEUED_INPUTS) return;
+    if (current.phase === 'READY') {
+      clockRef.current?.resume();
+      resetClockOriginRef.current = true;
+    }
     queuedRef.current.push(makeInput(sequenceRef.current, 'FLAP'));
     sequenceRef.current += 1;
     feedbackRef.current.flapSerial = (feedbackRef.current.flapSerial + 1) % 1_000_000;
@@ -110,7 +116,7 @@ export function useGameRun(canPlay: () => boolean, callbacks: RunCallbacks) {
           inputRef.current.reset();
         }
       } catch {
-        setRuntimeError('Игровая симуляция остановлена из-за ошибки. Обновите страницу.');
+        setRuntimeError(messages.simulationStoppedError);
         setRendererReady(false);
         rendererReadyRef.current = false;
         if (current.phase === 'RUNNING') updateFromResult(pauseRun(current), []);
@@ -120,10 +126,16 @@ export function useGameRun(canPlay: () => boolean, callbacks: RunCallbacks) {
     });
     clockRef.current = clock;
     const onFrame = (time: number) => {
-      if (last !== undefined) {
-        clock.advance(time - last);
-        if (clock.takePauseRequest() && runRef.current.phase === 'RUNNING') {
-          updateFromResult(pauseRun(runRef.current), []);
+      const active = rendererReadyRef.current && (runRef.current.phase === 'RUNNING' || queuedRef.current.length > 0);
+      if (!active) clock.resume();
+      else if (last !== undefined) {
+        // Waiting before start/resume is not active simulation time.
+        const elapsed = resetClockOriginRef.current ? Math.min(time - last, 1000 / 60) : time - last;
+        resetClockOriginRef.current = false;
+        clock.advance(elapsed);
+        if (clock.takePauseRequest()) {
+          if (runRef.current.phase === 'RUNNING') updateFromResult(pauseRun(runRef.current), []);
+          else clock.resume();
           clearQueuedInputs();
           inputRef.current.reset();
         }
@@ -164,6 +176,7 @@ export function useGameRun(canPlay: () => boolean, callbacks: RunCallbacks) {
   const start = useCallback(() => {
     if (!canPlay() || !rendererReadyRef.current || runtimeError) return;
     if (runRef.current.phase === 'PAUSED') {
+      resetClockOriginRef.current = true;
       clockRef.current?.resume();
       updateFromResult(resumeRun(runRef.current), []);
       clearQueuedInputs();

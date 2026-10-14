@@ -13,6 +13,9 @@ test('only one tab plays persistently; ownership transfers and fresh balances su
   await expect(first.getByText('Кошелёк на этом устройстве')).toBeVisible();
 
   const second = await context.newPage();
+  // This case verifies tab ownership, not real-time renderer scheduling.
+  await second.clock.install({ time: new Date('2026-01-01T00:00:00Z') });
+  await second.clock.pauseAt(new Date('2026-01-01T00:00:01Z'));
   await second.goto('/');
   await expect(second.getByText(/Кошелёк занят в другой вкладке/)).toBeVisible();
   await expect(second.getByRole('button', { name: /Начать полёт/ })).toBeDisabled();
@@ -26,6 +29,7 @@ test('only one tab plays persistently; ownership transfers and fresh balances su
   await expect(second.locator('.wallet-total').nth(1).locator('strong')).toHaveText('2');
   await expect(second.getByRole('button', { name: /Начать полёт/ })).toBeEnabled();
   await second.keyboard.press('Space');
+  await second.clock.runFor(70);
   await expect(second.getByRole('button', { name: 'Пауза' })).toBeEnabled();
   await context.close();
 });

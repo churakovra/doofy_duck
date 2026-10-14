@@ -19,7 +19,7 @@ This is a local development foundation, **not a commercial release**. No account
 
 ## Requirements
 
-Verified local tools: Node.js26.7.0, npm11.19.0, Go1.27.2. Direct JavaScript dependencies are exact-pinned in package.json/package-lock.json; Go uses only the standard library. The package engine requirements currently need Node26, not an arbitrary older LTS. No Python, PostgreSQL, RabbitMQ, Docker, bot token, or cloud server is needed for this slice.
+Local verification toolchain: Node.js 26.11.1, npm 11.20.0, Go 1.27.2. Direct JavaScript dependencies are exact-pinned in package.json/package-lock.json; Go uses only the standard library. The package engine requirements currently need Node26, not an arbitrary older LTS. No Python, PostgreSQL, RabbitMQ, Docker, bot token, or cloud server is needed for this slice.
 
 ## Start locally
 
@@ -56,7 +56,7 @@ npm run test:parity
 npm run build
 npx playwright install chromium  # one-time browser prerequisite
 npm run test:browser
-npm run test:dev                # isolated Vite development browser checks on 127.0.0.1:4175
+npm run test:dev                # run after test:browser; isolated Vite development browser checks on 127.0.0.1:4175
 npm run check                   # types, lint, unit/fixture tests, Go tests, production and development browser suites
 ```
 
@@ -66,9 +66,10 @@ Native-only commands:
 go -C services/core/simulation test -count=1 -v ./...
 go -C services/core/simulation test -race -count=1 ./...
 go -C services/core/simulation vet ./...
+go -C services/core/simulation test -run '^$' -bench 'BenchmarkDefault(Step|Replay300Ticks)$' -benchmem -count=3
 ```
 
-Playwright starts an isolated **production preview on127.0.0.1:4174** and an isolated **development server on127.0.0.1:4175**. Both suites disable server reuse so they test the configured build and source reliably. Browser screenshots are saved as test artifacts, not written over documentation images. CI configuration includes Node and Go checks; a committed workflow file is not evidence of a GitHub-hosted run.
+Playwright starts an isolated **production preview on127.0.0.1:4174** and an isolated **development server on127.0.0.1:4175**. Browser suites use one worker to isolate software-rendering load. Run the two suites sequentially because they share their artifact directory. Both suites disable server reuse so they test the configured build and source reliably. Browser screenshots are saved as test artifacts, not written over documentation images. CI configuration includes Node and Go checks; a committed workflow file is not evidence of a GitHub-hosted run.
 
 ## Source layout
 

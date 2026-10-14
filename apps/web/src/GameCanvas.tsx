@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { Application, Container, Graphics } from 'pixi.js';
 import type { RunState } from '@doofy-duck/game-sim';
 import { createFxPool, duckPose, flapEnvelope, fxPosition, pushFx, type Fx } from './feel';
+import { messages } from './messages.ru';
 
 const WIDTH = 360;
 const HEIGHT = 580;
@@ -131,7 +132,7 @@ export function GameCanvas({ getState, onReady, getFeedback }: Props) {
         await app.init({ width: WIDTH, height: HEIGHT, background: 0xdff3ec, antialias: true, autoDensity: true, resolution: Math.min(window.devicePixelRatio || 1, 2), preference: 'webgl', sharedTicker: false });
         if (disposed) return;
         app.ticker.stop();
-        app.canvas.setAttribute('aria-label', 'Doofy Duck game canvas');
+        app.canvas.setAttribute('aria-label', messages.gameCanvasLabel);
         app.canvas.setAttribute('role', 'img');
         host.appendChild(app.canvas);
         const world = new Graphics();
@@ -148,7 +149,7 @@ export function GameCanvas({ getState, onReady, getFeedback }: Props) {
           renderFailed = true;
           console.error('Game renderer stopped', reason);
           cancelAnimationFrame(frameRef.current);
-          onReady('Графика остановилась. Обновите страницу и попробуйте ещё раз.');
+          onReady(messages.flightStoppedGraphicsError);
           sceneRef.current = null;
           void serializeRendererLifecycle(destroyApp);
         };
@@ -234,7 +235,7 @@ export function GameCanvas({ getState, onReady, getFeedback }: Props) {
         draw(performance.now());
         onReady();
       } catch {
-        if (!disposed) onReady('Графика не запустилась. Обновите страницу и попробуйте ещё раз.');
+        if (!disposed) onReady(messages.graphicsStartupError);
         destroyApp();
       }
     });
