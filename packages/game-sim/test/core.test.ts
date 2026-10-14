@@ -7,7 +7,7 @@ import {
 import type { RunDescriptor, InputFrame } from '../src/index.js';
 
 const descriptor: RunDescriptor = {
-  runId: 'run-001', seed: 1, simulationVersion: '1.0.0', generatorVersion: '1.0.0', configId: 'dd-v1-default',
+  runId: 'run-001', seed: 1, simulationVersion: '1.1.0', generatorVersion: '1.0.0', configId: 'dd-v1-speed-v1',
 };
 const press = (sequence: number): InputFrame => makeInput(sequence, 'FLAP');
 

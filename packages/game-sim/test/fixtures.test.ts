@@ -5,8 +5,14 @@ import type { GameConfig, GameEvent, InputFrame, RunDescriptor, RunState } from 
 type Operation = { kind: string; frames?: InputFrame[]; ticks?: number; flapTicks?: number[]; descriptor?: RunDescriptor; expectedState: RunState; expectedEvents: GameEvent[] };
 type Case = { name: string; syntheticInitialState: boolean; initialState: RunState; operations: Operation[] };
 type InvalidCase = { name: string; kind: string; descriptor?: RunDescriptor; config?: GameConfig; initialState?: RunState; frames?: InputFrame[] };
-const fixture = JSON.parse(readFileSync('contracts/simulation/golden-v1.json', 'utf8')) as { rules: { generation: { firstPipeX: number } }; cases: Case[]; mixerVectors: { input: number; output: number }[]; invalidCases: InvalidCase[] };
+const fixture = JSON.parse(readFileSync('contracts/simulation/golden-v1.json', 'utf8')) as { fixtureRevision: string; contractVersion: string; rules: { generation: { firstPipeX: number }; speed: string }; defaultConfig: GameConfig; cases: Case[]; mixerVectors: { input: number; output: number }[]; invalidCases: InvalidCase[] };
 describe('shared contract fixtures', () => {
+  it('pins the speed ruleset and config identity', () => {
+    expect(fixture.fixtureRevision).toBe('foundation-speed-1');
+    expect(fixture.contractVersion).toBe('1.1.0');
+    expect(fixture.defaultConfig).toEqual(DEFAULT_CONFIG);
+    expect(fixture.rules.speed).toContain('rampTicks');
+  });
   it('pins the actual safe opening instead of obsolete tuning', () => {
     expect(fixture.rules.generation.firstPipeX).toBe(DEFAULT_CONFIG.pipes.safeLeadIn);
   });

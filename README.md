@@ -1,6 +1,6 @@
 # Doofy Duck — gameplay foundation
 
-A locally playable endless pipe game: tap to flap, pass pipes for points, collect occasional Feather/GameStar practice pickups, pause, die, and restart. React/PixiJS presents a pure TypeScript simulation; a native Go package checks the same full-state/event fixtures.
+A locally playable endless pipe game: tap to flap, pass pipes for points, collect occasional Feather/GameStar pickups into a local in-game wallet, pause, die, and restart. React/PixiJS presents a pure TypeScript simulation; a native Go package checks the same full-state/event fixtures.
 
 This is a development foundation targeting v1.0.0, **not a commercial release**. No accounts, authoritative wallet, payments, gift redemption, paid advantages, leaderboards, or live valuable rewards. Art is placeholder work, not an approved visual direction.
 
@@ -20,6 +20,16 @@ npm run dev
 Open `http://127.0.0.1:4173/`. The root dev command builds the simulation workspace entrypoint before starting Vite; a clean workspace does not need pre-existing dist files. Leave the terminal running. The server binds to localhost only. If the port is occupied, use the existing project server or deliberately stop it rather than silently starting on an unknown port.
 
 Touch/click the field or press Space to flap. Screen buttons do not also flap. Backgrounding pauses; returning requires explicit resume. Restart is free. Personal best is untrusted local storage, not an online score.
+
+## Latest playtest update
+
+- The wallet displays cumulative balances separately from completed-run earnings and saves locally after death. It is not an account, a Telegram Stars balance, or a redeemable reward. Earlier unsaved earnings cannot be recovered.
+- One tab at a time owns the persistent wallet. Close the first tab and reload the second to transfer ownership. If browser locking/storage is unavailable, play remains available with an explicitly non-persistent memory wallet.
+- Active-time world speed rises smoothly from144 to288pixels/second over90seconds, then caps. Pausing freezes the ramp; restarting resets it. This increases pressure rather than imposing a hidden death timer.
+- Velocity tilt, wing/flap motion, restrained squash/stretch and bounded visual effects improve feedback without changing authoritative hitboxes. Extra motion respects the reduced-motion setting.
+- Original synthesized flap/pickup/death sounds and a quiet music loop unlock from a user gesture. Separate sound/music controls are saved locally; backgrounding and pause silence playback.
+
+The internal simulation version is1.1.0, generator version1.0.0, default config ID `dd-v1-speed-v1`. Detailed scope, verification and remaining gates are in `docs/PLAYTEST_UPDATE.md` and `docs/PLAYTEST_UPDATE_RESULTS.md`; audio research and primary sources are in `docs/TELEGRAM_AUDIO_RESEARCH.md`.
 
 ## Verification commands
 

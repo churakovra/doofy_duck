@@ -31,7 +31,7 @@ func TestPauseReturnsIndependentState(t *testing.T) {
 	}
 }
 
-func TestFoundation2MixerVectors(t *testing.T) {
+func TestFoundationSpeedMixerVectors(t *testing.T) {
 	data, err := os.ReadFile("../../../contracts/simulation/golden-v1.json")
 	if err != nil {
 		t.Fatal(err)
@@ -55,7 +55,7 @@ func TestFoundation2MixerVectors(t *testing.T) {
 	}
 }
 
-func TestFoundation2FullFixtureParity(t *testing.T) {
+func TestFoundationSpeedFullFixtureParity(t *testing.T) {
 	if err := VerifyFoundationFixtures("../../../contracts/simulation/golden-v1.json"); err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +115,7 @@ func TestRunEndedTotalsPresentAndIndependentFromState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s, err := CreateRun(Descriptor{"totals-test", 1, "1.0.0", "1.0.0", id}, config)
+	s, err := CreateRun(Descriptor{"totals-test", 1, "1.1.0", "1.0.0", id}, config)
 	if err != nil {
 		t.Fatal(err)
 	}

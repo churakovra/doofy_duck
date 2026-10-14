@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_CONFIG, createRun, step, makeInput, configIdFor, PATTERN_CATALOG, canonicalJSON } from '../src/index.js';
-const descriptor = (seed = 1) => ({ runId: 'stabilization', seed, simulationVersion: '1.0.0', generatorVersion: '1.0.0', configId: 'dd-v1-default' });
+import { DEFAULT_CONFIG, createRun, step, makeInput, configIdFor, PATTERN_CATALOG, canonicalJSON, worldSpeedAt } from '../src/index.js';
+const descriptor = (seed = 1) => ({ runId: 'stabilization', seed, simulationVersion: '1.1.0', generatorVersion: '1.0.0', configId: 'dd-v1-speed-v1' });
 
 describe('parent stabilization regressions', () => {
   it.each([NaN, Infinity, -Infinity, 1.25, Number.MAX_SAFE_INTEGER + 1])('rejects a noncanonical number %s rather than coercing it', value => {
@@ -53,7 +53,11 @@ describe('parent stabilization regressions', () => {
     const { flight: f, pipes: p } = DEFAULT_CONFIG;
     const low = Math.max(...PATTERN_CATALOG.flatMap(pattern => pattern.gaps.map(gap => gap - Math.floor(p.gapHeight / 2) + f.duckHalfHeight)));
     const high = Math.min(...PATTERN_CATALOG.flatMap(pattern => pattern.gaps.map(gap => gap + Math.floor(p.gapHeight / 2) - f.duckHalfHeight)));
-    const firstContact = Math.ceil((p.safeLeadIn - Math.floor(p.width / 2) - f.duckX - f.duckHalfWidth) / p.speed);
+    const requiredTravel = p.safeLeadIn - Math.floor(p.width / 2) - f.duckX - f.duckHalfWidth;
+    let firstContact = 0, travel = 0;
+    while (travel < requiredTravel) { firstContact++; travel += worldSpeedAt(DEFAULT_CONFIG, firstContact); }
+    expect(travel).toBeGreaterThanOrEqual(requiredTravel);
+    expect(travel - worldSpeedAt(DEFAULT_CONFIG, firstContact)).toBeLessThan(requiredTravel);
     let state = createRun(descriptor(3));
     const seen = new Map<string, number>();
     let period = 0;

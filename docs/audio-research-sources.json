@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "sources": [
+    {
+      "id": 1,
+      "url": "https://core.telegram.org/api/bots/webapps",
+      "title": "Telegram Mini Apps on Telegram (MTProto API)",
+      "accessed": "2026-10-14",
+      "quotes": [
+        {
+          "text": "This article offers a client-side overview of the implementation of bot mini apps using the MTProto API: see here for an overview of the mini-app side JS API.",
+          "added": "2026-10-14"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "url": "https://core.telegram.org/bots/webapps",
+      "title": "Telegram Mini Apps (HTML5 Mini Apps)",
+      "accessed": "2026-10-14",
+      "quotes": [
+        {
+          "text": "With Mini Apps developers can use JavaScript to create infinitely flexible interfaces that can be launched right inside Telegram.",
+          "added": "2026-10-14"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "url": "https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API/Best_practices",
+      "title": "MDN Web Audio API best practices",
+      "accessed": "2026-10-14",
+      "quotes": [
+        {
+          "text": "Create or resume context from inside a user gesture",
+          "added": "2026-10-14"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "url": "https://developer.mozilla.org/en-US/docs/Web/Media/Guides/Autoplay",
+      "title": "MDN autoplay guide for media and Web Audio APIs",
+      "accessed": "2026-10-14",
+      "quotes": [
+        {
+          "text": "The user has interacted with the site (by clicking, tapping, pressing keys, etc.)",
+          "added": "2026-10-14"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "url": "https://developer.chrome.com/blog/autoplay",
+      "title": "Chrome autoplay policy",
+      "accessed": "2026-10-14",
+      "quotes": [
+        {
+          "text": "The user has interacted with the domain (click, tap, etc.).",
+          "added": "2026-10-14"
+        }
+      ]
+    }
+  ]
+}

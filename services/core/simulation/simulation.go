@@ -36,6 +36,8 @@ type FlightConfig struct {
 }
 type PipeConfig struct {
 	Speed      int64 `json:"speed"`
+	MaxSpeed   int64 `json:"maxSpeed"`
+	RampTicks  int64 `json:"rampTicks"`
 	Spacing    int64 `json:"spacing"`
 	Width      int64 `json:"width"`
 	GapHeight  int64 `json:"gapHeight"`
@@ -141,7 +143,7 @@ type Pattern struct {
 }
 
 var canonicalCatalog = []Pattern{{"center", []int64{280000, 280000, 280000, 280000}}, {"rise-fall", []int64{260000, 280000, 300000, 280000}}, {"fall-rise", []int64{300000, 280000, 260000, 280000}}}
-var canonicalDefaultConfig = Config{FlightConfig{80, -4200, 6000, 160000, 12000, 10000}, PipeConfig{2400, 220000, 52000, 176000, 420000, 960000, 580000, 0}, Limits{8, 2}, []Definition{{"FEATHER", 1, 18, 2, 3, 1, 7000, "feather-v1"}, {"GAME_STAR", 1, 4, 5, 5, 1, 7000, "game-star-v1"}}, 78}
+var canonicalDefaultConfig = Config{FlightConfig{80, -4200, 6000, 160000, 12000, 10000}, PipeConfig{Speed: 2400, MaxSpeed: 4800, RampTicks: 5400, Spacing: 220000, Width: 52000, GapHeight: 176000, SafeLeadIn: 420000, Horizon: 960000, FloorY: 580000, CeilingY: 0}, Limits{8, 2}, []Definition{{"FEATHER", 1, 18, 2, 3, 1, 7000, "feather-v1"}, {"GAME_STAR", 1, 4, 5, 5, 1, 7000, "game-star-v1"}}, 78}
 
 // PatternCatalog returns an independent copy of the authored pattern rules.
 func PatternCatalog() []Pattern {
@@ -200,7 +202,7 @@ func ValidateConfig(c Config) error {
 		return fmt.Errorf("limits and collectible definitions are required")
 	}
 	f, p := c.Flight, c.Pipes
-	numericValues := []int64{f.Gravity, f.FlapVelocity, f.MaxFallSpeed, f.DuckX, f.DuckHalfWidth, f.DuckHalfHeight, p.Speed, p.Spacing, p.Width, p.GapHeight, p.SafeLeadIn, p.Horizon, p.FloorY, p.CeilingY, c.Limits.MaxActivePipes, c.Limits.MaxActiveCollectibles, c.SpawnNoneWeight}
+	numericValues := []int64{f.Gravity, f.FlapVelocity, f.MaxFallSpeed, f.DuckX, f.DuckHalfWidth, f.DuckHalfHeight, p.Speed, p.MaxSpeed, p.RampTicks, p.Spacing, p.Width, p.GapHeight, p.SafeLeadIn, p.Horizon, p.FloorY, p.CeilingY, c.Limits.MaxActivePipes, c.Limits.MaxActiveCollectibles, c.SpawnNoneWeight}
 	for _, definition := range c.Collectibles {
 		numericValues = append(numericValues, definition.Version, definition.Weight, definition.MinPipeIndex, definition.MinSpacingPipes, definition.Amount, definition.Radius)
 	}
@@ -215,13 +217,13 @@ func ValidateConfig(c Config) error {
 	if f.Gravity <= 0 || f.FlapVelocity >= 0 || f.MaxFallSpeed <= 0 || f.FlapVelocity < -f.MaxFallSpeed {
 		return fmt.Errorf("flight")
 	}
-	vals := []int64{f.Gravity, f.FlapVelocity, f.MaxFallSpeed, f.DuckX, f.DuckHalfWidth, f.DuckHalfHeight, p.Speed, p.Spacing, p.Width, p.GapHeight, p.SafeLeadIn, p.Horizon, p.FloorY, p.CeilingY}
+	vals := []int64{f.Gravity, f.FlapVelocity, f.MaxFallSpeed, f.DuckX, f.DuckHalfWidth, f.DuckHalfHeight, p.Speed, p.MaxSpeed, p.RampTicks, p.Spacing, p.Width, p.GapHeight, p.SafeLeadIn, p.Horizon, p.FloorY, p.CeilingY}
 	for _, v := range vals {
 		if v < -10000000 || v > 10000000 {
 			return fmt.Errorf("config bound")
 		}
 	}
-	if p.Speed <= 0 || p.Spacing <= 0 || p.Width < p.Speed || p.Width <= 0 || p.GapHeight <= 2*f.DuckHalfHeight || p.Horizon < p.SafeLeadIn || p.FloorY <= p.CeilingY+p.GapHeight {
+	if p.Speed <= 0 || p.MaxSpeed < p.Speed || p.RampTicks <= 0 || p.Spacing <= 0 || p.Width < p.MaxSpeed || p.Width <= 0 || p.GapHeight <= 2*f.DuckHalfHeight || p.Horizon < p.SafeLeadIn || p.FloorY <= p.CeilingY+p.GapHeight {
 		return fmt.Errorf("invalid pipe geometry")
 	}
 	for _, pat := range canonicalCatalog {
@@ -316,7 +318,7 @@ func ConfigIDFor(c Config) (string, error) {
 	def, _ := CanonicalJSON(canonicalDefaultConfig)
 	cur, _ := CanonicalJSON(c)
 	if cur == def {
-		return "dd-v1-default", nil
+		return "dd-v1-speed-v1", nil
 	}
 	body, e := CanonicalJSON(struct {
 		Configuration Config    `json:"configuration"`
@@ -328,7 +330,7 @@ func validateDescriptor(d Descriptor) error {
 	if d.Seed < 0 || d.Seed > 4294967295 {
 		return fmt.Errorf("invalid seed")
 	}
-	if strings.TrimSpace(d.RunID) == "" || d.SimulationVersion != "1.0.0" || d.GeneratorVersion != "1.0.0" || d.ConfigID == "" {
+	if strings.TrimSpace(d.RunID) == "" || d.SimulationVersion != "1.1.0" || d.GeneratorVersion != "1.0.0" || d.ConfigID == "" {
 		return fmt.Errorf("invalid descriptor")
 	}
 	return nil
@@ -414,9 +416,13 @@ func Step(input State, frames []Input) (Result, error) {
 	vy = min64(input.Config.Flight.MaxFallSpeed, vy+input.Config.Flight.Gravity)
 	y += vy
 	pc, f := input.Config.Pipes, input.Config.Flight
+	speed, speedErr := WorldSpeedAt(input.Config, input.Tick+1)
+	if speedErr != nil {
+		return Result{}, speedErr
+	}
 	pipes := append([]Pipe{}, input.Pipes...)
 	for i := range pipes {
-		pipes[i].X -= pc.Speed
+		pipes[i].X -= speed
 	}
 	duck := Duck{f.DuckX, y, vy}
 	dead := y-f.DuckHalfHeight <= pc.CeilingY || y+f.DuckHalfHeight >= pc.FloorY
@@ -527,7 +533,7 @@ func Step(input State, frames []Input) (Result, error) {
 	keptC := []Collectible{}
 	for _, c := range s.Collectibles {
 		if !spawned[c.ID] {
-			c.X -= pc.Speed
+			c.X -= speed
 		}
 		if abs(c.X-duck.X) <= c.Radius+f.DuckHalfWidth && abs(c.Y-y) <= c.Radius+f.DuckHalfHeight {
 			amt := c.Amount
@@ -546,6 +552,22 @@ func Step(input State, frames []Input) (Result, error) {
 	s.Collectibles = keptC
 	return Result{s, events}, nil
 }
+func WorldSpeedAt(config Config, tick int64) (int64, error) {
+	if err := ValidateConfig(config); err != nil {
+		return 0, err
+	}
+	if tick <= 1 {
+		return config.Pipes.Speed, nil
+	}
+	elapsed := tick - 1
+	if elapsed > config.Pipes.RampTicks {
+		elapsed = config.Pipes.RampTicks
+	}
+	delta := config.Pipes.MaxSpeed - config.Pipes.Speed
+	// Config bounds keep this product within int64 and JavaScript's safe domain.
+	return config.Pipes.Speed + delta*elapsed/config.Pipes.RampTicks, nil
+}
+
 func min64(a, b int64) int64 {
 	if a < b {
 		return a
@@ -600,7 +622,7 @@ func VerifyFoundationFixtures(path string) error {
 	if e = json.Unmarshal(data, &f); e != nil {
 		return e
 	}
-	if f.FixtureRevision != "foundation-2" || len(f.Cases) != 9 || len(f.Invalid) != 5 || len(f.MixerVectors) != 4 {
+	if f.FixtureRevision != "foundation-speed-1" || len(f.Cases) != 12 || len(f.Invalid) != 5 || len(f.MixerVectors) != 4 {
 		return fmt.Errorf("unexpected fixture revision/case count")
 	}
 	operationCount, advanceTicks := 0, 0
@@ -619,7 +641,7 @@ func VerifyFoundationFixtures(path string) error {
 			}
 		}
 	}
-	if operationCount != 24 || advanceTicks != 24200 {
+	if operationCount != 30 || advanceTicks != 24200 {
 		return fmt.Errorf("unexpected fixture operation/tick count: %d/%d", operationCount, advanceTicks)
 	}
 	for _, c := range f.Cases {

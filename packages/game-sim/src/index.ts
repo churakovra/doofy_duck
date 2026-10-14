@@ -21,6 +21,8 @@ export interface FlightConfig {
 }
 export interface PipeConfig {
   readonly speed: number;
+  readonly maxSpeed: number;
+  readonly rampTicks: number;
   readonly spacing: number;
   readonly width: number;
   readonly gapHeight: number;
@@ -81,6 +83,8 @@ export const DEFAULT_CONFIG: GameConfig = freeze({
   },
   pipes: {
     speed: 2400,
+    maxSpeed: 4800,
+    rampTicks: 5400,
     spacing: 220000,
     width: 52000,
     gapHeight: 176000,
@@ -147,8 +151,10 @@ export function validateConfig(c: GameConfig): GameConfig {
       throw Error(`invalid pipes ${k}`);
   if (
     p.speed <= 0 ||
+    p.maxSpeed < p.speed ||
+    p.rampTicks <= 0 ||
     p.spacing <= 0 ||
-    p.width < p.speed ||
+    p.width < p.maxSpeed ||
     p.width <= 0 ||
     p.gapHeight <= 2 * f.duckHalfHeight ||
     p.horizon < p.safeLeadIn ||
@@ -208,7 +214,7 @@ export function validateDescriptor(d: RunDescriptor): RunDescriptor {
     !integer(d.seed) ||
     d.seed < 0 ||
     d.seed > 0xffffffff ||
-    d.simulationVersion !== "1.0.0" ||
+    d.simulationVersion !== "1.1.0" ||
     d.generatorVersion !== "1.0.0" ||
     !d.configId
   )
@@ -321,7 +327,7 @@ export function configIdFor(config: GameConfig): string {
   validateConfig(config);
   const encode = (value: GameConfig) => canonicalJSON({ configuration: value, patterns: PATTERN_CATALOG });
   const content = encode(config);
-  return content === encode(DEFAULT_CONFIG) ? "dd-v1-default" : `dd-v1-config:${content}`;
+  return content === encode(DEFAULT_CONFIG) ? "dd-v1-speed-v1" : `dd-v1-config:${content}`;
 }
 
 export function createRun(
@@ -384,6 +390,15 @@ export function generateNext(s: RunState): StepResult {
   };
 }
 export const MAX_COUNTER = Number.MAX_SAFE_INTEGER - 1;
+/** Speed for a one-based active simulation tick; READY is still stationary. */
+export function worldSpeedAt(config: GameConfig, tick: number): number {
+  validateConfig(config);
+  if (!integer(tick) || tick > MAX_COUNTER)
+    throw Error("tick must be a safe simulation counter");
+  if (tick <= 1) return config.pipes.speed;
+  const elapsed = Math.min(tick - 1, config.pipes.rampTicks);
+  return config.pipes.speed + Math.floor((config.pipes.maxSpeed - config.pipes.speed) * elapsed / config.pipes.rampTicks);
+}
 function incrementCounter(value: number, amount = 1): number {
   const next = value + amount;
   if (!Number.isSafeInteger(value) || value < 0 || !Number.isSafeInteger(next) || next > MAX_COUNTER)
@@ -429,7 +444,8 @@ export function step(
   y += vy;
   const pc = input.config.pipes,
     f = input.config.flight,
-    pipes = input.pipes.map((p) => ({ ...p, x: p.x - pc.speed })),
+    speed = worldSpeedAt(input.config, input.tick + 1),
+    pipes = input.pipes.map((p) => ({ ...p, x: p.x - speed })),
     duck = { x: f.duckX, y, vy };
   const dead =
     y - f.duckHalfHeight <= pc.ceilingY ||
@@ -541,7 +557,7 @@ export function step(
     next = { ...next, rngState, nextSpawnPipeIndex };
     const kept: Collectible[] = [];
     for (const c of next.collectibles) {
-      const moved = spawnedThisTick.has(c.id) ? c : { ...c, x: c.x - pc.speed },
+      const moved = spawnedThisTick.has(c.id) ? c : { ...c, x: c.x - speed },
         hit =
           Math.abs(moved.x - duck.x) <= moved.radius + f.duckHalfWidth &&
           Math.abs(moved.y - y) <= moved.radius + f.duckHalfHeight;
