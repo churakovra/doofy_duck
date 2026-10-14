@@ -1,14 +1,20 @@
-# Doofy Duck — gameplay foundation
+# Doofy Duck
+
+Doofy Duck targets a commercial Telegram Mini App for players aged 18+, in Russian
+and English. The approved [product vision](docs/PRODUCT_VISION.md) defines the first
+public version and later rewards. The repository currently provides a local
+gameplay foundation, not that commercial release.
 
 A locally playable endless pipe game: tap to flap, pass pipes for points, collect occasional Feather/GameStar pickups into a local in-game wallet, pause, die, and restart. React/PixiJS presents a pure TypeScript simulation; a native Go package checks the same full-state/event fixtures.
 
-This is a development foundation targeting v1.0.0, **not a commercial release**. No accounts, authoritative wallet, payments, gift redemption, paid advantages, leaderboards, or live valuable rewards. Art is placeholder work, not an approved visual direction.
+This is a local development foundation, **not a commercial release**. No accounts, authoritative wallet, payments, gift redemption, paid advantages, leaderboards, or live valuable rewards. Art is placeholder work, not an approved visual direction.
 
 ## Project navigation
 
+- [Product vision](docs/PRODUCT_VISION.md): approved purpose, audience, public-version scope, and open decisions.
 - [Agent instructions](AGENTS.md): working conventions and task-based model routing.
 - [Code map](docs/ARCHITECTURE.md): runtime flow, file ownership, and checks by task.
-- [Documentation map](docs/README.md): current rules, baseline requirements, future decisions, and historical reports.
+- [Documentation map](docs/README.md): current rules, product vision, future architecture, and supporting research.
 - [Latest recorded verification](docs/ARCADE_FIXES_RESULTS.md): executed checks and remaining acceptance work.
 
 ## Requirements
@@ -36,7 +42,7 @@ Touch/click the field or press Space to flap. Screen buttons do not also flap. B
 - Velocity tilt, wing/flap motion, restrained squash/stretch and bounded visual effects improve feedback without changing authoritative hitboxes. Extra motion respects the reduced-motion setting.
 - Original synthesized flap/pickup/death sounds and a quiet music loop unlock from a user gesture. Separate sound/music controls are saved locally; backgrounding and pause silence playback.
 
-The current rules use simulation version1.2.0, generator version1.1.0, and default config ID `dd-v1-arcade-v2`. See [`docs/ARCADE_SIMULATION.md`](docs/ARCADE_SIMULATION.md) for the rules and [`docs/ARCADE_TUNING_NOTES.md`](docs/ARCADE_TUNING_NOTES.md) for the tuning rationale. Older playtest and speed reports describe superseded rules.
+The current rules use simulation version1.2.0, generator version1.1.0, and default config ID `dd-v1-arcade-v2`. See [`docs/ARCADE_SIMULATION.md`](docs/ARCADE_SIMULATION.md) for the rules.
 
 ## Verification commands
 
@@ -70,7 +76,7 @@ Playwright starts an isolated **production preview on127.0.0.1:4174** and an iso
 - `packages/game-sim`: pure deterministic TypeScript rules and semantic/fixture tests.
 - `services/core/simulation`: native Go rules and parity verification; no HTTP service.
 - `contracts/simulation`: exact rules, authored pattern catalog, canonical fixtures and offline producer.
-- `docs/GAME_V1_SPEC.md`, `docs/GAME_V1_TECH_PLAN.md`: scope and acceptance requirements.
+- `docs/PRODUCT_VISION.md`: approved product purpose and commercial scope.
 
 For protocol details, read `contracts/simulation/README.md`. Do not change expected fixtures to hide a mismatch. `generate-fixtures.mjs` is a deliberate reviewed maintenance tool, never an automatic testing step.
 

@@ -1,12 +1,13 @@
 # Documentation maintenance
 
 Use [README.md](README.md) as the index and authority map. Start from current
-documents for the task, not the chronological handoff/review archive.
+documents for the task.
 
 - Record implemented behavior separately from requirements, future architecture,
   and dated verification evidence. Follow-up reports do not validate later code.
-- Preserve historical findings; add a short historical/supersession note rather
-  than rewriting old results to look like a new successful execution.
+- Remove obsolete documents and outdated sections; update incoming links. Do not
+  keep superseded requirements as historical guidance. Retained verification
+  evidence must keep its execution date and must not imply a new successful run.
 - When adding or moving a document, update the index and check relative links.
 - Keep code ownership in `ARCHITECTURE.md`, operational commands in the root
   README, and exact simulation mechanics in `ARCADE_SIMULATION.md`.
