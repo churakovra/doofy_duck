@@ -18,7 +18,7 @@ test('ready screen starts one playable run from the first Space press', async ({
   await waitForPlayableGame(page);
   await expect(page.locator('script[src="/@vite/client"]')).toHaveCount(0);
   await expect(page.getByRole('heading', { name: /Привет/ })).toBeVisible();
-  await expect(page.locator('canvas[aria-label="Doofy Duck game canvas"]')).toBeVisible();
+  await expect(page.locator('canvas[aria-label="Игровое поле Doofy Duck"]')).toBeVisible();
   await page.keyboard.press('Space');
   await page.clock.runFor(70);
   await expect(page.getByText('КАСАЙСЯ, ЧТОБЫ ВЗЛЕТЕТЬ')).toBeVisible();
@@ -31,7 +31,7 @@ test('screen start, pause, explicit resume, death, and restart survive three cyc
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
   await waitForPlayableGame(page);
-  await expect(page.locator('canvas[aria-label="Doofy Duck game canvas"]')).toBeVisible();
+  await expect(page.locator('canvas[aria-label="Игровое поле Doofy Duck"]')).toBeVisible();
   for (let cycle = 0; cycle < 3; cycle++) {
     await page.keyboard.press('Space');
     await expect(page.getByText('КАСАЙСЯ, ЧТОБЫ ВЗЛЕТЕТЬ')).toBeVisible();
@@ -248,8 +248,8 @@ test('a completed run settles once into the local wallet and survives reload', a
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
   expect(await page.evaluate(() => (window as typeof window & { __testSeed?: number }).__testSeed)).toBe(0);
-  await expect(page.getByText('Перья · всего')).toBeVisible();
-  await expect(page.getByText('Game Star · всего')).toBeVisible();
+  await expect(page.getByText('Монеты · всего')).toBeVisible();
+  await expect(page.getByText('Игровые звёзды · всего')).toBeVisible();
   await expect(page.getByText('Кошелёк на этом устройстве')).toBeVisible();
   await expect(page.locator('.wallet-total').nth(0).locator('strong')).toHaveText('11');
   await expect(page.locator('.wallet-total').nth(1).locator('strong')).toHaveText('7');

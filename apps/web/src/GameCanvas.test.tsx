@@ -37,6 +37,7 @@ vi.mock('pixi.js', () => {
 });
 
 import { GameCanvas } from './GameCanvas';
+import { LocaleProvider, useLocale } from './locale';
 
 let root: ReturnType<typeof createRoot>;
 let host: HTMLDivElement;
@@ -75,6 +76,27 @@ afterEach(async () => {
 });
 
 describe('GameCanvas renderer startup', () => {
+  it('translates the canvas label without recreating the renderer', async () => {
+    const onReady = vi.fn();
+    let changeLocale: ReturnType<typeof useLocale>['setLocale'];
+    function Canvas() {
+      changeLocale = useLocale().setLocale;
+      return <GameCanvas getState={() => runningState} onReady={onReady} />;
+    }
+    const storage = { getItem: () => 'ru', setItem: vi.fn() };
+    act(() => root.render(<LocaleProvider storage={storage}><Canvas /></LocaleProvider>));
+    await settleLifecycle();
+    const canvas = host.querySelector('canvas');
+    expect(canvas?.getAttribute('aria-label')).toBe('Игровое поле Doofy Duck');
+    act(() => changeLocale('en'));
+    await settleLifecycle();
+    expect(host.querySelector('canvas')).toBe(canvas);
+    expect(canvas?.getAttribute('aria-label')).toBe('Doofy Duck game canvas');
+    expect(pixi.init).toHaveBeenCalledTimes(1);
+    expect(pixi.destroy).not.toHaveBeenCalled();
+    expect(onReady).toHaveBeenCalledTimes(1);
+  });
+
   it('reports an initial render failure without later signaling readiness and destroys the app once', async () => {
     pixi.render.mockImplementation(() => { throw new Error('renderer failed'); });
     const onReady = vi.fn();

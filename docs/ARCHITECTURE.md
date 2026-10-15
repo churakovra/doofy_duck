@@ -26,7 +26,7 @@ while Pixi reads simulation state and draws cosmetic feedback.
 | Path | Responsibility |
 | --- | --- |
 | [apps/web/src/main.tsx](../apps/web/src/main.tsx) | React mount and error boundary |
-| [Game.tsx](../apps/web/src/Game.tsx) | UI composition and controls |
+| [Game.tsx](../apps/web/src/Game.tsx), [GameButton.tsx](../apps/web/src/GameButton.tsx), [GameSettings.tsx](../apps/web/src/GameSettings.tsx) | UI composition, shared button variants/input isolation, and the always-available settings menu |
 | [useGameRun.ts](../apps/web/src/useGameRun.ts) | Run descriptors, lifecycle, queued input, fixed-step advancement |
 | [clock.ts](../apps/web/src/clock.ts), [input.ts](../apps/web/src/input.ts) | Tick scheduling and accepted pointer/keyboard actions |
 | [GameCanvas.tsx](../apps/web/src/GameCanvas.tsx) | Serialized Pixi lifecycle and frame presentation |
@@ -34,7 +34,7 @@ while Pixi reads simulation state and draws cosmetic feedback.
 | [useGameProgress.ts](../apps/web/src/useGameProgress.ts), [local-progress.ts](../apps/web/src/local-progress.ts) | Thin React subscription adapter and pure injected local progress session |
 | [wallet.ts](../apps/web/src/wallet.ts), [wallet-session.ts](../apps/web/src/wallet-session.ts), [storage.ts](../apps/web/src/storage.ts) | Local record validation, deduplication, tab ownership, persistence fallback |
 | [useGameAudio.ts](../apps/web/src/useGameAudio.ts), [audio.ts](../apps/web/src/audio.ts) | Audio lifecycle, preferences, synthesized sounds/music |
-| [messages.ru.ts](../apps/web/src/messages.ru.ts) | Typed Russian presentation catalog; English translation/selection remain future work |
+| [locale.tsx](../apps/web/src/locale.tsx), [messages.ru.ts](../apps/web/src/messages.ru.ts), [messages.en.ts](../apps/web/src/messages.en.ts) | Saved locale preference, typed bilingual catalogs, count formatting, and document language |
 | [style.css](../apps/web/src/style.css) | Viewport scaling and interface layout |
 | [packages/game-sim/src/index.ts](../packages/game-sim/src/index.ts) | Stable public simulation exports |
 | [types.ts](../packages/game-sim/src/types.ts), [config.ts](../packages/game-sim/src/config.ts), [canonical.ts](../packages/game-sim/src/canonical.ts) | Shared types, rule defaults/validation, canonical configuration identity |

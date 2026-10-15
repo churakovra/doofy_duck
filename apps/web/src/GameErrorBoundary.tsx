@@ -1,9 +1,11 @@
+import { GameButton } from './GameButton';
 import { Component, type ErrorInfo, type ReactNode } from 'react';
-import { messages } from './messages.ru';
+import { useLocale } from './locale';
+import type { MessageCatalog } from './messages.ru';
 
 type State = { failed: boolean };
 
-export class GameErrorBoundary extends Component<{ children: ReactNode }, State> {
+class ErrorBoundary extends Component<{ children: ReactNode; messages: MessageCatalog }, State> {
   state: State = { failed: false };
 
   static getDerivedStateFromError(): State { return { failed: true }; }
@@ -16,11 +18,16 @@ export class GameErrorBoundary extends Component<{ children: ReactNode }, State>
     if (!this.state.failed) return this.props.children;
     return <main className="game-shell">
       <section className="screen-card" role="alert">
-        <p className="eyebrow">{messages.gameStartupFailedEyebrow}</p>
-        <h1>{messages.unableToOpenGameHeading}</h1>
-        <p className="instruction">{messages.reloadAndRetryInstruction}</p>
-        <button className="primary-button" type="button" onClick={() => window.location.reload()}>{messages.reloadPageButton} <span>{messages.reloadGlyph}</span></button>
+        <p className="eyebrow">{this.props.messages.gameStartupFailedEyebrow}</p>
+        <h1>{this.props.messages.unableToOpenGameHeading}</h1>
+        <p className="instruction">{this.props.messages.reloadAndRetryInstruction}</p>
+        <GameButton variant="primary" onClick={() => window.location.reload()}>{this.props.messages.reloadPageButton} <span>{this.props.messages.reloadGlyph}</span></GameButton>
       </section>
     </main>;
   }
+}
+
+export function GameErrorBoundary({ children }: { children: ReactNode }) {
+  const { messages } = useLocale();
+  return <ErrorBoundary messages={messages}>{children}</ErrorBoundary>;
 }

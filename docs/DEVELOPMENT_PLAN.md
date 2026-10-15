@@ -16,11 +16,11 @@ and proposals. [Foundation](FOUNDATION.md) describes current extension boundarie
 | Single-tap flight, scoring, free new runs | Implemented locally | Telegram/device acceptance and gameplay tuning |
 | Varied, stepped, fair challenges with recovery | Seeded gaps and speed ramp | Challenge design, stepped generator, reachability evidence, playtesting |
 | Telegram Mini App and saved player progress | Browser game and untrusted local storage | Telegram integration, identity, authoritative services and persistence |
-| Coins and in-game Stars, separate from XTR | `FEATHER`/`GAME_STAR` local balances | Product wording, approved issuance policy, authoritative ledger |
+| Coins and in-game Stars, separate from XTR | Product wording aligned; `FEATHER`/`GAME_STAR` local balances | Approved issuance policy, authoritative ledger |
 | Owned/equipped skins and backgrounds | Renderer palette boundary | Catalog, assets, inventory, equip, shop and purchase transactions |
 | Actual Telegram Stars purchases | Not implemented | Product/pricing decisions, provider integration, fulfillment and refunds |
 | At most one paid continue preserving score | Death is terminal | Lifecycle design, safe resume, authorization and accounting |
-| Russian and English | Russian catalog with some mixed wording | Typed bilingual catalogs, locale selection and complete UI coverage |
+| Russian and English | Typed bilingual catalogs, saved locale selection, localized errors and plurals | Real Telegram/device acceptance in both languages |
 | Operational and abuse protection | Local validation and simulation parity | Service authorization, limits, detection, monitoring and recovery |
 
 ## Delivery sequence
@@ -55,10 +55,12 @@ implementation must recheck official provider documentation at that time.
 
 ### 1. Align the playable client with the product language
 
-Implement typed Russian/English message catalogs, locale selection and saved
-preference. Use “coins” and “in-game Stars” consistently in player-facing text;
-retain existing simulation IDs and local storage schemas. Keep XTR visibly
-separate. Translate errors, controls, accessibility labels, and currency plurals.
+Implemented locally: typed Russian/English message catalogs, locale selection
+and saved preference. Switching language preserves the current run and renderer.
+Unavailable storage keeps language selection usable for the current session.
+
+Use “coins” and “in-game Stars” consistently in player-facing text; retain
+existing simulation IDs and local storage schemas. Keep XTR visibly separate. Translate errors, controls, accessibility labels, and currency plurals.
 Keep local-practice labels accurate until account progress exists.
 
 Acceptance: every player-facing message has both translations, switching locale
@@ -188,7 +190,8 @@ explicit; prior verification reports do not validate later changes.
 
 ## Dependencies and work that can overlap
 
-- Milestone 1 can start immediately. Milestones 2 and 3 can progress in parallel
+- Milestone 1 is implemented locally; real-device acceptance remains open.
+  Milestones 2 and 3 can progress in parallel
   once their focused design decisions exist.
 - Milestone 4 contract design can overlap local gameplay/art work. Milestone 5
   depends on identity, durable services and the run/economy specifications.
@@ -200,11 +203,10 @@ explicit; prior verification reports do not validate later changes.
 
 ## Recommended next work
 
-Start with **bilingual product wording and locale selection** as a complete,
-low-dependency feature. In parallel, prepare the **challenge-generation** and
-**run/continue/settlement** specifications. Then implement stepped challenges and
-the first authenticated verified-run-to-wallet slice. These close the largest
-product gaps and prevent later shop/continue work from inventing incompatible
+With **bilingual product wording and locale selection** implemented locally,
+prepare the **challenge-generation** and **run/continue/settlement** specifications.
+Then implement stepped challenges and the first authenticated
+verified-run-to-wallet slice. These close the largest product gaps and prevent later shop/continue work from inventing incompatible
 accounting or lifecycle rules.
 
 ## Deliberately after the first public release

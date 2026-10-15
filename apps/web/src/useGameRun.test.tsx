@@ -3,6 +3,7 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useGameRun } from './useGameRun';
+import { LocaleProvider, useLocale } from './locale';
 import { DEFAULT_CONFIG, type GameConfig, type GameEvent, type RunDescriptorIdentity } from '@doofy-duck/game-sim';
 
 let run: ReturnType<typeof useGameRun>;
@@ -10,12 +11,18 @@ let frameId: number;
 let now: number;
 let frames: Map<number, FrameRequestCallback>;
 let root: ReturnType<typeof createRoot>;
+let host: HTMLDivElement;
 let options: { config?: GameConfig; createIdentity?: () => RunDescriptorIdentity; onEvents?: (events: readonly GameEvent[]) => void } = {};
 const callbacks = {
   onFlapUnlock: vi.fn(), onFlap: vi.fn(), onPickup: vi.fn(),
   onPhaseChange: vi.fn(), onRunEnded: vi.fn(),
 };
-function Harness() { run = useGameRun(() => true, callbacks, options); return null; }
+let changeLocale: ReturnType<typeof useLocale>['setLocale'];
+function Harness() {
+  changeLocale = useLocale().setLocale;
+  run = useGameRun(() => true, callbacks, options);
+  return <select aria-label="Language"><option value="ru">Русский</option><option value="en">English</option></select>;
+}
 function frame(elapsed: number) {
   act(() => {
     now += elapsed;
@@ -27,6 +34,7 @@ function frame(elapsed: number) {
 
 beforeEach(() => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  localStorage.clear();
   Object.defineProperty(document, 'hidden', { configurable: true, value: false });
   frameId = 0;
   now = 0;
@@ -37,19 +45,35 @@ beforeEach(() => {
     return frameId;
   });
   vi.stubGlobal('cancelAnimationFrame', (id: number) => frames.delete(id));
-  root = createRoot(document.createElement('div'));
-  act(() => root.render(<Harness />));
+  host = document.createElement('div');
+  document.body.append(host);
+  root = createRoot(host);
+  act(() => root.render(<LocaleProvider><Harness /></LocaleProvider>));
   act(() => run.acceptRenderer());
   frame(0);
 });
 afterEach(() => {
   act(() => root.unmount());
+  host.remove();
   Object.defineProperty(document, 'hidden', { configurable: true, value: false });
   vi.unstubAllGlobals();
   vi.clearAllMocks();
 });
 
 describe('run clock integration', () => {
+  it('keeps the same active run and input sequence when language changes', () => {
+    act(() => run.start());
+    frame(17);
+    const before = run.getState();
+    expect(before.phase).toBe('RUNNING');
+    act(() => changeLocale('en'));
+    expect(run.getState()).toBe(before);
+    frame(17);
+    expect(run.getState().tick).toBe(before.tick + 1);
+    expect(run.getState().descriptor).toEqual(before.descriptor);
+    expect(run.getState().nextInputSequence).toBe(before.nextInputSequence);
+  });
+
   it('starts from a complete Space key press before the next animation frame', () => {
     act(() => {
       window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space' }));
@@ -58,6 +82,19 @@ describe('run clock integration', () => {
     frame(1_000);
     expect(run.phase).toBe('RUNNING');
     expect(run.getState().nextInputSequence).toBe(1);
+  });
+
+  it.each(['Space', 'ArrowUp'])('leaves a focused native language select usable for %s', (code) => {
+    const select = host.querySelector('select')!;
+    select.focus();
+    const event = new KeyboardEvent('keydown', { code, bubbles: true, cancelable: true });
+    act(() => select.dispatchEvent(event));
+    expect(event.defaultPrevented).toBe(false);
+    act(() => select.dispatchEvent(new KeyboardEvent('keyup', { code, bubbles: true })));
+    frame(17);
+    expect(run.phase).toBe('READY');
+    expect(run.getState().nextInputSequence).toBe(0);
+    expect(callbacks.onFlap).not.toHaveBeenCalled();
   });
 
   it('does not carry a dying slow frame backlog into an immediate new run', () => {
@@ -172,7 +209,7 @@ describe('run clock integration', () => {
   it('delivers complete simulation event batches once in their simulation order', () => {
     const onEvents = vi.fn();
     options = { onEvents };
-    act(() => root.render(<Harness />));
+    act(() => root.render(<LocaleProvider><Harness /></LocaleProvider>));
     act(() => run.start());
     frame(17);
     const batches = onEvents.mock.calls.map(([events]) => events as readonly GameEvent[]);
@@ -229,7 +266,7 @@ describe('run clock integration', () => {
     const report = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     options = { onEvents: () => { throw Error('telemetry unavailable'); } };
     try {
-      act(() => root.render(<Harness />));
+      act(() => root.render(<LocaleProvider><Harness /></LocaleProvider>));
       act(() => run.start());
       frame(17);
       expect(run.runtimeError).toBe('');

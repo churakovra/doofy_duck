@@ -18,7 +18,7 @@ test('flight presentation animates inside the existing canvas', async ({ page })
   });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
-  const canvas = page.locator('canvas[aria-label="Doofy Duck game canvas"]');
+  const canvas = page.locator('canvas[aria-label="Игровое поле Doofy Duck"]');
   await expect(canvas).toBeVisible();
   await page.getByRole('button', { name: /Начать полёт/ }).click();
   await page.clock.runFor(70);
@@ -36,7 +36,7 @@ test('flight presentation animates inside the existing canvas', async ({ page })
 test('reduced motion keeps the playable duck and canvas available', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/');
-  const canvas = page.locator('canvas[aria-label="Doofy Duck game canvas"]');
+  const canvas = page.locator('canvas[aria-label="Игровое поле Doofy Duck"]');
   await expect(canvas).toBeVisible();
   await page.keyboard.press('Space');
   await expect(page.getByText('КАСАЙСЯ, ЧТОБЫ ВЗЛЕТЕТЬ')).toBeVisible();

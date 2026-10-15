@@ -5,7 +5,7 @@ and English. The approved [product vision](docs/PRODUCT_VISION.md) defines the f
 public version and later rewards. The repository currently provides a local
 gameplay foundation, not that commercial release.
 
-A locally playable endless pipe game: tap to flap, pass pipes for points, collect occasional Feather/GameStar pickups into a local in-game wallet, pause, die, and restart. React/PixiJS presents a pure TypeScript simulation; a native Go package checks the same full-state/event fixtures.
+A locally playable endless pipe game: tap to flap, pass pipes for points, collect occasional coins/in-game Stars pickups into a local in-game wallet, pause, die, and restart. React/PixiJS presents a pure TypeScript simulation; a native Go package checks the same full-state/event fixtures.
 
 This is a local development foundation, **not a commercial release**. No accounts, authoritative wallet, payments, gift redemption, paid advantages, leaderboards, or live valuable rewards. Art is placeholder work, not an approved visual direction.
 
@@ -32,6 +32,8 @@ npm run dev
 ```
 
 Open `http://127.0.0.1:4173/`. The root dev command builds the simulation workspace entrypoint before starting Vite; a clean workspace does not need pre-existing dist files. Leave the terminal running. The server binds to localhost only. If the port is occupied, use the existing project server or deliberately stop it rather than silently starting on an unknown port.
+
+Open the always-available Menu to choose Русский or English and to control sound effects and music independently. These preferences save on this device when browser storage is available, and changing language preserves the current run. Opening the menu during play pauses the game; closing it does not resume play.
 
 Touch/click the field or press Space to flap. Screen buttons do not also flap. Backgrounding pauses; returning requires explicit resume. Restart is free. Personal best is untrusted local storage, not an online score.
 

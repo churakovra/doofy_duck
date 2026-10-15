@@ -6,7 +6,7 @@ import {
 } from '@doofy-duck/game-sim';
 import { FixedStepClock } from './clock';
 import { createInputController } from './input';
-import { messages } from './messages.ru';
+import type { RuntimeErrorKey } from './messages.ru';
 
 const MAX_QUEUED_INPUTS = 8;
 type RunCallbacks = {
@@ -28,6 +28,12 @@ function createIdentity(): RunDescriptorIdentity {
   return { runId: crypto.randomUUID(), seed: seed[0]! };
 }
 
+function isInteractiveTarget(target: EventTarget | null): boolean {
+  return target instanceof Element && Boolean(target.closest(
+    'button, select, input, textarea, a[href], [contenteditable="true"], [role="button"], [role="switch"], [role="combobox"], [tabindex]:not([tabindex="-1"])',
+  ));
+}
+
 function freshRun(config?: GameConfig, identity = createIdentity()) {
   return createRun(createRunDescriptor(identity, config), config);
 }
@@ -41,7 +47,7 @@ export function useGameRun(canPlay: () => boolean, callbacks: RunCallbacks, opti
   const sequenceRef = useRef(0);
   const [phase, setPhase] = useState(initial.phase);
   const [score, setScore] = useState(0);
-  const [runtimeError, setRuntimeError] = useState('');
+  const [runtimeError, setRuntimeError] = useState<RuntimeErrorKey | ''>('');
   const [rendererReady, setRendererReady] = useState(false);
   const rendererReadyRef = useRef(false);
   const callbacksRef = useRef(callbacks);
@@ -99,7 +105,7 @@ export function useGameRun(canPlay: () => boolean, callbacks: RunCallbacks, opti
   }, []);
   const inputRef = useRef(createInputController(flap));
 
-  const acceptRenderer = useCallback((error?: string) => {
+  const acceptRenderer = useCallback((error?: RuntimeErrorKey) => {
     if (error) {
       setRuntimeError(error);
       setRendererReady(false);
@@ -133,7 +139,7 @@ export function useGameRun(canPlay: () => boolean, callbacks: RunCallbacks, opti
           inputRef.current.reset();
         }
       } catch {
-        setRuntimeError(messages.simulationStoppedError);
+        setRuntimeError('simulationStoppedError');
         setRendererReady(false);
         rendererReadyRef.current = false;
         if (current.phase === 'RUNNING') updateFromResult(pauseRun(current), []);
@@ -164,7 +170,7 @@ export function useGameRun(canPlay: () => boolean, callbacks: RunCallbacks, opti
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.code === 'Space' || event.code === 'ArrowUp') callbacksRef.current.onFlapUnlock();
-      inputRef.current.onKeyDown({ code: event.code, repeat: event.repeat, targetIsButton: event.target instanceof Element && Boolean(event.target.closest('button')), preventDefault: () => event.preventDefault() });
+      inputRef.current.onKeyDown({ code: event.code, repeat: event.repeat, targetIsButton: isInteractiveTarget(event.target), preventDefault: () => event.preventDefault() });
     };
     const onKeyUp = (event: KeyboardEvent) => inputRef.current.onKeyUp(event.code);
     const onVisibility = () => {
@@ -224,7 +230,7 @@ export function useGameRun(canPlay: () => boolean, callbacks: RunCallbacks, opti
 
   const onFieldPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     callbacksRef.current.onFlapUnlock();
-    inputRef.current.onPointerDown({ button: event.button, targetIsButton: event.target instanceof Element && Boolean(event.target.closest('button')), preventDefault: () => event.preventDefault() });
+    inputRef.current.onPointerDown({ button: event.button, targetIsButton: isInteractiveTarget(event.target), preventDefault: () => event.preventDefault() });
   }, []);
   const onFieldPointerUp = useCallback(() => callbacksRef.current.onFlapUnlock(), []);
   const unlockForStart = useCallback(() => callbacksRef.current.onFlapUnlock(), []);

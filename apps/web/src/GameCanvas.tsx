@@ -2,7 +2,8 @@ import React, { useEffect, useRef } from 'react';
 import { Application, Container, Graphics } from 'pixi.js';
 import type { RunState } from '@doofy-duck/game-sim';
 import { createFxPool, duckPose, flapEnvelope, pushFx, type Fx } from './feel';
-import { messages } from './messages.ru';
+import { useLocale } from './locale';
+import type { RuntimeErrorKey } from './messages.ru';
 import { DEFAULT_APPEARANCE, type GameAppearance } from './appearance';
 import { HEIGHT, WIDTH, makeBackground, makeDuck, makeParallax, paintBackground, paintDuck, paintEffects, paintWorld, px } from './scene';
 const FX_POOL = createFxPool(20);
@@ -18,21 +19,29 @@ export function serializeRendererLifecycle(operation: () => void | Promise<void>
 type Feedback = { flapSerial: number; pickupSerial: number; deathSerial: number };
 type Props = {
   getState: () => RunState;
-  onReady: (error?: string) => void;
+  onReady: (error?: RuntimeErrorKey) => void;
   getFeedback?: () => Feedback;
   appearance?: GameAppearance;
 };
 type Scene = { app: Application; world: Graphics; duck: Container; wing: Graphics; effects: Graphics; parallax: Container };
 export function GameCanvas({ getState, onReady, getFeedback, appearance = DEFAULT_APPEARANCE }: Props) {
+  const { messages } = useLocale();
   const hostRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<Scene | null>(null);
   const getStateRef = useRef(getState);
   const feedbackRef = useRef(getFeedback);
   const appearanceRef = useRef(appearance);
+  const canvasLabelRef = useRef(messages.gameCanvasLabel);
   const frameRef = useRef(0);
   getStateRef.current = getState;
   feedbackRef.current = getFeedback;
   appearanceRef.current = appearance;
+  canvasLabelRef.current = messages.gameCanvasLabel;
+
+  useEffect(() => {
+    const canvas = sceneRef.current?.app.canvas;
+    canvas?.setAttribute('aria-label', messages.gameCanvasLabel);
+  }, [messages.gameCanvasLabel]);
 
   useEffect(() => {
     let disposed = false;
@@ -65,7 +74,7 @@ export function GameCanvas({ getState, onReady, getFeedback, appearance = DEFAUL
         await app.init({ width: WIDTH, height: HEIGHT, background: initialAppearance.world.sky, antialias: true, autoDensity: true, resolution: Math.min(window.devicePixelRatio || 1, 2), preference: 'webgl', sharedTicker: false });
         if (disposed) return;
         app.ticker.stop();
-        app.canvas.setAttribute('aria-label', messages.gameCanvasLabel);
+        app.canvas.setAttribute('aria-label', canvasLabelRef.current);
         app.canvas.setAttribute('role', 'img');
         host.appendChild(app.canvas);
         const world = new Graphics();
@@ -83,7 +92,7 @@ export function GameCanvas({ getState, onReady, getFeedback, appearance = DEFAUL
           renderFailed = true;
           console.error('Game renderer stopped', reason);
           cancelAnimationFrame(frameRef.current);
-          onReady(messages.flightStoppedGraphicsError);
+          onReady('flightStoppedGraphicsError');
           sceneRef.current = null;
           void serializeRendererLifecycle(destroyApp);
         };
@@ -176,7 +185,7 @@ export function GameCanvas({ getState, onReady, getFeedback, appearance = DEFAUL
         draw(performance.now());
         if (!disposed && !renderFailed) onReady();
       } catch {
-        if (!disposed) onReady(messages.graphicsStartupError);
+        if (!disposed) onReady('graphicsStartupError');
         destroyApp();
       }
     });
