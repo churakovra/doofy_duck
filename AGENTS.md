@@ -91,32 +91,122 @@ Keep historical verification reports distinguishable from new execution evidence
 
 ## Collaboration
 
-Use subagents proactively when a task has independent parts that benefit from
-parallel work, such as exploration, implementation in separate files, or review.
-Handle small, tightly coupled tasks directly.
+### Responsibilities
 
-Route delegated work by task. Use the model and reasoning effort in this table
-unless the user explicitly requests a different choice:
+The main agent owns requirements, acceptance criteria, shared design decisions,
+task assignment, integration review, and the final report. It does not write or
+change application code, tests, scripts, or build/tooling configuration.
+Documentation-only changes may be handled directly.
+
+Delegate each coherent code change to one implementation worker. That worker
+owns the complete development cycle: understand the behavior, write meaningful
+tests, confirm the expected failure, implement the change, run focused checks,
+refactor when useful, and self-review.
+
+Do not create separate test-writing and implementation agents for ordinary work.
+Send revisions back to the existing worker while its context remains useful.
+
+For behavior-preserving refactors, use existing tests or add characterization
+tests before editing. Do not manufacture a failing test when behavior should
+remain unchanged.
+
+### Model routing
+
+Use these defaults:
 
 | Task | Model | Reasoning effort |
 | --- | --- | --- |
-| Application code for features, fixes, or refactors | `gpt-6-luna` | `high` |
-| Writing tests | `gpt-6-luna` | `medium` |
-| Writing documentation | `gpt-6-luna` | `medium` |
-| Planning | `gpt-6.1-sol` | `high` |
-| Review | `gpt-6.1-sol` | `low` normally; `medium` for important or high-risk changes, such as simulation contracts or TypeScript/Go parity, wallet or persistence behavior, security, and broad lifecycle changes |
+| Code, tests, and implementation fixes | `gpt-6-luna` | `high` |
+| Delegated documentation | `gpt-6-luna` | `medium` |
+| Planning and coordination | Main agent | Current setting |
+| Routine review | Main agent | Current setting |
+| Independent review | `gpt-6.1-sol` | `low`; `medium` for high-risk changes |
 
-For mixed-role work, delegate distinct phases with the model and effort suited
-to each phase. Pass behavior and acceptance expectations through each handoff;
-for example, test-writing work should receive the requirements before
-implementation begins. Keep the TDD sequence above: tests precede implementation,
-confirm the expected failure, then implement, establish green, refactor, and
-review. Delegation does not reduce anyone's self-review obligations.
+Do not delegate code writing to Sol. If Luna cannot complete a task, the main
+agent should clarify the requirements, narrow the task, or provide targeted
+analysis, then return implementation to Luna.
 
-When spawning with model overrides, use `fork_turns="none"` and include a
-self-contained task brief with relevant context, constraints, files, and expected
-result. Do not silently substitute another model or effort if the requested one
-is unavailable; report the limitation. Respect runtime concurrency limits and
-assign distinct file ownership to agents that edit files. The main agent
-coordinates the work, reviews returned findings and changes, resolves
-integration issues, and reports the final result.
+If a required model is unavailable, report the limitation. Do not silently
+substitute another model.
+
+### Delegation and concurrency
+
+Use one implementation worker by default. Add another worker only when tasks
+are independent and the benefit justifies additional context and coordination.
+
+Do not spawn agents merely to fill available concurrency slots. Only the main
+agent delegates work; workers must not spawn further agents.
+
+Give each worker a concise, self-contained brief containing:
+
+- Required behavior, acceptance criteria, and relevant edge cases.
+- Owned files or component boundaries.
+- Applicable root and component instructions and relevant documentation.
+- Required checks and the expected completion report.
+
+Require workers to read and follow the applicable instructions and development
+workflow. When spawning with model overrides, use `fork_turns="none"`.
+Respect runtime concurrency limits.
+
+Workers should read only the context needed for their task. Return concise
+findings and check summaries; include detailed logs only when needed to
+diagnose a failure.
+
+### Ownership and integration
+
+Inspect and preserve existing user changes before assigning work.
+
+Agree on shared interfaces and behavior before parallel implementation.
+Assign one owner to each edited file. Workers must request reassignment before
+editing outside their scope.
+
+In a shared checkout, only the main agent changes branches, stages files, or
+creates commits. Workers must not reset, restore, or overwrite another person's
+or agent's changes.
+
+Serialize work that overlaps in files or writes shared generated artifacts.
+Use isolated worktrees when isolation materially helps; do not create one
+automatically for every worker.
+
+### Review and verification
+
+Every worker self-reviews its diff and runs the relevant focused checks.
+
+The main agent inspects the returned diff against acceptance criteria and
+coordinates final routine verification with `npm run check`. Avoid repeating
+checks on an unchanged state without a specific reason. Documentation-only
+changes follow the Verification section and do not require application checks.
+
+Require one independent review for:
+
+- Simulation behavior, shared contracts, or TypeScript/Go parity.
+- Wallet persistence, ownership, settlement, or deduplication.
+- Security-sensitive changes.
+- Broad lifecycle or concurrency changes.
+
+Routine changes use worker self-review and main-agent review without an
+additional review agent.
+
+Reviewers receive the requirements and diff and independently inspect relevant
+callers, tests, and failure paths. Implementation revisions return to Luna.
+
+Verification evidence applies to the state tested. After relevant edits,
+conflict resolution, or integration changes, rerun affected checks.
+Browser verification remains governed by the Verification section.
+
+### Recovery and reporting
+
+If a worker repeats an unsuccessful approach or discovers a larger problem,
+it must report the evidence and blocker. The main agent then adjusts the task
+or provides targeted analysis; do not continue an unproductive retry loop.
+
+Before replacing a worker, preserve a concise handoff with changed files,
+decisions, remaining work, and check results.
+
+Each completion report states:
+
+- What changed.
+- Which checks ran and their results.
+- Remaining limitations or blockers.
+
+Never claim verification that did not run.
