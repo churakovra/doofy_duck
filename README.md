@@ -54,10 +54,14 @@ npm run test:go
 npm run test:go:race
 npm run test:parity
 npm run build
+npm run check                   # routine: types, lint, unit/fixture tests, Go tests, build
+
+# Optional browser verification, only when requested:
 npx playwright install chromium  # one-time browser prerequisite
-npm run test:browser
-npm run test:dev                # run after test:browser; isolated Vite development browser checks on 127.0.0.1:4175
-npm run check                   # types, lint, unit/fixture tests, Go tests, production and development browser suites
+npm run test:browser             # production browser suite
+npm run test:dev                 # development browser suite; run separately after production
+npm run check:browser            # both browser suites, sequentially
+npm run check:full               # routine checks followed by both browser suites
 ```
 
 Native-only commands:
@@ -69,7 +73,7 @@ go -C services/core/simulation vet ./...
 go -C services/core/simulation test -run '^$' -bench 'BenchmarkDefault(Step|Replay300Ticks)$' -benchmem -count=3
 ```
 
-Playwright starts an isolated **production preview on127.0.0.1:4174** and an isolated **development server on127.0.0.1:4175**. Browser suites use one worker to isolate software-rendering load. Run the two suites sequentially because they share their artifact directory. Both suites disable server reuse so they test the configured build and source reliably. Browser screenshots are saved as test artifacts, not written over documentation images. CI configuration includes Node and Go checks; a committed workflow file is not evidence of a GitHub-hosted run.
+Playwright starts an isolated **production preview on127.0.0.1:4174** and an isolated **development server on127.0.0.1:4175**. Browser suites use one worker to isolate software-rendering load. Run the two suites sequentially because they share their artifact directory. Both suites disable server reuse so they test the configured build and source reliably. Browser screenshots are saved as test artifacts, not written over documentation images. Push/PR CI runs routine Node/Go checks without installing or launching Chromium. Browser checks are available through a manual workflow run with `browser_tests` enabled. A committed workflow file is not evidence of a GitHub-hosted run.
 
 ## Source layout
 

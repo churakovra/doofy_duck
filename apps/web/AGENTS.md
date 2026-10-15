@@ -15,7 +15,10 @@ making changes. Keep gameplay rules in `@doofy-duck/game-sim`.
 - Keep gameplay coordinates/visibility consistent when scaling the viewport.
 
 From the repository root, use relevant `npm test -- <test-path>` cases,
-`npm run typecheck`, and `npm run lint` for code changes. `npm run test:browser`
+`npm run typecheck`, and `npm run lint` for code changes. Browser tests run only
+when explicitly requested, not after each fix. `npm run check` is the routine
+verification; `npm run check:browser` runs both browser suites on demand.
+`npm run test:browser`
 builds and uses isolated production preview at 4174. `npm run test:dev` uses
 isolated development at 4175 and exercises StrictMode startup/reload. Manual
 development uses `npm run dev` at 4173. Test files occur in both `src` and `test`.
