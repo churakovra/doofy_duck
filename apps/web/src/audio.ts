@@ -1,4 +1,4 @@
-import type { Phase } from '../../../packages/game-sim/src/index';
+import type { Phase } from '@doofy-duck/game-sim';
 
 export interface AudioPreferences { sound: boolean; music: boolean }
 export interface GameAudio {

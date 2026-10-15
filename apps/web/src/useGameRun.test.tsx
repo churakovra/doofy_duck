@@ -3,17 +3,19 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useGameRun } from './useGameRun';
+import { DEFAULT_CONFIG, type GameConfig, type GameEvent, type RunDescriptorIdentity } from '@doofy-duck/game-sim';
 
 let run: ReturnType<typeof useGameRun>;
 let frameId: number;
 let now: number;
 let frames: Map<number, FrameRequestCallback>;
 let root: ReturnType<typeof createRoot>;
+let options: { config?: GameConfig; createIdentity?: () => RunDescriptorIdentity; onEvents?: (events: readonly GameEvent[]) => void } = {};
 const callbacks = {
   onFlapUnlock: vi.fn(), onFlap: vi.fn(), onPickup: vi.fn(),
   onPhaseChange: vi.fn(), onRunEnded: vi.fn(),
 };
-function Harness() { run = useGameRun(() => true, callbacks); return null; }
+function Harness() { run = useGameRun(() => true, callbacks, options); return null; }
 function frame(elapsed: number) {
   act(() => {
     now += elapsed;
@@ -25,9 +27,11 @@ function frame(elapsed: number) {
 
 beforeEach(() => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  Object.defineProperty(document, 'hidden', { configurable: true, value: false });
   frameId = 0;
   now = 0;
   frames = new Map();
+  options = {};
   vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
     frames.set(++frameId, callback);
     return frameId;
@@ -40,6 +44,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   act(() => root.unmount());
+  Object.defineProperty(document, 'hidden', { configurable: true, value: false });
   vi.unstubAllGlobals();
   vi.clearAllMocks();
 });
@@ -115,5 +120,126 @@ describe('run clock integration', () => {
     act(() => run.flap());
     frame(17);
     expect(run.getState().nextInputSequence).toBe(before.nextInputSequence + 1);
+  });
+
+  it('discards a queued first flap when hidden before its first animation frame and requires explicit start on return', () => {
+    act(() => run.start());
+    Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+    act(() => document.dispatchEvent(new Event('visibilitychange')));
+    expect(run.phase).toBe('READY');
+    Object.defineProperty(document, 'hidden', { configurable: true, value: false });
+    act(() => document.dispatchEvent(new Event('visibilitychange')));
+    frame(17);
+    frame(17);
+    expect(run.phase).toBe('READY');
+    expect(run.getState().nextInputSequence).toBe(0);
+    act(() => run.start());
+    frame(17);
+    expect(run.phase).toBe('RUNNING');
+    expect(run.getState().nextInputSequence).toBe(1);
+  });
+
+  it('does not accept inputs while hidden, including a new start', () => {
+    Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+    act(() => { run.start(); run.flap(); });
+    frame(17);
+    expect(run.phase).toBe('READY');
+    expect(run.getState().nextInputSequence).toBe(0);
+  });
+
+  it('freezes each run config and uses the latest config and injected identity on restart', () => {
+    const firstConfig = { ...DEFAULT_CONFIG, flight: { ...DEFAULT_CONFIG.flight, gravity: 321 } };
+    const nextConfig = { ...DEFAULT_CONFIG, flight: { ...DEFAULT_CONFIG.flight, gravity: 654 } };
+    const createIdentity = vi.fn()
+      .mockReturnValueOnce({ runId: 'initial-injected', seed: 41 })
+      .mockReturnValueOnce({ runId: 'injected-run', seed: 42 });
+    options = { config: firstConfig, createIdentity };
+    act(() => root.render(<Harness key="configured-run" />));
+    const firstRun = run.getState();
+    expect(firstRun.config.flight.gravity).toBe(321);
+    expect(firstRun.descriptor.runId).toBe('initial-injected');
+    options = { config: nextConfig, createIdentity };
+    act(() => root.render(<Harness key="configured-run" />));
+    expect(run.getState()).toBe(firstRun);
+    expect(run.getState().config.flight.gravity).toBe(321);
+    act(() => run.restart());
+    expect(run.getState().config.flight.gravity).toBe(654);
+    expect(run.getState().descriptor.runId).toBe('injected-run');
+    expect(createIdentity).toHaveBeenCalledTimes(2);
+    expect(Object.isFrozen(run.getState().config)).toBe(true);
+  });
+
+  it('delivers complete simulation event batches once in their simulation order', () => {
+    const onEvents = vi.fn();
+    options = { onEvents };
+    act(() => root.render(<Harness />));
+    act(() => run.start());
+    frame(17);
+    const batches = onEvents.mock.calls.map(([events]) => events as readonly GameEvent[]);
+    const delivered = batches.flat();
+    expect(delivered.map((event) => event.type)).toEqual(['RunStarted']);
+    expect(delivered[0]).toMatchObject({ type: 'RunStarted', runId: run.getState().descriptor.runId, tick: 1 });
+    expect(new Set(delivered).size).toBe(delivered.length);
+  });
+
+  it('delivers scoring and collection in tick order and completion only once', () => {
+    const onEvents = vi.fn();
+    const config: GameConfig = {
+      ...DEFAULT_CONFIG,
+      pipes: {
+        ...DEFAULT_CONFIG.pipes, safeLeadIn: 51_000, horizon: 51_000,
+        gapMinCenter: 280_000, gapMaxCenter: 280_000, gapHeight: 400_000,
+      },
+      spawnNoneWeight: 0,
+      collectibles: [{
+        ...DEFAULT_CONFIG.collectibles[0]!, minPipeIndex: 0,
+        minSpacingPipes: 0, weight: 1, radius: 60_000, amount: 3,
+      }],
+    };
+    options = { config, onEvents, createIdentity: () => ({ runId: 'event-run', seed: 1 }) };
+    act(() => root.render(<Harness key="event-run" />));
+    act(() => run.acceptRenderer());
+    frame(0);
+    act(() => run.start());
+    frame(17);
+    const first = onEvents.mock.calls[0]![0] as readonly GameEvent[];
+    expect(first).toEqual([
+      { type: 'RunStarted', runId: 'event-run', tick: 1 },
+      { type: 'PipePassed', runId: 'event-run', pipeId: 'pipe-0', score: 1, tick: 1 },
+      { type: 'CurrencyCollected', runId: 'event-run', collectibleId: 'collectible-0', typeId: 'FEATHER', amount: 3, tick: 1 },
+    ]);
+    expect(Object.isFrozen(first)).toBe(true);
+    for (let i = 0; i < 200 && run.phase !== 'DEAD'; i++) frame(17);
+    expect(run.phase).toBe('DEAD');
+    const ended = onEvents.mock.calls.flatMap(([events]) => events as readonly GameEvent[])
+      .filter(event => event.type === 'RunEnded');
+    expect(ended).toEqual([{
+      type: 'RunEnded', runId: 'event-run', score: run.getState().score,
+      totals: { FEATHER: 3 }, tick: run.getState().tick,
+    }]);
+    const calls = onEvents.mock.calls.length;
+    frame(17);
+    act(() => run.flap());
+    frame(17);
+    expect(onEvents).toHaveBeenCalledTimes(calls);
+    expect(callbacks.onRunEnded).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps gameplay running when an optional event observer fails', () => {
+    const report = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    options = { onEvents: () => { throw Error('telemetry unavailable'); } };
+    try {
+      act(() => root.render(<Harness />));
+      act(() => run.start());
+      frame(17);
+      expect(run.runtimeError).toBe('');
+      expect(run.rendererReady).toBe(true);
+      expect(run.phase).toBe('RUNNING');
+      frame(17);
+      expect(run.getState().tick).toBe(2);
+      expect(report).toHaveBeenCalledTimes(1);
+    } finally {
+      report.mockRestore();
+    }
   });
 });

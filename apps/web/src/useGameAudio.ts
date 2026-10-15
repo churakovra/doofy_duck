@@ -25,8 +25,10 @@ export function useGameAudio() {
   const flap = useCallback(() => audioRef.current?.flap(), []);
   const pickup = useCallback((typeId: string) => audioRef.current?.pickup(typeId), []);
   const toggle = useCallback((key: keyof AudioPreferences) => {
+    // Keep resume inside the activation handler, including keyboard clicks.
+    if (!preferences[key]) audioRef.current?.unlockFromGesture();
     setPreferences((current) => ({ ...current, [key]: !current[key] }));
-  }, []);
+  }, [preferences]);
 
   return { preferences, toggle, unlockFromGesture, setPhase, flap, pickup };
 }

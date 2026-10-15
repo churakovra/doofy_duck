@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type React from 'react';
 import {
-  createRun, createRunDescriptor, makeInput, pauseRun, restartRun, resumeRun, step,
-  type GameEvent, type RunState,
+  createRun, createRunDescriptor, DEFAULT_CONFIG, makeInput, pauseRun, restartRun, resumeRun, step,
+  type GameConfig, type GameEvent, type RunDescriptorIdentity, type RunState,
 } from '@doofy-duck/game-sim';
 import { FixedStepClock } from './clock';
 import { createInputController } from './input';
@@ -16,17 +16,26 @@ type RunCallbacks = {
   onPhaseChange(phase: RunState['phase']): void;
   onRunEnded(event: Extract<GameEvent, { type: 'RunEnded' }>): void;
 };
+type GameRunOptions = {
+  config?: GameConfig;
+  createIdentity?: () => RunDescriptorIdentity;
+  onEvents?: (events: readonly GameEvent[]) => void;
+};
 
-function descriptor() {
+function createIdentity(): RunDescriptorIdentity {
   const seed = new Uint32Array(1);
   crypto.getRandomValues(seed);
-  return createRunDescriptor({ runId: crypto.randomUUID(), seed: seed[0]! });
+  return { runId: crypto.randomUUID(), seed: seed[0]! };
 }
 
-function freshRun() { return createRun(descriptor()); }
+function freshRun(config?: GameConfig, identity = createIdentity()) {
+  return createRun(createRunDescriptor(identity, config), config);
+}
 
-export function useGameRun(canPlay: () => boolean, callbacks: RunCallbacks) {
-  const [initial] = useState(freshRun);
+export function useGameRun(canPlay: () => boolean, callbacks: RunCallbacks, options: GameRunOptions = {}) {
+  const optionsRef = useRef(options);
+  optionsRef.current = options;
+  const [initial] = useState(() => freshRun(options.config, options.createIdentity?.() ?? createIdentity()));
   const runRef = useRef(initial);
   const queuedRef = useRef<ReturnType<typeof makeInput>[]>([]);
   const sequenceRef = useRef(0);
@@ -66,11 +75,19 @@ export function useGameRun(canPlay: () => boolean, callbacks: RunCallbacks) {
         callbacksRef.current.onRunEnded(event);
       }
     }
+    if (events.length > 0) {
+      try {
+        optionsRef.current.onEvents?.(events);
+      } catch (error) {
+        // Optional telemetry must not rewind a tick or block run settlement.
+        console.error('Game event observer failed', error);
+      }
+    }
   }, []);
 
   const flap = useCallback(() => {
     const current = runRef.current;
-    if (!canPlayRef.current() || !rendererReadyRef.current || current.phase === 'DEAD' || current.phase === 'PAUSED' || queuedRef.current.length >= MAX_QUEUED_INPUTS) return;
+    if (document.hidden || !canPlayRef.current() || !rendererReadyRef.current || current.phase === 'DEAD' || current.phase === 'PAUSED' || queuedRef.current.length >= MAX_QUEUED_INPUTS) return;
     if (current.phase === 'READY') {
       clockRef.current?.resume();
       resetClockOriginRef.current = true;
@@ -151,8 +168,8 @@ export function useGameRun(canPlay: () => boolean, callbacks: RunCallbacks) {
     };
     const onKeyUp = (event: KeyboardEvent) => inputRef.current.onKeyUp(event.code);
     const onVisibility = () => {
-      if (document.hidden && runRef.current.phase === 'RUNNING') {
-        updateFromResult(pauseRun(runRef.current), []);
+      if (document.hidden) {
+        if (runRef.current.phase === 'RUNNING') updateFromResult(pauseRun(runRef.current), []);
         clearQueuedInputs();
         inputRef.current.reset();
         clock.resume();
@@ -174,7 +191,7 @@ export function useGameRun(canPlay: () => boolean, callbacks: RunCallbacks) {
   }, [clearQueuedInputs, updateFromResult]);
 
   const start = useCallback(() => {
-    if (!canPlay() || !rendererReadyRef.current || runtimeError) return;
+    if (document.hidden || !canPlay() || !rendererReadyRef.current || runtimeError) return;
     if (runRef.current.phase === 'PAUSED') {
       resetClockOriginRef.current = true;
       clockRef.current?.resume();
@@ -194,7 +211,10 @@ export function useGameRun(canPlay: () => boolean, callbacks: RunCallbacks) {
 
   const restart = useCallback(() => {
     if (!canPlay()) return;
-    const next = restartRun(runRef.current, descriptor());
+    const latestOptions = optionsRef.current;
+    const identity = latestOptions.createIdentity?.() ?? createIdentity();
+    const config = latestOptions.config ?? DEFAULT_CONFIG;
+    const next = restartRun(runRef.current, createRunDescriptor(identity, config), config);
     runRef.current = next;
     clearQueuedInputs();
     setPhase(next.phase);
