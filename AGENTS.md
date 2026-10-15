@@ -79,10 +79,14 @@ Use these project conventions for all new work, including delegated work:
 
 Run commands from the repository root. Choose checks for the affected component
 using its instructions. For documentation changes, check links and the diff;
-application tests are unnecessary. For a full implementation verification use
-`npm run check`, then Go race/vet if native behavior changed. The full check
-includes builds and isolated production/development browser suites; it does not
-include Go race or vet. Do not claim a check passed unless it ran in this task.
+application tests are unnecessary. During a fix, run focused unit tests and the
+affected type/lint checks. Use `npm run check` for final routine verification:
+types, lint, unit/fixture tests, Go tests, and build. Run Go race/vet if native
+behavior changed. Playwright/browser tests are on demand only: do not run them
+after routine fixes or automatically repeat them to obtain a passing run. When
+the user explicitly requests browser verification, use `npm run check:browser`
+for both browser suites or `npm run check:full` for routine plus browser checks.
+Do not claim a check passed unless it ran in this task.
 Keep historical verification reports distinguishable from new execution evidence.
 
 ## Collaboration

@@ -43,10 +43,10 @@ while Pixi reads simulation state and draws cosmetic feedback.
 
 | Task | Start here | Related checks from root |
 | --- | --- | --- |
-| Controls, pause/resume, startup/restart | `useGameRun`, `clock`, `input` | Relevant Vitest tests; production browser; development browser for StrictMode |
-| Appearance or viewport | `GameCanvas`, `feel`, `style.css` | Relevant unit/browser cases; visually inspect affected states |
-| Local balances or best | `local-progress`, `useGameProgress`, `wallet`, `wallet-session`, `storage` | Wallet/session unit and browser cases |
-| Sound/music | `audio`, `useGameAudio` | Audio unit and browser cases; physical playback is separate evidence |
+| Controls, pause/resume, startup/restart | `useGameRun`, `clock`, `input` | Relevant Vitest tests; browser/StrictMode suites only on request |
+| Appearance or viewport | `GameCanvas`, `feel`, `style.css` | Relevant unit cases; browser/visual checks only on request |
+| Local balances or best | `local-progress`, `useGameProgress`, `wallet`, `wallet-session`, `storage` | Wallet/session unit cases; browser cases only on request |
+| Sound/music | `audio`, `useGameAudio` | Audio unit cases; browser cases only on request; physical playback is separate evidence |
 | Physics, gaps, speed, scoring, pickups | TS simulation and Go simulation together | Semantic tests in both languages and `npm run test:parity` |
 | Descriptor/config/state/event shape | Both simulations, descriptor schema, fixtures and browser consumers | Schema/fixture tests and parity; review identity compatibility |
 | Documentation | Relevant current document and documentation map | Local links and diff review |
@@ -64,7 +64,10 @@ while Pixi reads simulation state and draws cosmetic feedback.
   play uses 4173. Browser suites intentionally refuse server reuse.
 - The Go module is isolated in `services/core/simulation` and uses the standard
   library. Its tests read the same committed fixtures as TypeScript.
-- [.github/workflows/ci.yml](../.github/workflows/ci.yml) defines CI checks.
+- `npm run check` runs routine types, lint, unit/fixture tests, Go tests, and build.
+  Browser suites are opt-in through `npm run check:browser` or `npm run check:full`.
+  Routine fixes do not automatically launch browser tests.
+- [.github/workflows/ci.yml](../.github/workflows/ci.yml) defines routine CI checks and an optional manual browser run.
   A workflow file alone is not evidence of a hosted CI run.
 
 Keep these paths stable unless a task requires moving them: workspace exports,
