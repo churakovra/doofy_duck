@@ -12,7 +12,7 @@ apps/web/index.html → src/main.tsx → Game.tsx
                                      ├─ useGameRun → clock + input → game-sim
                                      ├─ useGameProgress → local-progress → wallet + locks + storage
                                      ├─ useGameAudio → audio
-                                     └─ GameCanvas → Pixi + feel
+                                     └─ GameCanvas → scene + appearance + feel → Pixi
 
 TypeScript simulation ← shared fixtures/schema → native Go simulation
 ```
@@ -29,14 +29,20 @@ while Pixi reads simulation state and draws cosmetic feedback.
 | [Game.tsx](../apps/web/src/Game.tsx) | UI composition and controls |
 | [useGameRun.ts](../apps/web/src/useGameRun.ts) | Run descriptors, lifecycle, queued input, fixed-step advancement |
 | [clock.ts](../apps/web/src/clock.ts), [input.ts](../apps/web/src/input.ts) | Tick scheduling and accepted pointer/keyboard actions |
-| [GameCanvas.tsx](../apps/web/src/GameCanvas.tsx), [feel.ts](../apps/web/src/feel.ts) | Pixi lifecycle, state presentation, cosmetic effects |
+| [GameCanvas.tsx](../apps/web/src/GameCanvas.tsx) | Serialized Pixi lifecycle and frame presentation |
+| [scene.ts](../apps/web/src/scene.ts), [appearance.ts](../apps/web/src/appearance.ts), [feel.ts](../apps/web/src/feel.ts) | Scene drawing, physics-neutral palettes, bounded cosmetic effects |
 | [useGameProgress.ts](../apps/web/src/useGameProgress.ts), [local-progress.ts](../apps/web/src/local-progress.ts) | Thin React subscription adapter and pure injected local progress session |
 | [wallet.ts](../apps/web/src/wallet.ts), [wallet-session.ts](../apps/web/src/wallet-session.ts), [storage.ts](../apps/web/src/storage.ts) | Local record validation, deduplication, tab ownership, persistence fallback |
 | [useGameAudio.ts](../apps/web/src/useGameAudio.ts), [audio.ts](../apps/web/src/audio.ts) | Audio lifecycle, preferences, synthesized sounds/music |
 | [messages.ru.ts](../apps/web/src/messages.ru.ts) | Typed Russian presentation catalog; English translation/selection remain future work |
 | [style.css](../apps/web/src/style.css) | Viewport scaling and interface layout |
-| [packages/game-sim/src/index.ts](../packages/game-sim/src/index.ts) | Pure TypeScript rules, public types, config identity, state, ordered events |
-| [services/core/simulation/simulation.go](../services/core/simulation/simulation.go) | Native Go rules, canonical serialization, raw fixture verification |
+| [packages/game-sim/src/index.ts](../packages/game-sim/src/index.ts) | Stable public simulation exports |
+| [types.ts](../packages/game-sim/src/types.ts), [config.ts](../packages/game-sim/src/config.ts), [canonical.ts](../packages/game-sim/src/canonical.ts) | Shared types, rule defaults/validation, canonical configuration identity |
+| [simulation.ts](../packages/game-sim/src/simulation.ts), [generation.ts](../packages/game-sim/src/generation.ts) | Run lifecycle, ordered tick rules, seeded world generation |
+| [collectibles.ts](../packages/game-sim/src/collectibles.ts) | Public compatibility collectible helpers |
+| [services/core/simulation/simulation.go](../services/core/simulation/simulation.go) | Native state types, tick rules, and lifecycle |
+| [config.go](../services/core/simulation/config.go), [canonical.go](../services/core/simulation/canonical.go), [generation.go](../services/core/simulation/generation.go) | Native configuration, identity encoding, and generation |
+| [fixtures.go](../services/core/simulation/fixtures.go) | Offline raw-JSON contract verifier |
 | [contracts/simulation](../contracts/simulation/README.md) | Reviewed full-state/event fixtures, descriptor schema, explicit producer |
 
 ## Change routing
@@ -44,7 +50,7 @@ while Pixi reads simulation state and draws cosmetic feedback.
 | Task | Start here | Related checks from root |
 | --- | --- | --- |
 | Controls, pause/resume, startup/restart | `useGameRun`, `clock`, `input` | Relevant Vitest tests; browser/StrictMode suites only on request |
-| Appearance or viewport | `GameCanvas`, `feel`, `style.css` | Relevant unit cases; browser/visual checks only on request |
+| Appearance or viewport | `scene`, `appearance`, `GameCanvas`, `feel`, `style.css` | Relevant unit cases; browser/visual checks only on request |
 | Local balances or best | `local-progress`, `useGameProgress`, `wallet`, `wallet-session`, `storage` | Wallet/session unit cases; browser cases only on request |
 | Sound/music | `audio`, `useGameAudio` | Audio unit cases; browser cases only on request; physical playback is separate evidence |
 | Physics, gaps, speed, scoring, pickups | TS simulation and Go simulation together | Semantic tests in both languages and `npm run test:parity` |
@@ -59,6 +65,8 @@ while Pixi reads simulation state and draws cosmetic feedback.
   commands build it first; edit `src/index.ts`, not generated `dist`.
 - Vitest discovers unit tests in both the web and simulation trees. Playwright
   tests in `apps/web/test` are excluded from Vitest.
+- Vitest aliases the simulation package to source; unit tests do not depend on
+  a pre-existing or current `dist` directory. Production builds retain the package export.
 - Browser suites use one worker to isolate SwiftShader CPU load from game timing.
 - Production browser checks use port 4174; development checks use 4175. Manual
   play uses 4173. Browser suites intentionally refuse server reuse.

@@ -14,6 +14,7 @@ This is a local development foundation, **not a commercial release**. No account
 - [Product vision](docs/PRODUCT_VISION.md): approved purpose, audience, public-version scope, and open decisions.
 - [Agent instructions](AGENTS.md): working conventions and task-based model routing.
 - [Code map](docs/ARCHITECTURE.md): runtime flow, file ownership, and checks by task.
+- [Foundation](docs/FOUNDATION.md): extension points for rules, cosmetics, and event consumers.
 - [Documentation map](docs/README.md): current rules, product vision, future architecture, and supporting research.
 - [Latest recorded verification](docs/ARCADE_FIXES_RESULTS.md): executed checks and remaining acceptance work.
 

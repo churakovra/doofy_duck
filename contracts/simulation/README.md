@@ -4,8 +4,8 @@ The arcade rules are documented in [`docs/ARCADE_SIMULATION.md`](../../docs/ARCA
 
 ## Authoritative files
 
-- `packages/game-sim/src/index.ts`: TypeScript simulation implementation and API.
-- `services/core/simulation/simulation.go`: independent Go implementation and raw-JSON fixture verifier.
+- `packages/game-sim/src/index.ts`: stable API exporting the TypeScript simulation modules.
+- `services/core/simulation`: independent Go implementation; `fixtures.go` owns raw-JSON fixture verification. See the [code map](../../docs/ARCHITECTURE.md) for both implementations' module ownership.
 - `golden-v1.json`: reviewed complete initial states, expected operations/events, invalid cases, mixer vectors, and rule/config description.
 - `generate-fixtures.mjs`: explicit reviewed-fixture producer; never run automatically from tests.
 

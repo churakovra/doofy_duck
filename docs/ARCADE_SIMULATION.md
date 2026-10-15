@@ -1,6 +1,6 @@
 # Arcade simulation rules
 
-This deterministic practice game runs independently in TypeScript and Go. `packages/game-sim/src/index.ts` and `services/core/simulation/simulation.go` are the executable specifications; `contracts/simulation/golden-v1.json` is the reviewed replay contract.
+This deterministic practice game runs independently in TypeScript and Go. The modules exported by `packages/game-sim/src/index.ts` and the native `services/core/simulation` package are the executable specifications; `contracts/simulation/golden-v1.json` is the reviewed replay contract. See the [code map](ARCHITECTURE.md) for module ownership.
 
 ## Frozen current rules
 

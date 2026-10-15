@@ -1,7 +1,8 @@
 # TypeScript simulation
 
-The public implementation is `src/index.ts`; package exports point to generated
-`dist/index.js`. Read [current rules](../../docs/ARCADE_SIMULATION.md) and the
+The public export surface is `src/index.ts`; rules live in `src/simulation.ts`,
+generation in `src/generation.ts`, and configuration in `src/config.ts`.
+Package exports point to generated `dist/index.js`. Read [current rules](../../docs/ARCADE_SIMULATION.md) and the
 [fixture contract](../../contracts/simulation/README.md) for behavioral changes.
 
 - Keep the simulation pure: no React, Pixi, browser, storage, wall clock, network,
