@@ -17,10 +17,12 @@ test('only one tab plays persistently; ownership transfers and fresh balances su
   await second.clock.install({ time: new Date('2026-01-01T00:00:00Z') });
   await second.clock.pauseAt(new Date('2026-01-01T00:00:01Z'));
   await second.goto('/');
-  await expect(second.getByText(/Кошелёк занят в другой вкладке/)).toBeVisible();
+  await expect(second.getByRole('status')).toHaveText(/Кошелёк занят в другой вкладке/);
   await expect(second.getByRole('button', { name: /Начать полёт/ })).toBeDisabled();
   await second.keyboard.press('Space');
-  await expect(second.getByRole('button', { name: 'Пауза' })).toBeDisabled();
+  await expect(second.getByRole('heading', { name: /Привет, путешественник!/ })).toBeVisible();
+  await expect(second.getByRole('button', { name: /Начать полёт/ })).toBeDisabled();
+  await expect(second.getByRole('button', { name: 'Пауза' })).toHaveCount(0);
 
   await first.close();
   await second.reload();
@@ -30,6 +32,7 @@ test('only one tab plays persistently; ownership transfers and fresh balances su
   await expect(second.getByRole('button', { name: /Начать полёт/ })).toBeEnabled();
   await second.keyboard.press('Space');
   await second.clock.runFor(70);
-  await expect(second.getByRole('button', { name: 'Пауза' })).toBeEnabled();
+  await expect(second.locator('.running-score')).toBeVisible();
+  await expect(second.getByRole('button', { name: /Пауза|Pause/ })).toHaveCount(0);
   await context.close();
 });

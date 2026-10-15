@@ -42,25 +42,36 @@ beforeEach(() => {
 afterEach(() => { act(() => root.unmount()); host.remove(); vi.unstubAllGlobals(); });
 
 describe('game settings menu', () => {
-  it.each(['READY', 'RUNNING', 'PAUSED', 'DEAD'])('keeps a named menu trigger available in %s', (phase) => {
+  it.each(['READY', 'PAUSED', 'DEAD'])('keeps a named menu trigger visible in %s', (phase) => {
     state.phase = phase; render();
     const trigger = menuTrigger();
     expect(trigger).not.toBeNull();
     expect(trigger!.disabled).toBe(false);
+    expect(getComputedStyle(trigger!).display).not.toBe('none');
     expect(host.querySelector('[role="dialog"]')).toBeNull();
     expect(host.querySelector('.locale-controls')).toBeNull();
     expect(host.querySelector('.audio-controls')).toBeNull();
   });
 
-  it.each(['ru', 'en'] as const)('opens a localized modal and pauses only a running game (%s)', (locale) => {
-    state.phase = 'RUNNING'; render(locale);
+  it('marks the flight phase and renders a plain score without a pause control', () => {
+    state.phase = 'RUNNING'; render();
+    const frame = host.querySelector('.game-frame')!;
+    expect(frame.classList.contains('running')).toBe(true);
+    expect(host.querySelector('.running-score')).not.toBeNull();
+    expect(host.querySelector('.running-score')?.tagName).toBe('OUTPUT');
+    expect(host.querySelector('.running-score')?.closest('button')).toBeNull();
+    expect(host.querySelector('.pause-button')).toBeNull();
+  });
+
+  it.each(['ru', 'en'] as const)('opens a localized modal without pausing the game (%s)', (locale) => {
+    state.phase = 'PAUSED'; render(locale);
     const trigger = menuTrigger()!;
     trigger.focus(); click(trigger);
     const dialog = host.querySelector<HTMLElement>('[role="dialog"]');
     expect(dialog?.getAttribute('aria-modal')).toBe('true');
     expect(dialog?.getAttribute('aria-label') ?? dialog?.getAttribute('aria-labelledby')).toBeTruthy();
     expect(host.querySelector('[role="dialog"] h1, [role="dialog"] h2')).not.toBeNull();
-    expect(state.pause).toHaveBeenCalledTimes(1);
+    expect(state.pause).not.toHaveBeenCalled();
     expect(dialog?.contains(document.activeElement)).toBe(true);
   });
 
@@ -83,56 +94,73 @@ describe('game settings menu', () => {
   it('traps Tab within the dialog', () => {
     render(); openMenu();
     const dialog = host.querySelector<HTMLElement>('[role="dialog"]')!;
-    const controls = [...dialog.querySelectorAll<HTMLElement>('button, select, [tabindex]:not([tabindex="-1"])')];
+    const controls = [...dialog.querySelectorAll<HTMLElement>('button, [tabindex]:not([tabindex="-1"])')];
     expect(controls.length).toBeGreaterThan(1);
     controls.at(-1)!.focus();
     act(() => controls.at(-1)!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true })));
     expect(document.activeElement).toBe(controls[0]);
   });
 
-  it('renders the modal on the viewport plane outside the HUD and keeps the native dropdown pointer-active', () => {
+  it('renders the modal inside the fixed game frame and keeps the language choice pointer-active', () => {
     render(); openMenu();
-    const viewport = host.querySelector('.game-viewport')!;
+    const frame = host.querySelector('.game-frame')!;
     const hud = host.querySelector('.hud')!;
     const backdrop = host.querySelector<HTMLElement>('.settings-backdrop')!;
     const dialog = host.querySelector<HTMLElement>('[role="dialog"]')!;
-    const language = dialog.querySelector<HTMLSelectElement>('select')!;
+    const language = dialog.querySelector<HTMLButtonElement>('[data-testid="language-dropdown-trigger"]')!;
 
-    expect(viewport.contains(backdrop)).toBe(true);
+    expect(frame.contains(backdrop)).toBe(true);
     expect(backdrop.closest('.hud')).toBeNull();
     expect(dialog.closest('.hud')).toBeNull();
     expect(hud.contains(backdrop)).toBe(false);
     expect(getComputedStyle(language).pointerEvents).toBe('auto');
+    click(language);
+    expect(dialog.querySelector('[role="listbox"]')).not.toBeNull();
+    expect(frame.contains(dialog.querySelector('[role="listbox"]'))).toBe(true);
   });
 
-  it('provides a saved-locale language dropdown and independent accessible audio toggles', () => {
+  it('provides an accessible language dropdown and independent audio toggles', () => {
     render(); openMenu();
-    const language = host.querySelector<HTMLSelectElement>('select[aria-label="Язык"], select[aria-label="Language"]');
-    expect(language).not.toBeNull();
-    expect([...language!.options].map(({ textContent, value }) => [textContent, value])).toEqual([
-      ['Русский', 'ru'], ['English', 'en'],
-    ]);
-    expect(language!.value).toBe('ru');
+    const trigger = host.querySelector<HTMLButtonElement>('[data-testid="language-dropdown-trigger"]')!;
+    expect(trigger.getAttribute('aria-haspopup')).toBe('listbox');
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    click(trigger);
+    const listbox = host.querySelector('[role="listbox"]');
+    const russian = host.querySelector<HTMLElement>('[role="option"][data-value="ru"]');
+    const english = host.querySelector<HTMLElement>('[role="option"][data-value="en"]');
+    expect(listbox?.getAttribute('aria-label')).toBe('Язык');
+    expect(russian?.textContent).toContain('Русский');
+    expect(english?.textContent).toContain('English');
+    expect(russian?.getAttribute('aria-selected')).toBe('true');
+    expect(english?.getAttribute('aria-selected')).toBe('false');
     const sound = host.querySelector<HTMLButtonElement>('[aria-label="Звук: вкл."], [aria-label="Sound: on"]');
     const music = host.querySelector<HTMLButtonElement>('[aria-label="Музыка: выкл."], [aria-label="Music: off"]');
     expect(sound?.getAttribute('aria-pressed')).toBe('true');
     expect(music?.getAttribute('aria-pressed')).toBe('false');
     act(() => sound!.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })));
+    act(() => russian!.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })));
     expect(state.field).not.toHaveBeenCalled();
     click(sound!); click(music!);
     expect(state.toggle).toHaveBeenNthCalledWith(1, 'sound');
     expect(state.toggle).toHaveBeenNthCalledWith(2, 'music');
   });
 
+  it('opens the language list from the closed trigger with ArrowDown', () => {
+    render(); openMenu();
+    const trigger = host.querySelector<HTMLButtonElement>('[data-testid="language-dropdown-trigger"]')!;
+    act(() => trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })));
+    expect(trigger.getAttribute('aria-expanded')).toBe('true');
+    expect(host.querySelector('[role="option"][data-value="ru"]')?.contains(document.activeElement)).toBe(true);
+  });
+
   it('changes language from the menu without restarting or remounting the canvas', () => {
     render();
     const canvas = host.querySelector('canvas');
     openMenu();
-    const language = host.querySelector<HTMLSelectElement>('select[aria-label="Язык"], select[aria-label="Language"]')!;
-    act(() => {
-      language.value = 'en';
-      language.dispatchEvent(new Event('change', { bubbles: true }));
-    });
+    const trigger = host.querySelector<HTMLButtonElement>('[data-testid="language-dropdown-trigger"]')!;
+    click(trigger);
+    const language = host.querySelector<HTMLElement>('[role="option"][data-value="en"]')!;
+    click(language);
     expect(document.documentElement.lang).toBe('en');
     expect(host.querySelector('canvas')).toBe(canvas);
     expect(state.pause).not.toHaveBeenCalled();

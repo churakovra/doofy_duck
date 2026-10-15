@@ -10,7 +10,7 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
       await expect(start).toBeEnabled();
       await expect(page.locator('.wallet-storage')).toHaveText('Кошелёк на этом устройстве');
       await start.click();
-      await expect(page.locator('.tap-hint')).toBeVisible();
+      await expect(page.locator('.running-score')).toBeVisible();
       await expect(page.locator('canvas')).toHaveCount(1);
       if (attempt === 0) await page.reload();
     }

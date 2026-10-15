@@ -151,8 +151,8 @@ describe('LocaleProvider', () => {
     expect(host.querySelector('.result-score')?.textContent).toBe('7 очков');
     expect(host.querySelector('.earnings-summary')?.textContent).toContain('0 монет');
     act(() => host.querySelector<HTMLButtonElement>('[aria-label="Меню"], [aria-label="Menu"]')!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    const language = host.querySelector<HTMLSelectElement>('[aria-label="Язык"], [aria-label="Language"]')!;
-    act(() => { language.value = 'en'; language.dispatchEvent(new Event('change', { bubbles: true })); });
+    act(() => host.querySelector<HTMLButtonElement>('[data-testid="language-dropdown-trigger"]')!.click());
+    act(() => host.querySelector<HTMLElement>('[role="option"][data-value="en"]')!.click());
     expect(host.querySelector('.result-score')?.textContent).toBe('7 points');
     expect(host.querySelector('.earnings-summary')?.textContent).toContain('0 coins');
     expect(host.querySelector('.earnings-summary')?.textContent).toContain('0 in-game Stars');
@@ -165,8 +165,8 @@ describe('LocaleProvider', () => {
     act(() => root.render(<LocaleProvider storage={storage}><Game /></LocaleProvider>));
     expect(host.querySelector('[role="alert"]')?.textContent).toBe(russian.graphicsStartupError);
     act(() => host.querySelector<HTMLButtonElement>('[aria-label="Меню"], [aria-label="Menu"]')!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    const language = host.querySelector<HTMLSelectElement>('[aria-label="Язык"], [aria-label="Language"]')!;
-    act(() => { language.value = 'en'; language.dispatchEvent(new Event('change', { bubbles: true })); });
+    act(() => host.querySelector<HTMLButtonElement>('[data-testid="language-dropdown-trigger"]')!.click());
+    act(() => host.querySelector<HTMLElement>('[role="option"][data-value="en"]')!.click());
     expect(host.querySelector('[role="alert"]')?.textContent).toBe(english.graphicsStartupError);
   });
 
@@ -215,13 +215,16 @@ describe('LocaleProvider', () => {
     const menu = host.querySelector<HTMLButtonElement>('[aria-label="Меню"], [aria-label="Menu"]');
     expect(menu).toBeDefined();
     act(() => menu!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    const language = host.querySelector<HTMLSelectElement>('[aria-label="Язык"], [aria-label="Language"]');
+    const language = host.querySelector<HTMLButtonElement>('[data-testid="language-dropdown-trigger"]');
     expect(language).toBeDefined();
     act(() => {
       language!.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
-      language!.value = 'en';
-      language!.dispatchEvent(new Event('change', { bubbles: true }));
     });
+    act(() => language!.click());
+    const english = host.querySelector<HTMLElement>('[role="option"][data-value="en"]');
+    expect(english).toBeDefined();
+    act(() => english!.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true })));
+    act(() => english!.click());
     expect(integration.fieldPointer).not.toHaveBeenCalled();
     expect(document.documentElement.lang).toBe('en');
     expect(host.textContent).toContain('Coins');

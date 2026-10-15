@@ -22,12 +22,12 @@ test('flight presentation animates inside the existing canvas', async ({ page })
   await expect(canvas).toBeVisible();
   await page.getByRole('button', { name: /Начать полёт/ }).click();
   await page.clock.runFor(70);
-  await expect(page.getByText('КАСАЙСЯ, ЧТОБЫ ВЗЛЕТЕТЬ')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Пауза' })).toBeEnabled();
+  await expect(page.locator('.running-score')).toBeVisible();
+  await expect(page.getByRole('button', { name: /Пауза|Pause/ })).toHaveCount(0);
   const before = await canvas.screenshot();
   await page.clock.runFor(70);
-  await expect(page.getByText('КАСАЙСЯ, ЧТОБЫ ВЗЛЕТЕТЬ')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Пауза' })).toBeEnabled();
+  await expect(page.locator('.running-score')).toBeVisible();
+  await expect(page.getByRole('button', { name: /Пауза|Pause/ })).toHaveCount(0);
   const after = await canvas.screenshot();
   expect(Buffer.compare(before, after)).not.toBe(0);
   await expect(page.locator('canvas')).toHaveCount(1);
@@ -39,7 +39,7 @@ test('reduced motion keeps the playable duck and canvas available', async ({ pag
   const canvas = page.locator('canvas[aria-label="Игровое поле Doofy Duck"]');
   await expect(canvas).toBeVisible();
   await page.keyboard.press('Space');
-  await expect(page.getByText('КАСАЙСЯ, ЧТОБЫ ВЗЛЕТЕТЬ')).toBeVisible();
+  await expect(page.locator('.running-score')).toBeVisible();
   await expect(canvas).toBeVisible();
   await expect(page.locator('canvas')).toHaveCount(1);
 });

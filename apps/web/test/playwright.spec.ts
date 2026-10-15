@@ -9,6 +9,13 @@ async function waitForPlayableGame(page: Page) {
   await expect(page.getByRole('button', { name: /Начать полёт/ })).toBeEnabled();
 }
 
+async function changeVisibility(page: Page, hidden: boolean) {
+  await page.evaluate((isHidden) => {
+    Object.defineProperty(document, 'hidden', { configurable: true, value: isHidden });
+    document.dispatchEvent(new Event('visibilitychange'));
+  }, hidden);
+}
+
 test('ready screen starts one playable run from the first Space press', async ({ page }, testInfo) => {
   // Assert first-input behavior independently of host stalls that intentionally pause gameplay.
   await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') });
@@ -21,8 +28,11 @@ test('ready screen starts one playable run from the first Space press', async ({
   await expect(page.locator('canvas[aria-label="Игровое поле Doofy Duck"]')).toBeVisible();
   await page.keyboard.press('Space');
   await page.clock.runFor(70);
-  await expect(page.getByText('КАСАЙСЯ, ЧТОБЫ ВЗЛЕТЕТЬ')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Пауза' })).toBeEnabled();
+  await expect(page.locator('.running-score')).toBeVisible();
+  await expect(page.getByRole('button', { name: /Пауза|Pause/ })).toHaveCount(0);
+  for (const selector of ['.brand', '.best-card', '.menu-trigger', '.wallet-strip', '.screen-card']) {
+    await expect(page.locator(selector)).toBeHidden();
+  }
   await page.screenshot({ path: testInfo.outputPath('web-running.png'), fullPage: true });
 });
 
@@ -34,9 +44,10 @@ test('screen start, pause, explicit resume, death, and restart survive three cyc
   await expect(page.locator('canvas[aria-label="Игровое поле Doofy Duck"]')).toBeVisible();
   for (let cycle = 0; cycle < 3; cycle++) {
     await page.keyboard.press('Space');
-    await expect(page.getByText('КАСАЙСЯ, ЧТОБЫ ВЗЛЕТЕТЬ')).toBeVisible();
-    await page.locator('.pause-button').evaluate((button: HTMLButtonElement) => button.click());
+    await expect(page.locator('.running-score')).toBeVisible();
+    await changeVisibility(page, true);
     await expect(page.getByRole('heading', { name: 'На паузе' })).toBeVisible();
+    await changeVisibility(page, false);
     await page.locator('.screen-card .primary-button').evaluate((button: HTMLButtonElement) => button.click());
     for (let elapsed = 0; elapsed < 8_000 && !(await page.getByRole('heading', { name: 'Хороший заход!' }).isVisible().catch(() => false)); elapsed += 200) {
       if (await page.getByRole('heading', { name: 'На паузе' }).isVisible().catch(() => false)) {
@@ -84,17 +95,19 @@ test('short landscape viewports keep the complete playfield and HUD inside the s
   }
 });
 
-test('a primary field touch starts gameplay, while button touches remain isolated from field input', async ({ page }) => {
+test('field touch starts gameplay while the ready menu remains isolated from field input', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
   await waitForPlayableGame(page);
+  await page.getByRole('button', { name: 'Меню' }).dispatchEvent('pointerdown', { pointerId: 2, pointerType: 'touch', isPrimary: true, button: 0, bubbles: true });
+  await page.getByRole('button', { name: 'Меню' }).click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Привет/ })).toBeVisible();
+  await page.getByRole('button', { name: 'Закрыть настройки' }).click();
   const canvas = page.locator('canvas');
   await canvas.dispatchEvent('pointerdown', { pointerId: 1, pointerType: 'touch', isPrimary: true, button: 0, bubbles: true });
-  await expect(page.getByText('КАСАЙСЯ, ЧТОБЫ ВЗЛЕТЕТЬ')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Пауза' })).toBeEnabled();
-  await page.getByRole('button', { name: 'Пауза' }).dispatchEvent('pointerdown', { pointerId: 2, pointerType: 'touch', isPrimary: true, button: 0, bubbles: true });
-  await expect(page.getByRole('button', { name: 'Пауза' })).toBeEnabled();
-  await expect(page.getByText('КАСАЙСЯ, ЧТОБЫ ВЗЛЕТЕТЬ')).toBeVisible();
+  await expect(page.locator('.running-score')).toBeVisible();
+  await expect(page.getByRole('button', { name: /Пауза|Pause/ })).toHaveCount(0);
 });
 
 test('queued field inputs after pause and resume retain the next accepted sequence', async ({ page }) => {
@@ -104,18 +117,20 @@ test('queued field inputs after pause and resume retain the next accepted sequen
   const canvas = page.locator('canvas');
   const touch = () => canvas.dispatchEvent('pointerdown', { pointerId: 1, pointerType: 'touch', isPrimary: true, button: 0, bubbles: true });
   await touch();
-  await expect(page.getByRole('button', { name: 'Пауза' })).toBeEnabled();
+  await expect(page.locator('.running-score')).toBeVisible();
   await page.evaluate(() => {
     const canvas = document.querySelector('canvas')!;
     canvas.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 2, pointerType: 'touch', isPrimary: true, button: 0, bubbles: true }));
-    document.querySelector<HTMLButtonElement>('.pause-button')!.click();
+    Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+    document.dispatchEvent(new Event('visibilitychange'));
   });
   await expect(page.getByRole('heading', { name: 'На паузе' })).toBeVisible();
+  await changeVisibility(page, false);
   await page.getByRole('button', { name: /Продолжить/ }).click();
   await touch();
   await page.waitForTimeout(150);
   await expect(page.getByRole('alert')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Пауза' })).toBeEnabled();
+  await expect(page.locator('.running-score')).toBeVisible();
 });
 
 test('renderer failure blocks gameplay input and reports a visible error', async ({ page }) => {
@@ -158,14 +173,14 @@ test('an input event burst stays within the bounded queue and preserves contiguo
   await waitForPlayableGame(page);
   await page.locator('canvas').dispatchEvent('pointerdown', { pointerId: 1, pointerType: 'touch', isPrimary: true, button: 0, bubbles: true });
   await page.clock.runFor(34);
-  await expect(page.getByRole('button', { name: 'Пауза' })).toBeEnabled();
+  await expect(page.locator('.running-score')).toBeVisible();
   await page.evaluate(() => {
     const canvas = document.querySelector('canvas')!;
     for (let i = 0; i < 40; i += 1) canvas.dispatchEvent(new PointerEvent('pointerdown', { pointerId: i + 2, pointerType: 'touch', isPrimary: true, button: 0, bubbles: true }));
   });
   await page.clock.runFor(150);
   await expect(page.getByRole('alert')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Пауза' })).toBeEnabled();
+  await expect(page.locator('.running-score')).toBeVisible();
 });
 
 test('resizes while keeping its single fixed-ratio playfield and pauses after visibility loss', async ({ page }) => {
@@ -178,7 +193,7 @@ test('resizes while keeping its single fixed-ratio playfield and pauses after vi
   expect(canvasSize.ratio).toBeCloseTo(360 / 580, 1);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('button', { name: /Начать полёт/ }).click();
-  await expect(page.getByText('КАСАЙСЯ, ЧТОБЫ ВЗЛЕТЕТЬ')).toBeVisible();
+  await expect(page.locator('.running-score')).toBeVisible();
   await page.evaluate(() => {
     Object.defineProperty(document, 'hidden', { configurable: true, value: true });
     document.dispatchEvent(new Event('visibilitychange'));
@@ -198,7 +213,7 @@ test('blocked storage does not prevent repeated complete runs and restarts', asy
   for (let cycle = 0; cycle < 3; cycle++) {
     await page.locator('canvas').dispatchEvent('pointerdown', { pointerId: cycle + 1, pointerType: 'touch', isPrimary: true, button: 0, bubbles: true });
     await page.clock.runFor(100);
-    await expect(page.getByText('КАСАЙСЯ, ЧТОБЫ ВЗЛЕТЕТЬ')).toBeVisible();
+    await expect(page.locator('.running-score')).toBeVisible();
     await page.clock.runFor(3000);
     await expect(page.getByRole('heading', { name: 'Хороший заход!' })).toBeVisible();
     await expect(page.getByRole('alert')).toHaveCount(0);
@@ -248,8 +263,10 @@ test('a completed run settles once into the local wallet and survives reload', a
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
   expect(await page.evaluate(() => (window as typeof window & { __testSeed?: number }).__testSeed)).toBe(0);
-  await expect(page.getByText('Монеты · всего')).toBeVisible();
-  await expect(page.getByText('Игровые звёзды · всего')).toBeVisible();
+  await expect(page.locator('.wallet-total').nth(0)).toHaveAttribute('aria-label', '11 монет');
+  await expect(page.locator('.wallet-total').nth(1)).toHaveAttribute('aria-label', '7 игровых звёзд');
+  await expect(page.locator('.wallet-total .token').nth(0)).toHaveAttribute('aria-hidden', 'true');
+  await expect(page.locator('.wallet-total .token').nth(1)).toHaveAttribute('aria-hidden', 'true');
   await expect(page.getByText('Кошелёк на этом устройстве')).toBeVisible();
   await expect(page.locator('.wallet-total').nth(0).locator('strong')).toHaveText('11');
   await expect(page.locator('.wallet-total').nth(1).locator('strong')).toHaveText('7');
