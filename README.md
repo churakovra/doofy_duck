@@ -33,7 +33,7 @@ npm run dev
 
 Open `http://127.0.0.1:4173/`. The root dev command builds the simulation workspace entrypoint before starting Vite; a clean workspace does not need pre-existing dist files. Leave the terminal running. The server binds to localhost only. If the port is occupied, use the existing project server or deliberately stop it rather than silently starting on an unknown port.
 
-Open the always-available Menu to choose Русский or English and to control sound effects and music independently. These preferences save on this device when browser storage is available, and changing language preserves the current run. Opening the menu during play pauses the game; closing it does not resume play.
+Open Menu before a flight, while paused, or after a run to choose Русский or English and control sound effects and music independently. These preferences save on this device when browser storage is available, and changing language preserves the current run. While flying, the screen shows only the score. The game pauses automatically when the app is backgrounded; resume explicitly after returning.
 
 Touch/click the field or press Space to flap. Screen buttons do not also flap. Backgrounding pauses; returning requires explicit resume. Restart is free. Personal best is untrusted local storage, not an online score.
 
