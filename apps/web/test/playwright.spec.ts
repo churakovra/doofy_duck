@@ -10,6 +10,9 @@ async function waitForPlayableGame(page: Page) {
 }
 
 test('ready screen starts one playable run from the first Space press', async ({ page }, testInfo) => {
+  // Assert first-input behavior independently of host stalls that intentionally pause gameplay.
+  await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') });
+  await page.clock.pauseAt(new Date('2026-01-01T00:00:01Z'));
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
   await waitForPlayableGame(page);
@@ -17,6 +20,7 @@ test('ready screen starts one playable run from the first Space press', async ({
   await expect(page.getByRole('heading', { name: /Привет/ })).toBeVisible();
   await expect(page.locator('canvas[aria-label="Doofy Duck game canvas"]')).toBeVisible();
   await page.keyboard.press('Space');
+  await page.clock.runFor(70);
   await expect(page.getByText('КАСАЙСЯ, ЧТОБЫ ВЗЛЕТЕТЬ')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Пауза' })).toBeEnabled();
   await page.screenshot({ path: testInfo.outputPath('web-running.png'), fullPage: true });

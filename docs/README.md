@@ -18,6 +18,7 @@ Follow the [development workflow](../AGENTS.md#development-workflow) and
 | [Audio implementation](AUDIO_IMPLEMENTATION.md) | Controller API, integration, and playback lifecycle |
 | [Flight feel](FLIGHT_FEEL.md) | Cosmetic motion, bounded effects, and reduced motion |
 | [Renderer lifecycle](RENDERER_LIFECYCLE.md) | Serialized Pixi initialization/destruction and checks |
+| [Native simulation benchmarks](SIMULATION_BENCHMARKS.md) | Reproducible workload, allocations, and measured local baseline |
 | [Latest recorded verification](ARCADE_FIXES_RESULTS.md) | Executed integration checks dated 2026-10-14 |
 
 Product vision describes the target, not implemented capabilities. Simulation

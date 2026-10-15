@@ -6,14 +6,16 @@ export class FixedStepClock {
   private debt = 0;
   private tick = 0;
   private pauseRequested = false;
+  private overloaded = false;
 
   constructor(private readonly onTick: (tick: number) => void) {}
 
   advance(elapsedMs: number): void {
-    if (!Number.isFinite(elapsedMs) || elapsedMs < 0) return;
-    if (elapsedMs > MAX_GAP_MS) {
+    if (this.overloaded || !Number.isFinite(elapsedMs) || elapsedMs < 0) return;
+    if (this.debt + elapsedMs > MAX_GAP_MS) {
       this.debt = 0;
       this.pauseRequested = true;
+      this.overloaded = true;
       return;
     }
     this.debt += elapsedMs;
@@ -32,10 +34,12 @@ export class FixedStepClock {
   }
 
   get interpolation(): number {
-    return this.debt / STEP_MS;
+    return Math.min(1, Math.max(0, this.debt / STEP_MS));
   }
 
   resume(): void {
     this.debt = 0;
+    this.pauseRequested = false;
+    this.overloaded = false;
   }
 }

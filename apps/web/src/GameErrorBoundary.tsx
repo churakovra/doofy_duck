@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { messages } from './messages.ru';
 
 type State = { failed: boolean };
 
@@ -15,10 +16,10 @@ export class GameErrorBoundary extends Component<{ children: ReactNode }, State>
     if (!this.state.failed) return this.props.children;
     return <main className="game-shell">
       <section className="screen-card" role="alert">
-        <p className="eyebrow">ИГРА НЕ ЗАПУСТИЛАСЬ</p>
-        <h1>Не удалось открыть игру</h1>
-        <p className="instruction">Обнови страницу и попробуй ещё раз.</p>
-        <button className="primary-button" type="button" onClick={() => window.location.reload()}>Обновить страницу <span>↻</span></button>
+        <p className="eyebrow">{messages.gameStartupFailedEyebrow}</p>
+        <h1>{messages.unableToOpenGameHeading}</h1>
+        <p className="instruction">{messages.reloadAndRetryInstruction}</p>
+        <button className="primary-button" type="button" onClick={() => window.location.reload()}>{messages.reloadPageButton} <span>{messages.reloadGlyph}</span></button>
       </section>
     </main>;
   }
