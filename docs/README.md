@@ -13,6 +13,7 @@ Follow the [development workflow](../AGENTS.md#development-workflow) and
 | --- | --- |
 | [Product vision](PRODUCT_VISION.md) | Purpose, audience, commercial release scope, economy boundaries, and open decisions |
 | [Foundation](FOUNDATION.md) | Extension boundaries for rule configuration, cosmetics, events, and future statistics |
+| [Development plan](DEVELOPMENT_PLAN.md) | Proposed delivery sequence, requirement gaps, dependencies, and first-release acceptance gates |
 | [Arcade simulation](ARCADE_SIMULATION.md) | Current mechanics, identities, bounds, and parity limits |
 | [Simulation contract](../contracts/simulation/README.md) | Shared fixtures and deliberate regeneration workflow |
 | [Local wallet](WALLET_UPDATE.md) | Record validation, settlement, tab ownership, and storage fallback |
