@@ -78,6 +78,7 @@ func TestFoundationSpawnWeightAcceptsMaxSafeInteger(t *testing.T) {
 
 func TestFoundationNegativeMidpointsUseFloor(t *testing.T) {
 	c := DefaultConfiguration()
+	c.Challenges = nil
 	c.Pipes.CeilingY, c.Pipes.FloorY = -1000000, -439001
 	c.Pipes.GapMinCenter, c.Pipes.GapMaxCenter = -840000, -599999
 	s := foundationRun(t, c)

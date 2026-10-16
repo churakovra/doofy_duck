@@ -14,6 +14,9 @@ export {
 } from "./types.js";
 export type {
   Action,
+  ChallengeBand,
+  ChallengeFamily,
+  ChallengeSet,
   Collectible,
   CollectibleDefinition,
   Duck,

@@ -17,7 +17,7 @@ export function canonicalJSON(value: unknown): string {
 /** Collision-free local identity: custom IDs contain the complete canonical rules. */
 export function configIdFor(config: GameConfig): string {
   validateConfig(config);
-  const encode = (value: GameConfig) => canonicalJSON({ configuration: value, patterns: PATTERN_CATALOG });
+  const encode = (value: GameConfig) => canonicalJSON({ configuration: { ...value, challenges: value.challenges ?? null }, patterns: PATTERN_CATALOG });
   const content = encode(config);
   return content === encode(DEFAULT_CONFIG) ? DEFAULT_CONFIG_ID : `dd-v1-config:${content}`;
 }

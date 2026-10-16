@@ -13,7 +13,9 @@ Follow the [development workflow](../AGENTS.md#development-workflow) and
 | --- | --- |
 | [Product vision](PRODUCT_VISION.md) | Purpose, audience, commercial release scope, economy boundaries, and open decisions |
 | [Foundation](FOUNDATION.md) | Extension boundaries for rule configuration, cosmetics, events, and future statistics |
-| [Development plan](DEVELOPMENT_PLAN.md) | Proposed delivery sequence, requirement gaps, dependencies, and first-release acceptance gates |
+| [Development plan](DEVELOPMENT_PLAN.md) | MVP finish line, prioritized feature backlog, next batch, dependencies, and release acceptance gates |
+| [MVP specifications](MVP_SPECIFICATIONS.md) | Proposed difficulty, run/continue/settlement and economy rules, acceptance scenarios, and owned product/release/infrastructure decision gates |
+| [Challenge verification](CHALLENGE_RESULTS.md) | Feature 1 implementation, executed checks dated 2026-10-17, bounded physics/replay evidence and open playtest/device acceptance |
 | [Arcade simulation](ARCADE_SIMULATION.md) | Current mechanics, identities, bounds, and parity limits |
 | [Simulation contract](../contracts/simulation/README.md) | Shared fixtures and deliberate regeneration workflow |
 | [Local wallet](WALLET_UPDATE.md) | Record validation, settlement, tab ownership, and storage fallback |
@@ -21,7 +23,7 @@ Follow the [development workflow](../AGENTS.md#development-workflow) and
 | [Flight feel](FLIGHT_FEEL.md) | Cosmetic motion, bounded effects, and reduced motion |
 | [Renderer lifecycle](RENDERER_LIFECYCLE.md) | Serialized Pixi initialization/destruction and checks |
 | [Native simulation benchmarks](SIMULATION_BENCHMARKS.md) | Reproducible workload, allocations, and measured local baseline |
-| [Latest recorded verification](ARCADE_FIXES_RESULTS.md) | Executed integration checks dated 2026-10-14 |
+| [Earlier arcade integration verification](ARCADE_FIXES_RESULTS.md) | Historical integration checks dated 2026-10-14 |
 
 Product vision describes the target, not implemented capabilities. Simulation
 rules and component notes describe current behavior. Recorded checks retain their

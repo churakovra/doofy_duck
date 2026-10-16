@@ -4,12 +4,14 @@ import "testing"
 
 func TestSeededGapWalkContinuesAfterPruning(t *testing.T) {
 	config := DefaultConfiguration()
+	config.Challenges = nil
+	config.Pipes.Spacing = 225000
 	config.Pipes.Horizon = 2_500_000
 	id, err := ConfigIDFor(config)
 	if err != nil {
 		t.Fatal(err)
 	}
-	state, err := CreateRun(Descriptor{"gap-walk", 142, "1.2.0", "1.1.0", id}, config)
+	state, err := CreateRun(Descriptor{"gap-walk", 142, SimulationVersion, GeneratorVersion, id}, config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,7 +33,13 @@ func TestSeededGapWalkContinuesAfterPruning(t *testing.T) {
 
 func TestSeededFeatherTapWitness(t *testing.T) {
 	config := DefaultConfiguration()
-	state, err := CreateRun(Descriptor{"feather-witness", 0, "1.2.0", "1.1.0", "dd-v1-arcade-v2"}, config)
+	config.Challenges = nil
+	config.Pipes.Spacing, config.Pipes.MaxSpeed = 225000, 5800
+	id, err := ConfigIDFor(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, err := CreateRun(Descriptor{"feather-witness", 0, SimulationVersion, GeneratorVersion, id}, config)
 	if err != nil {
 		t.Fatal(err)
 	}

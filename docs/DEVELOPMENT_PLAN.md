@@ -1,6 +1,6 @@
 # Development plan toward the first public release
 
-Prepared October 15, 2026, after the foundation refactor. This is a proposed
+Updated October 17, 2026, after feature 1 implementation and verification. This is a proposed
 implementation sequence, not approval of prices, economics, infrastructure
 deployment, or unresolved game mechanics.
 
@@ -9,12 +9,138 @@ Authority: [Product vision](PRODUCT_VISION.md) defines requirements;
 [ADR-003](ADR-003-CURRENCY-AND-BROKER.md) define selected technical directions
 and proposals. [Foundation](FOUNDATION.md) describes current extension boundaries.
 
+## MVP finish line
+
+Use the approved first public version as the commercial MVP: a player opens the
+game in Telegram, authenticates, plays a fair varied run, keeps verified earnings,
+optionally continues once, buys and equips cosmetics, and can complete an actual
+XTR purchase with recoverable fulfillment. Progress survives reloads and another
+device. The whole loop works in Russian and English on the pilot devices.
+
+The local playable foundation already exists. A free Telegram pilot is a useful
+intermediate delivery, but it does not finish the approved commercial scope.
+Payments and one paid continue remain required unless the owner changes the vision.
+
+The October 16 planning review inspected source and scope without executing
+application checks. Feature 1 checks executed on October 17 are recorded in
+[challenge verification](CHALLENGE_RESULTS.md). Historical reports retain their
+execution dates; Telegram/device acceptance remains open.
+
+## Prioritized feature backlog
+
+These are proposed feature boundaries, not time estimates or approved numeric
+economics. The milestone sections below provide the detailed acceptance rules.
+Implement each coherent feature on its own branch with TDD and the reviews
+required by the root instructions.
+
+| Order / ID | Feature and player outcome | Depends on | Completion evidence |
+| --- | --- | --- | --- |
+| Preparation / SPEC — done | Prepare challenge, run/continue/settlement and economy specifications; register art, pilot and infrastructure decisions | Product vision and current-code review | [Specification package](MVP_SPECIFICATIONS.md); acceptance examples and owned decision gates; completion recorded below |
+| 1 / GAME — done locally | Stepped challenge families and recovery sections make repeated flights varied and fair | SPEC: difficulty | [Implementation and checks](CHALLENGE_RESULTS.md); bounded physics evidence passed; owner tuning/device acceptance remains open |
+| 2 / ACCOUNT | Launch inside Telegram and access the player's own account | Identity contracts, service/tooling decisions | Authenticated Platform/Core/Economy skeleton; forged, expired and cross-user access rejected; real Telegram launch |
+| 3 / RUN | Save server-verified free-run progress and best score | ACCOUNT; lifecycle spec | Go checkpoint replay, durable accepted results, bounded retry/reconnect/expiry behavior; no currency issuance yet |
+| 4 / WALLET | Keep verified coins and in-game Stars across devices | RUN; approved issuance policy and durable delivery | Ledger credit from verified facts; duplicate/out-of-order delivery and outage recovery; pending credit visible |
+| 5 / ART | Choose a duck skin and background through a usable preview flow | SPEC: visual direction | Approved launch assets, stable catalog IDs, equipment preview and missing-asset fallback; gameplay unchanged |
+| 6 / SHOP | Buy specific cosmetics at visible prices and equip owned items | WALLET, ART, approved prices | Atomic debit/grant, ownership enforcement, concurrent/repeated request checks and cross-device persistence |
+| 7 / CONTINUE | Spend in-game Stars to continue once with the score preserved | WALLET; specified lifecycle, price and safe resume | TS/Go parity; no second continue, duplicate charge or duplicate earnings; debit/resume reconciliation |
+| 8 / PAY | Complete actual Telegram Stars purchases and receive the purchased entitlement | ACCOUNT; catalog, order and fulfillment rules | Validated payment ingress, idempotent fulfillment, cancellation/status/refund reconciliation and controlled end-to-end acceptance |
+| 9 / RELEASE | Reliably play and buy in the public Telegram MVP | GAME through PAY; launch policy | Real-device bilingual acceptance, performance evidence, support, monitoring, backup/restore and failure drills |
+
+Operations, privacy/measurement design and abuse controls start with ACCOUNT and
+grow with each backend feature. They are part of delivering those features, not
+a final cleanup task. ART can overlap GAME and ACCOUNT once the visual direction
+is approved; PAY can overlap later SHOP/CONTINUE work after order contracts settle.
+Existing audio, settings and translation systems need extension and acceptance,
+not replacement.
+
+### Feature 1 implementation — October 17, 2026
+
+- [x] Implement seeded intro/cruise/pressure families and recovery in TypeScript
+  and Go, with frozen run configuration, validation and matching pipe metadata.
+- [x] Preserve pause/restart behavior and an explicit gap-only custom-config path.
+- [x] Test all 26 selectable edges with 234 sampled delayed-controller witnesses
+  and an unfiltered 64-seed, 5000-tick corpus in both languages.
+- [x] Deliberately update identities/schema and reviewed raw fixtures, including
+  a default traversal across all bands/refill and preserved legacy witnesses.
+- [x] Pass routine checks (212 tests, types, lint, Go and build), parity, native
+  race/vet, formatting/diff checks and independent review.
+- [ ] Accept human difficulty/reaction tuning through owner playtests.
+- [ ] Complete real Telegram/device performance and input acceptance at release.
+
+Local feature implementation is done. The [verification report](CHALLENGE_RESULTS.md)
+records the bounded evidence and counterexample limits; the unchecked items are
+release acceptance, not claims established by automated tests.
+
+### Specification preparation — October 16, 2026
+
+- [x] Deliver [MVP specifications](MVP_SPECIFICATIONS.md): proposed challenge
+  families/progression/recovery and feasibility criteria; checkpoint, death,
+  continue, expiry and settlement contracts; economy/catalog policy structure.
+- [x] Include acceptance scenarios for retries, duplicate/out-of-order delivery,
+  crashes, continue/finalization races and preservation of verified earnings.
+- [x] Record open product, art, pilot and infrastructure decisions with responsible
+  roles, acceptance criteria and dependent feature gates.
+- [x] Review against current source and product direction; complete independent
+  lifecycle/accounting review and resolve its sequencing and concurrency findings.
+- [x] Verify relative file links and whitespace/diff checks on the completed docs.
+
+**SPEC preparation is complete. Product approval remains open.** This status does
+not approve draft timing/tuning, prices, earning/refund policy, art, launch policy,
+budget or infrastructure proposals. This preparatory completion alone did not
+implement GAME or backend features; GAME implementation is recorded separately
+above. Open decisions block only their dependent work as specified below.
+Verification for this documentation-only step is link/diff inspection and review;
+application, browser and real-device checks were not run in this step.
+
+## Immediate next batch
+
+The [specification package](MVP_SPECIFICATIONS.md) now proposes difficulty and
+run/continue/settlement behavior, with acceptance examples and a decision register.
+It separates first death from finalization and defines incremental earnings so
+continuing cannot credit the same pickup twice. These are future requirements:
+today's client still settles at `RunEnded` and the simulation still has terminal
+`DEAD` state with no authorized resume transition.
+
+GAME is implemented locally; collect owner playtest feedback while preparing
+ACCOUNT contracts. The next engineering feature is ACCOUNT, followed by RUN:
+a real Telegram account can start a server-issued run and recover its verified result after a
+reload. Add WALLET only after issuance policy and durable delivery are specified.
+This creates an end-to-end foundation for SHOP, CONTINUE and PAY.
+
+The owner needs to decide challenge targets and recovery behavior, continue price
+and safe-resume behavior, launch products/prices and earning rules, visual
+direction, and pilot countries/devices/budget. Engineering should propose the
+checkpoint/retry contracts and pending broker/tooling decisions for review.
+No arbitrary prices, currency conversion or delivery dates are assumed here.
+
+## Release checklist
+
+- The complete authenticated flight → death/optional continue → verified credit
+  → shop/equip → XTR purchase loop passes agreed acceptance scenarios.
+- Refresh, device changes, duplicate requests, disconnections and process crashes
+  preserve accepted progress and cannot duplicate charges or entitlements.
+- Local practice balances cannot become account funds; coins, in-game Stars and
+  XTR remain visibly distinct.
+- Approved launch content, prices, country/age policy, privacy information and
+  payment-support process are ready before public sales.
+- Both languages pass real Telegram mobile/desktop checks, including input,
+  viewport, audio and measured sustained performance on named pilot devices.
+- Relevant routine, parity, native, integration and explicitly requested browser
+  checks pass on the release state; operators can restore data and reconcile
+  pending payments/rewards. Pilot metrics can measure replay, retention,
+  purchases, operating costs and fulfillment correctness.
+
+Gifts, loot boxes, leaderboards, social challenges and boosters do not block this
+finish line. Avoid assigning a completion percentage from feature counts:
+authoritative progress, commerce and release operations are substantial work
+despite the already playable client.
+
 ## Requirement coverage today
 
 | First-release requirement | Current state | Remaining work |
 | --- | --- | --- |
 | Single-tap flight, scoring, free new runs | Implemented locally | Telegram/device acceptance and gameplay tuning |
-| Varied, stepped, fair challenges with recovery | Seeded gaps and speed ramp | Challenge design, stepped generator, reachability evidence, playtesting |
+| Varied, stepped, fair challenges with recovery | Implemented locally: seeded families/recovery and bounded TS/Go physics evidence | Owner playtests/final tuning, real-device acceptance; universal reachability is not established |
 | Telegram Mini App and saved player progress | Browser game and untrusted local storage | Telegram integration, identity, authoritative services and persistence |
 | Coins and in-game Stars, separate from XTR | Product wording aligned; `FEATHER`/`GAME_STAR` local balances | Approved issuance policy, authoritative ledger |
 | Owned/equipped skins and backgrounds | Renderer palette boundary | Catalog, assets, inventory, equip, shop and purchase transactions |
@@ -30,6 +156,10 @@ implementation, relevant checks, and independent review. Keep each feature on
 its own branch. Do not wait until the final milestone to integrate the services.
 
 ### 0. Resolve requirements that affect contracts
+
+Specification preparation is complete through backlog step SPEC above. Decision
+approval remains open in the [specification register](MVP_SPECIFICATIONS.md);
+this milestone does not claim every contract-affecting choice is resolved.
 
 Produce focused specifications for:
 
@@ -68,10 +198,11 @@ preserves the current run, and no wording implies withdrawals or live gifts.
 
 ### 2. Build the approved challenge system
 
-Replace the current gap/ramp-only progression with the specified stepped
-challenges in TypeScript and Go. Keep generation seeded and bounded, include
-recovery sections, and pin the rules/generator/configuration for each run.
-Purchases and balances must never influence difficulty.
+Local implementation is complete as feature 1 / GAME above; see
+[current rules](ARCADE_SIMULATION.md) and [verification](CHALLENGE_RESULTS.md).
+Seeded generation includes recovery and pins rules/generator/configuration per
+run. Purchases and balances do not influence difficulty. Final owner tuning and
+release acceptance remain open.
 
 Acceptance: semantic tests and reviewed fixtures agree across both languages;
 transition checks use actual flight dynamics and reaction constraints;
@@ -203,11 +334,12 @@ explicit; prior verification reports do not validate later changes.
 
 ## Recommended next work
 
-With **bilingual product wording and locale selection** implemented locally,
-prepare the **challenge-generation** and **run/continue/settlement** specifications.
-Then implement stepped challenges and the first authenticated
-verified-run-to-wallet slice. These close the largest product gaps and prevent later shop/continue work from inventing incompatible
-accounting or lifecycle rules.
+Implement feature 2 / ACCOUNT after the dependent infrastructure/authentication
+decisions in the [specification package](MVP_SPECIFICATIONS.md). The next backend
+slice is authenticated verified free runs, followed by authoritative wallet
+credit when issuance and durable delivery are decided. In parallel, collect
+owner feedback on the implemented challenge tuning; keep its acceptance limits
+visible rather than treating the automated witnesses as a human playtest.
 
 ## Deliberately after the first public release
 

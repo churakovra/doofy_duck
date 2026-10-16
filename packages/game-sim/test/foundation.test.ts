@@ -67,6 +67,7 @@ describe('foundation edge cases', () => {
 
   it('uses floor for negative half-way run and first-gap centers', () => {
     const config = customConfig({
+      challenges: null,
       pipes: { ...DEFAULT_CONFIG.pipes, ceilingY: -1000000, floorY: -439001, gapMinCenter: -840000, gapMaxCenter: -599999 },
     });
     const state = createRun(createRunDescriptor(baseDescriptor, config), config);

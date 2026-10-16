@@ -7,9 +7,9 @@ export interface RunDescriptor {
   readonly generatorVersion: string;
   readonly configId: string;
 }
-export const SIMULATION_VERSION = "1.2.0";
-export const GENERATOR_VERSION = "1.1.0";
-export const DEFAULT_CONFIG_ID = "dd-v1-arcade-v2";
+export const SIMULATION_VERSION = "1.3.0";
+export const GENERATOR_VERSION = "1.2.0";
+export const DEFAULT_CONFIG_ID = "dd-v1-stepped-v1";
 export interface RunDescriptorIdentity {
   readonly runId: string;
   readonly seed: number;
@@ -63,6 +63,21 @@ export interface GameConfig {
   readonly limits: LimitsConfig;
   readonly collectibles: readonly CollectibleDefinition[];
   readonly spawnNoneWeight: number;
+  readonly challenges?: ChallengeSet | null;
+}
+export type ChallengeBand = "intro" | "cruise" | "pressure" | "recovery";
+export interface ChallengeFamily {
+  readonly id: string;
+  readonly band: ChallengeBand;
+  readonly gapCenters: readonly number[];
+}
+export interface ChallengeSet {
+  readonly pipesPerFamily: number;
+  readonly introFamilyId: string;
+  readonly cruiseFamilyIds: readonly string[];
+  readonly pressureFamilyIds: readonly string[];
+  readonly recoveryFamilyId: string;
+  readonly families: readonly ChallengeFamily[];
 }
 export interface GapPattern {
   readonly id: string;
@@ -89,6 +104,8 @@ export interface Pipe {
   readonly x: number;
   readonly gapCenter: number;
   readonly scored: boolean;
+  readonly challengeId?: string;
+  readonly challengeStep?: number;
 }
 export interface Collectible {
   readonly id: string;

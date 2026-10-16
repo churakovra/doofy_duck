@@ -74,10 +74,10 @@ func TestDefaultReplayWorkloadIsDeterministicAndActive(t *testing.T) {
 	if first.final.Phase != Running || first.final.Tick != 300 {
 		t.Fatalf("replay ended at phase %s tick %d", first.final.Phase, first.final.Tick)
 	}
-	if first.final.Score != 3 {
-		t.Fatalf("replay score = %d, want 3", first.final.Score)
+	if first.final.Score != 2 {
+		t.Fatalf("replay score = %d, want 2", first.final.Score)
 	}
-	const wantFingerprint = "dbdd3d35bea3b1abffb48369a1fb0ef499b094932ff0232aee10b5757b8833be"
+	const wantFingerprint = "96f22c92c4f3aa301d09d19169c70f98dc95fa938506841289482e1706c78289"
 	if first.fingerprint != wantFingerprint || second.fingerprint != wantFingerprint {
 		t.Fatalf("replay fingerprint first=%q second=%q want=%q", first.fingerprint, second.fingerprint, wantFingerprint)
 	}

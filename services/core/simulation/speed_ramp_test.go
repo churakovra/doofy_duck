@@ -4,7 +4,7 @@ import "testing"
 
 func TestScoreAddsSpeedAtPipeBoundariesAndCapsSafely(t *testing.T) {
 	c := DefaultConfiguration()
-	for _, tc := range []struct{ score, want int64 }{{0, 3000}, {9, 3000}, {10, 3300}, {20, 3600}, {40, 4200}, {1000, 5800}} {
+	for _, tc := range []struct{ score, want int64 }{{0, 3000}, {9, 3000}, {10, 3300}, {20, 3600}, {40, 4200}, {1000, 4800}} {
 		got, err := WorldSpeedAt(c, 1, tc.score)
 		if err != nil || got != tc.want {
 			t.Errorf("score %d: speed=%d err=%v want=%d", tc.score, got, err, tc.want)
@@ -17,7 +17,7 @@ func TestScoreAddsSpeedAtPipeBoundariesAndCapsSafely(t *testing.T) {
 
 func TestWorldSpeedAtBoundaries(t *testing.T) {
 	config := DefaultConfiguration()
-	for _, test := range []struct{ tick, want int64 }{{0, 3000}, {1, 3000}, {2, 3001}, {1351, 4400}, {2700, 5798}, {2701, 5800}, {5401, 5800}} {
+	for _, test := range []struct{ tick, want int64 }{{0, 3000}, {1, 3000}, {2, 3000}, {1351, 3900}, {2700, 4799}, {2701, 4800}, {5401, 4800}} {
 		got, err := WorldSpeedAt(config, test.tick)
 		if err != nil || got != test.want {
 			t.Errorf("WorldSpeedAt(%d)=%d, %v; want %d", test.tick, got, err, test.want)
@@ -32,7 +32,7 @@ func TestSpeedRampChangesActualStepDisplacement(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	state, err := CreateRun(Descriptor{"speed-test", 3, "1.2.0", "1.1.0", id}, config)
+	state, err := CreateRun(Descriptor{"speed-test", 3, SimulationVersion, GeneratorVersion, id}, config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,10 +45,10 @@ func TestSpeedRampChangesActualStepDisplacement(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got := result.State.Pipes[0].X; got != 796550 {
-		t.Fatalf("mid-ramp pipe x=%d, want 796400", got)
+		t.Fatalf("mid-ramp pipe x=%d, want 796550", got)
 	}
 	if got := result.State.Collectibles[0].X; got != 796550 {
-		t.Fatalf("mid-ramp collectible x=%d, want 796400", got)
+		t.Fatalf("mid-ramp collectible x=%d, want 796550", got)
 	}
 }
 

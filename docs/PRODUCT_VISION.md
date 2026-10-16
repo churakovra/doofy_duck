@@ -105,8 +105,9 @@ after a pilot; low redemption alone is not a success criterion.
 The repository currently contains a local React/PixiJS game, a pure TypeScript
 simulation and matching native Go simulation, and local progress storage. Accounts,
 commercial services, purchases, shop, continues, and gift redemption are not
-implemented. Current difficulty uses random gaps and a speed ramp; the stepped
-challenge system above is future work.
+implemented. Local difficulty now uses seeded stepped challenge families and
+recovery sections alongside a speed ramp. Its draft tuning and release
+acceptance still require owner playtests and real-device evidence.
 
 [Current simulation rules](ARCADE_SIMULATION.md) describe what runs today.
 This vision defines the commercial target; current local implementation limits

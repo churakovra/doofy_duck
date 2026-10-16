@@ -8,7 +8,7 @@ type InvalidCase = { name: string; kind: string; descriptor?: RunDescriptor; con
 const fixture = JSON.parse(readFileSync('contracts/simulation/golden-v1.json', 'utf8')) as { fixtureRevision: string; contractVersion: string; rules: { generation: { firstPipeX: number }; speed: string }; defaultConfig: GameConfig; cases: Case[]; mixerVectors: { input: number; output: number }[]; invalidCases: InvalidCase[] };
 describe('shared contract fixtures', () => {
   it('pins the current ruleset identity and default config', () => {
-    expect(fixture.fixtureRevision).toBe('foundation-arcade-2');
+    expect(fixture.fixtureRevision).toBe('stepped-challenges-1');
     expect(fixture.contractVersion).toBe(SIMULATION_VERSION);
     expect(fixture.defaultConfig).toEqual(DEFAULT_CONFIG);
     expect(createRunDescriptor({ runId: 'fixture-contract', seed: 1 }).configId).toBe(DEFAULT_CONFIG_ID);

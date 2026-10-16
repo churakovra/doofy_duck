@@ -57,6 +57,12 @@ function cloneConfig(config: GameConfig): GameConfig {
     pipes: { ...config.pipes },
     limits: { ...config.limits },
     collectibles: config.collectibles.map((definition) => ({ ...definition })),
+    challenges: config.challenges == null ? null : {
+      ...config.challenges,
+      cruiseFamilyIds: [...config.challenges.cruiseFamilyIds],
+      pressureFamilyIds: [...config.challenges.pressureFamilyIds],
+      families: config.challenges.families.map(family => ({ ...family, gapCenters: [...family.gapCenters] })),
+    },
   };
 }
 export function step(

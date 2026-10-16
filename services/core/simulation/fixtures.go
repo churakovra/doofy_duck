@@ -31,7 +31,7 @@ func VerifyFoundationFixtures(path string) error {
 	if e = json.Unmarshal(data, &f); e != nil {
 		return e
 	}
-	if f.FixtureRevision != "foundation-arcade-2" || len(f.Cases) != 12 || len(f.Invalid) != 5 || len(f.MixerVectors) != 4 {
+	if f.FixtureRevision != "stepped-challenges-1" || len(f.Cases) != 13 || len(f.Invalid) != 5 || len(f.MixerVectors) != 4 {
 		return fmt.Errorf("unexpected fixture revision/case count")
 	}
 	operationCount, advanceTicks := 0, 0
@@ -50,7 +50,7 @@ func VerifyFoundationFixtures(path string) error {
 			}
 		}
 	}
-	if operationCount != 30 || advanceTicks != 24200 {
+	if operationCount != 40 || advanceTicks != 29200 {
 		return fmt.Errorf("unexpected fixture operation/tick count: %d/%d", operationCount, advanceTicks)
 	}
 	for _, c := range f.Cases {

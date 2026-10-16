@@ -20,6 +20,13 @@ and identity factory; a restart snapshots the latest supplied configuration and
 creates a new identity. Default callers retain existing rules and cryptographic
 browser identity generation.
 
+Default generation uses a versioned, data-driven challenge set with four-pipe
+families and a bounded seeded pressure/recovery schedule. `GameConfig.challenges`
+owns the family geometry and references; it is deep-copied with the rest of the
+run configuration. Omitted or `null` challenges select the gap-only custom path
+and normalize to the same configuration identity. Challenge metadata is part of
+pipe state, while the renderer continues to consume the actual pipe geometry.
+
 Change physics, scoring, generation, or pickup effects in both simulations.
 Keep collision, scoring, generation, and collection ordering explicit. Follow
 the [simulation contract](../contracts/simulation/README.md), add semantic tests

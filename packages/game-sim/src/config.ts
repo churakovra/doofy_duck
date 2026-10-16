@@ -18,14 +18,14 @@ export const DEFAULT_CONFIG: GameConfig = deepFreeze({
   },
   pipes: {
     speed: 3000,
-    maxSpeed: 5800,
+    maxSpeed: 4800,
     rampTicks: 2700,
     speedEveryPipes: 10,
     speedStepPercent: 10,
     gapMinCenter: 160000,
     gapMaxCenter: 400000,
     maxGapDelta: 85000,
-    spacing: 225000,
+    spacing: 300000,
     width: 52000,
     gapHeight: 156000,
     safeLeadIn: 420000,
@@ -57,6 +57,24 @@ export const DEFAULT_CONFIG: GameConfig = deepFreeze({
     },
   ],
   spawnNoneWeight: 58,
+  challenges: {
+    pipesPerFamily: 4,
+    introFamilyId: "intro-steady",
+    cruiseFamilyIds: ["cruise-steady", "cruise-rise", "cruise-dip", "cruise-offset"],
+    pressureFamilyIds: ["pressure-rise", "pressure-dip", "pressure-offset"],
+    recoveryFamilyId: "recovery-steady",
+    families: [
+      { id: "intro-steady", band: "intro", gapCenters: [280000, 280000, 280000, 280000] },
+      { id: "cruise-steady", band: "cruise", gapCenters: [280000, 280000, 280000, 280000] },
+      { id: "cruise-rise", band: "cruise", gapCenters: [265000, 275000, 290000, 305000] },
+      { id: "cruise-dip", band: "cruise", gapCenters: [295000, 285000, 270000, 255000] },
+      { id: "cruise-offset", band: "cruise", gapCenters: [300000, 300000, 270000, 270000] },
+      { id: "pressure-rise", band: "pressure", gapCenters: [280000, 230000, 190000, 270000] },
+      { id: "pressure-dip", band: "pressure", gapCenters: [280000, 320000, 350000, 280000] },
+      { id: "pressure-offset", band: "pressure", gapCenters: [280000, 330000, 300000, 220000] },
+      { id: "recovery-steady", band: "recovery", gapCenters: [280000, 280000, 280000, 280000] },
+    ],
+  },
 });
 const integer = (v: unknown): v is number => Number.isSafeInteger(v);
 export function validateConfig(c: GameConfig): GameConfig {
@@ -115,6 +133,52 @@ export function validateConfig(c: GameConfig): GameConfig {
     throw Error("invalid runtime limits");
   if (!integer(c.spawnNoneWeight) || c.spawnNoneWeight < 0)
     throw Error("invalid no-item weight");
+  if (c.challenges !== undefined && c.challenges !== null) {
+    const set = c.challenges;
+    if (!integer(set.pipesPerFamily) || set.pipesPerFamily < 1 || set.pipesPerFamily > 16 ||
+        !Array.isArray(set.cruiseFamilyIds) || set.cruiseFamilyIds.length < 2 ||
+        !Array.isArray(set.pressureFamilyIds) || set.pressureFamilyIds.length < 1 ||
+        !Array.isArray(set.families)) throw Error("invalid challenge set");
+    const families = new Map<string, (typeof set.families)[number]>();
+    for (const family of set.families) {
+      if (!family.id.trim() || families.has(family.id) || !["intro", "cruise", "pressure", "recovery"].includes(family.band) ||
+          family.gapCenters.length !== set.pipesPerFamily || family.gapCenters.some((center: number) =>
+            !integer(center) || center < p.gapMinCenter || center > p.gapMaxCenter ||
+            center - Math.floor(p.gapHeight / 2) < p.ceilingY || center + Math.floor(p.gapHeight / 2) > p.floorY))
+        throw Error("invalid challenge family geometry");
+      for (let i = 1; i < family.gapCenters.length; i++)
+        if (Math.abs(family.gapCenters[i]! - family.gapCenters[i - 1]!) > p.maxGapDelta)
+          throw Error("challenge family exceeds gap delta");
+      families.set(family.id, family);
+    }
+    const hasBand = (id: string, band: string) => families.get(id)?.band === band;
+    if (!hasBand(set.introFamilyId, "intro") || !hasBand(set.recoveryFamilyId, "recovery") ||
+        set.cruiseFamilyIds.some(id => !hasBand(id, "cruise")) ||
+        set.pressureFamilyIds.some(id => !hasBand(id, "pressure")))
+      throw Error("challenge family references have invalid bands");
+    const references = [set.introFamilyId, set.recoveryFamilyId, ...set.cruiseFamilyIds, ...set.pressureFamilyIds];
+    if (new Set(set.cruiseFamilyIds).size !== set.cruiseFamilyIds.length ||
+        new Set(set.pressureFamilyIds).size !== set.pressureFamilyIds.length ||
+        references.some(id => typeof id !== "string" || !id.trim()))
+      throw Error("challenge family references must be unique nonempty IDs");
+    const family = (id: string) => families.get(id)!;
+    const midpoint = Math.floor((p.gapMinCenter + p.gapMaxCenter) / 2);
+    const introFirst = family(set.introFamilyId).gapCenters[0]!;
+    if (introFirst < Math.max(p.gapMinCenter, midpoint - 35000) || introFirst > Math.min(p.gapMaxCenter, midpoint + 35000))
+      throw Error("intro lead-in geometry must honor the initial gap bound");
+    const checkBoundaries = (fromFamilies: readonly (typeof set.families)[number][], toFamilies: readonly (typeof set.families)[number][]) => {
+      for (const from of fromFamilies) for (const to of toFamilies)
+        if (Math.abs(to.gapCenters[0]! - from.gapCenters[set.pipesPerFamily - 1]!) > p.maxGapDelta)
+          throw Error("challenge family boundary exceeds gap delta");
+    };
+    const cruise = set.cruiseFamilyIds.map(family);
+    const pressure = set.pressureFamilyIds.map(family);
+    checkBoundaries([family(set.introFamilyId)], cruise);
+    for (let i = 0; i < cruise.length; i++)
+      checkBoundaries([cruise[i]!], [cruise[(i + 1) % cruise.length]!, ...pressure]);
+    checkBoundaries(pressure, [family(set.recoveryFamilyId)]);
+    checkBoundaries([family(set.recoveryFamilyId)], pressure);
+  }
   const ids = new Set<string>();
   for (const d of c.collectibles) {
     if (

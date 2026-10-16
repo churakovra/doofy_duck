@@ -22,6 +22,13 @@ func GenerateNext(s State) (Result, error) {
 	pipes := append([]Pipe{}, s.Pipes...)
 	rng, index := s.RNGState, s.NextPipeIndex
 	previousGap := s.LastGapCenter
+	challenge := s.Config.Challenges
+	challengeFamilies := map[string]ChallengeFamily{}
+	if challenge != nil {
+		for _, family := range challenge.Families {
+			challengeFamilies[family.ID] = family
+		}
+	}
 	x := s.Config.Pipes.SafeLeadIn
 	if len(pipes) > 0 {
 		x = pipes[len(pipes)-1].X + s.Config.Pipes.Spacing
@@ -30,6 +37,26 @@ func GenerateNext(s State) (Result, error) {
 		rng += 0x9e3779b9
 		p := s.Config.Pipes
 		raw := p.GapMinCenter + int64(Mix32(uint32(s.Descriptor.Seed)^uint32(index+1)*uint32(0x9e3779b9)))%(p.GapMaxCenter-p.GapMinCenter+1)
+		challengeID := ""
+		challengeStep := int64(0)
+		if challenge != nil {
+			challengeStep = index % challenge.PipesPerFamily
+			block := index / challenge.PipesPerFamily
+			if block == 0 {
+				challengeID = challenge.IntroFamilyID
+			} else if block <= 2 {
+				scheduled := block - 1
+				offset := int64(Mix32(uint32(s.Descriptor.Seed)^uint32(0x9e3779b9))) % int64(len(challenge.CruiseFamilyIDs))
+				challengeID = challenge.CruiseFamilyIDs[(offset+scheduled)%int64(len(challenge.CruiseFamilyIDs))]
+			} else if (block-3)%2 == 0 {
+				cycle := (block - 3) / 2
+				offset := int64(Mix32(uint32(s.Descriptor.Seed)^uint32(cycle+1)*uint32(0x85ebca6b))) % int64(len(challenge.PressureFamilyIDs))
+				challengeID = challenge.PressureFamilyIDs[offset]
+			} else {
+				challengeID = challenge.RecoveryFamilyID
+			}
+			raw = challengeFamilies[challengeID].GapCenters[challengeStep]
+		}
 		lo, hi := previousGap-p.MaxGapDelta, previousGap+p.MaxGapDelta
 		if index == 0 {
 			lo, hi = previousGap-35000, previousGap+35000
@@ -37,7 +64,12 @@ func GenerateNext(s State) (Result, error) {
 		lo, hi = max64(lo, p.GapMinCenter), min64(hi, p.GapMaxCenter)
 		gap := max64(lo, min64(hi, raw))
 		previousGap = gap
-		pipes = append(pipes, Pipe{fmt.Sprintf("pipe-%d", index), index, x, gap, false})
+		var challengeStepPointer *int64
+		if challengeID != "" {
+			value := challengeStep
+			challengeStepPointer = &value
+		}
+		pipes = append(pipes, Pipe{ID: fmt.Sprintf("pipe-%d", index), Index: index, X: x, GapCenter: gap, ChallengeID: challengeID, ChallengeStep: challengeStepPointer})
 		var e error
 		index, e = inc(index, 1)
 		if e != nil {

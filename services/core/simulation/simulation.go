@@ -68,11 +68,25 @@ type Definition struct {
 	Appearance      string `json:"appearance"`
 }
 type Config struct {
-	Flight          FlightConfig `json:"flight"`
-	Pipes           PipeConfig   `json:"pipes"`
-	Limits          Limits       `json:"limits"`
-	Collectibles    []Definition `json:"collectibles"`
-	SpawnNoneWeight int64        `json:"spawnNoneWeight"`
+	Flight          FlightConfig  `json:"flight"`
+	Pipes           PipeConfig    `json:"pipes"`
+	Limits          Limits        `json:"limits"`
+	Collectibles    []Definition  `json:"collectibles"`
+	SpawnNoneWeight int64         `json:"spawnNoneWeight"`
+	Challenges      *ChallengeSet `json:"challenges"`
+}
+type ChallengeFamily struct {
+	ID         string  `json:"id"`
+	Band       string  `json:"band"`
+	GapCenters []int64 `json:"gapCenters"`
+}
+type ChallengeSet struct {
+	PipesPerFamily    int64             `json:"pipesPerFamily"`
+	IntroFamilyID     string            `json:"introFamilyId"`
+	CruiseFamilyIDs   []string          `json:"cruiseFamilyIds"`
+	PressureFamilyIDs []string          `json:"pressureFamilyIds"`
+	RecoveryFamilyID  string            `json:"recoveryFamilyId"`
+	Families          []ChallengeFamily `json:"families"`
 }
 type Duck struct {
 	X  int64 `json:"x"`
@@ -80,11 +94,13 @@ type Duck struct {
 	VY int64 `json:"vy"`
 }
 type Pipe struct {
-	ID        string `json:"id"`
-	Index     int64  `json:"index"`
-	X         int64  `json:"x"`
-	GapCenter int64  `json:"gapCenter"`
-	Scored    bool   `json:"scored"`
+	ID            string `json:"id"`
+	Index         int64  `json:"index"`
+	X             int64  `json:"x"`
+	GapCenter     int64  `json:"gapCenter"`
+	Scored        bool   `json:"scored"`
+	ChallengeID   string `json:"challengeId,omitempty"`
+	ChallengeStep *int64 `json:"challengeStep,omitempty"`
 }
 type Collectible struct {
 	ID        string `json:"id"`
@@ -151,7 +167,21 @@ type Pattern struct {
 }
 
 var canonicalCatalog = []Pattern{{"center", []int64{280000, 280000, 280000, 280000}}, {"rise-fall", []int64{260000, 280000, 300000, 280000}}, {"fall-rise", []int64{300000, 280000, 260000, 280000}}}
-var canonicalDefaultConfig = Config{FlightConfig{320, -5600, 8500, 100000, 12000, 10000}, PipeConfig{Speed: 3000, MaxSpeed: 5800, RampTicks: 2700, SpeedEveryPipes: 10, SpeedStepPercent: 10, GapMinCenter: 160000, GapMaxCenter: 400000, MaxGapDelta: 85000, Spacing: 225000, Width: 52000, GapHeight: 156000, SafeLeadIn: 420000, Horizon: 960000, FloorY: 561000, CeilingY: 0}, Limits{8, 2}, []Definition{{"FEATHER", 1, 34, 1, 1, 1, 7000, "feather-v1"}, {"GAME_STAR", 1, 8, 4, 3, 1, 7000, "game-star-v1"}}, 58}
+var canonicalDefaultConfig = Config{FlightConfig{320, -5600, 8500, 100000, 12000, 10000}, PipeConfig{Speed: 3000, MaxSpeed: 4800, RampTicks: 2700, SpeedEveryPipes: 10, SpeedStepPercent: 10, GapMinCenter: 160000, GapMaxCenter: 400000, MaxGapDelta: 85000, Spacing: 300000, Width: 52000, GapHeight: 156000, SafeLeadIn: 420000, Horizon: 960000, FloorY: 561000, CeilingY: 0}, Limits{8, 2}, []Definition{{"FEATHER", 1, 34, 1, 1, 1, 7000, "feather-v1"}, {"GAME_STAR", 1, 8, 4, 3, 1, 7000, "game-star-v1"}}, 58, defaultChallengeSet()}
+
+func defaultChallengeSet() *ChallengeSet {
+	return &ChallengeSet{4, "intro-steady", []string{"cruise-steady", "cruise-rise", "cruise-dip", "cruise-offset"}, []string{"pressure-rise", "pressure-dip", "pressure-offset"}, "recovery-steady", []ChallengeFamily{
+		{"intro-steady", "intro", []int64{280000, 280000, 280000, 280000}},
+		{"cruise-steady", "cruise", []int64{280000, 280000, 280000, 280000}},
+		{"cruise-rise", "cruise", []int64{265000, 275000, 290000, 305000}},
+		{"cruise-dip", "cruise", []int64{295000, 285000, 270000, 255000}},
+		{"cruise-offset", "cruise", []int64{300000, 300000, 270000, 270000}},
+		{"pressure-rise", "pressure", []int64{280000, 230000, 190000, 270000}},
+		{"pressure-dip", "pressure", []int64{280000, 320000, 350000, 280000}},
+		{"pressure-offset", "pressure", []int64{280000, 330000, 300000, 220000}},
+		{"recovery-steady", "recovery", []int64{280000, 280000, 280000, 280000}},
+	}}
+}
 
 // PatternCatalog returns a copy of the legacy catalog, retained for compatibility.
 func PatternCatalog() []Pattern {
@@ -167,9 +197,9 @@ func DefaultConfiguration() Config { return cloneConfig(canonicalDefaultConfig) 
 
 const MaxCounter int64 = 9007199254740990
 const maxSafeInteger int64 = 9007199254740991
-const SimulationVersion = "1.2.0"
-const GeneratorVersion = "1.1.0"
-const DefaultConfigID = "dd-v1-arcade-v2"
+const SimulationVersion = "1.3.0"
+const GeneratorVersion = "1.2.0"
+const DefaultConfigID = "dd-v1-stepped-v1"
 
 func Step(input State, frames []Input) (Result, error) {
 	input = cloneState(input)

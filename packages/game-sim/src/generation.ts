@@ -7,6 +7,8 @@ export function generateNext(s: RunState): StepResult {
   let rng = s.rngState,
     index = s.nextPipeIndex;
   const spacing = s.config.pipes.spacing;
+  const challenge = s.config.challenges;
+  const challengeFamilies = challenge ? new Map(challenge.families.map(family => [family.id, family])) : undefined;
   let previousGap = s.lastGapCenter;
   let x = pipes.length
     ? pipes[pipes.length - 1]!.x + spacing
@@ -18,12 +20,32 @@ export function generateNext(s: RunState): StepResult {
     rng = (rng + 0x9e3779b9) >>> 0;
     const p = s.config.pipes;
     const sample = mix32((s.descriptor.seed ^ Math.imul(index + 1, 0x9e3779b9)) >>> 0);
-    const raw = p.gapMinCenter + sample % (p.gapMaxCenter - p.gapMinCenter + 1);
+    const challengeStep = challenge ? index % challenge.pipesPerFamily : undefined;
+    const challengeBlock = challenge ? Math.floor(index / challenge.pipesPerFamily) : 0;
+    let challengeId: string | undefined;
+    let raw = p.gapMinCenter + sample % (p.gapMaxCenter - p.gapMinCenter + 1);
+    if (challenge) {
+      if (challengeBlock === 0) challengeId = challenge.introFamilyId;
+      else if (challengeBlock <= 2) {
+        const scheduled = challengeBlock - 1;
+        if (scheduled < 2) {
+          const offset = mix32((s.descriptor.seed ^ 0x9e3779b9) >>> 0) % challenge.cruiseFamilyIds.length;
+          challengeId = challenge.cruiseFamilyIds[(offset + scheduled) % challenge.cruiseFamilyIds.length];
+        }
+      } else if ((challengeBlock - 3) % 2 === 0) {
+          const cycle = Math.floor((challengeBlock - 3) / 2);
+          const offset = mix32((s.descriptor.seed ^ Math.imul(cycle + 1, 0x85ebca6b)) >>> 0) % challenge.pressureFamilyIds.length;
+          challengeId = challenge.pressureFamilyIds[offset];
+      } else challengeId = challenge.recoveryFamilyId;
+      raw = challengeFamilies!.get(challengeId!)!.gapCenters[challengeStep!]!;
+    }
     const low = index === 0 ? Math.max(p.gapMinCenter, previousGap - 35000) : Math.max(p.gapMinCenter, previousGap - p.maxGapDelta);
     const high = index === 0 ? Math.min(p.gapMaxCenter, previousGap + 35000) : Math.min(p.gapMaxCenter, previousGap + p.maxGapDelta);
     const gapCenter = Math.max(low, Math.min(high, raw));
     previousGap = gapCenter;
-    pipes.push({ id: `pipe-${index}`, index, x, gapCenter, scored: false });
+    pipes.push({ id: `pipe-${index}`, index, x, gapCenter, scored: false,
+      ...(challengeId === undefined ? {} : { challengeId, challengeStep: challengeStep! }),
+    });
     index = incrementCounter(index);
     x += spacing;
   }

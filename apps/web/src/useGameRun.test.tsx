@@ -223,6 +223,7 @@ describe('run clock integration', () => {
     const onEvents = vi.fn();
     const config: GameConfig = {
       ...DEFAULT_CONFIG,
+      challenges: null,
       pipes: {
         ...DEFAULT_CONFIG.pipes, safeLeadIn: 51_000, horizon: 51_000,
         gapMinCenter: 280_000, gapMaxCenter: 280_000, gapHeight: 400_000,

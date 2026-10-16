@@ -16,7 +16,7 @@ This is a local development foundation, **not a commercial release**. No account
 - [Code map](docs/ARCHITECTURE.md): runtime flow, file ownership, and checks by task.
 - [Foundation](docs/FOUNDATION.md): extension points for rules, cosmetics, and event consumers.
 - [Documentation map](docs/README.md): current rules, product vision, future architecture, and supporting research.
-- [Latest recorded verification](docs/ARCADE_FIXES_RESULTS.md): executed checks and remaining acceptance work.
+- [Latest recorded verification](docs/CHALLENGE_RESULTS.md): October 17 challenge implementation checks, bounded physics evidence and remaining acceptance work.
 
 ## Requirements
 
@@ -37,15 +37,16 @@ Open Menu before a flight, while paused, or after a run to choose Русский
 
 Touch/click the field or press Space to flap. Screen buttons do not also flap. Backgrounding pauses; returning requires explicit resume. Restart is free. Personal best is untrusted local storage, not an online score.
 
-## Latest playtest update
+## Current gameplay
 
 - The wallet displays cumulative balances separately from completed-run earnings and saves locally after death. It is not an account, a Telegram Stars balance, or a redeemable reward. Earlier unsaved earnings cannot be recovered.
 - One tab at a time owns the persistent wallet. Close the first tab and reload the second to transfer ownership. If browser locking/storage is unavailable, play remains available with an explicitly non-persistent memory wallet.
-- Active-time world speed rises from180 to348pixels/second over45seconds, then score adds speed in10% steps per10 passed pipes until the cap. Pausing freezes the ramp; restarting resets it.
+- Seeded four-pipe challenge families introduce steady, rising, falling and offset routes, with recovery blocks after pressure sections. The schedule advances with pipe encounter order; pause freezes play and restart resets the schedule.
+- Active-time world speed ramps from180 to288pixels/second over45seconds. Score adds speed in10% steps per10 passed pipes until the same cap, which can be reached earlier. Default pipe spacing is300pixels.
 - Velocity tilt, wing/flap motion, restrained squash/stretch and bounded visual effects improve feedback without changing authoritative hitboxes. Extra motion respects the reduced-motion setting.
 - Original synthesized flap/pickup/death sounds and a quiet music loop unlock from a user gesture. Separate sound/music controls are saved locally; backgrounding and pause silence playback.
 
-The current rules use simulation version1.2.0, generator version1.1.0, and default config ID `dd-v1-arcade-v2`. See [`docs/ARCADE_SIMULATION.md`](docs/ARCADE_SIMULATION.md) for the rules.
+The current rules use simulation version1.3.0, generator version1.2.0, and default config ID `dd-v1-stepped-v1`. See [`docs/ARCADE_SIMULATION.md`](docs/ARCADE_SIMULATION.md) for the rules.
 
 ## Verification commands
 

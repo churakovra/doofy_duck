@@ -5,12 +5,39 @@ This deterministic practice game runs independently in TypeScript and Go. The mo
 ## Frozen current rules
 
 - Units are integer milli-pixels. Each `step` advances one active 60 Hz tick; READY starts on its first FLAP. PAUSED and DEAD are inert.
-- Rules identity is simulation `1.2.0`, gap generator `1.1.0`, default config ID `dd-v1-arcade-v2`; fixture revision is `foundation-arcade-2`.
+- Rules identity is simulation `1.3.0`, generator `1.2.0`, default config ID `dd-v1-stepped-v1`; fixture revision is `stepped-challenges-1`.
 - Default flight is gravity `320`, flap velocity `-5600`, terminal fall velocity `8500`, duck X `100000`, half extents `12000 × 10000`. A flap sets the impulse velocity, gravity is applied during that same tick, and velocity is capped before position integration.
-- Default pipe speed ramps from `3000` to `5800` over `2700` active ticks. For one-based tick `t`, base speed is `speed + floor((maxSpeed-speed)*clamp(t-1,0,rampTicks)/rampTicks)`. Add `floor(speed * floor(score/speedEveryPipes) * speedStepPercent / 100)`, capped at `maxSpeed`; defaults add 10% of base speed per 10 scored pipes. A pipe scored this step affects speed starting the following step. Existing pipes and pickups move by the same speed.
-- Default gap center range is `160000..400000`, gap height `156000`, and adjacent generated centers differ by at most `85000`. A raw center is selected independently per pipe using `mix32(seed XOR imul(index+1, 0x9e3779b9))`, then clamped to the configured range and previous center ± maximum delta. The first center is additionally clamped to ±35000 from the configured range midpoint. `lastGapCenter` is explicit run state so generation remains stable after horizon refill and pipe pruning. No currency outcome feeds back into map layout.
+- Default pipe speed ramps from `3000` to `4800` over `2700` active ticks. For one-based tick `t`, base speed is `speed + floor((maxSpeed-speed)*clamp(t-1,0,rampTicks)/rampTicks)`. Add `floor(speed * floor(score/speedEveryPipes) * speedStepPercent / 100)`, capped at `maxSpeed`; defaults add 10% of initial speed per 10 scored pipes. A pipe scored this step affects speed starting the following step. Existing pipes and pickups move by the same speed. This speed ramp is separate from the stepped challenge schedule.
+- Default gap center range is `160000..400000`, gap height `156000`, spacing `300000`, and adjacent generated centers differ by at most `85000`. Default generation uses the challenge families below. Custom configs with absent or `null` challenges retain indexed gap sampling using `mix32(seed XOR imul(index+1, 0x9e3779b9))`, clamped to the configured range and previous center ± maximum delta. The first center is additionally bounded to ±35000 from the configured range midpoint. `lastGapCenter` is explicit run state so generation remains stable after horizon refill and pipe pruning. No currency outcome feeds back into map layout.
 - Configured bonus definitions retain weighted NONE-first selection and eligibility/spacing rules. Default FEATHER uses weight 34, minimum pipe index 1 and one-pipe spacing; GAME_STAR uses weight 8, minimum index 4 and three-pipe spacing; NONE weight is 58. Pipe 0 follows the configured eligibility rules. A selected bonus shares its pipe X and receives a seeded, off-center Y constrained to the opening's safe inner region, including pickup radius and duck half-height.
-- `PATTERN_CATALOG` / Go `PatternCatalog()` remain only as legacy exported constants for compatibility. They do not choose gaps or constrain valid gap geometry. Config identities retain these public legacy entries; default identity is the explicit `dd-v1-arcade-v2` sentinel, and custom identities include canonical configuration plus the legacy catalog.
+- `PATTERN_CATALOG` / Go `PatternCatalog()` remain only as legacy exported constants for compatibility. They do not choose gaps or constrain valid gap geometry. Config identities retain these public legacy entries; default identity is the explicit `dd-v1-stepped-v1` sentinel, and custom identities include canonical configuration plus the legacy catalog.
+
+## Stepped challenge schedule
+
+`GameConfig.challenges` contains immutable family IDs, bands and ordered gap
+centers. The default catalog defines steady, rising, falling and offset routes.
+Each family has four pipes, with `challengeId` and zero-based `challengeStep` on
+generated pipes. The renderer uses their gap geometry directly.
+
+For zero-based pipe index `i`, family block is `floor(i / 4)`:
+
+- Block 0 (pipes 0–3) is the intro family.
+- Blocks 1–2 (pipes 4–11) use two seeded cruise families.
+- Block 3 onward alternates seeded pressure and steady recovery families. Pressure
+  is the difficulty cap; recovery provides breathing room without resetting it.
+
+Selection depends on seed and block index, independent of the collectible RNG.
+Initial horizon generation and later refill use the same schedule; pausing does
+not expose new pipes, and restarting resets encounter progress. Progression is
+measured in pipes, not predicted wall-clock encounter times. There is no promise
+that a band begins at exactly 15 or 30 seconds.
+
+The challenge set is copied into each run and included in its configuration
+identity. Omitted and `null` challenges normalize to the same gap-only identity.
+Catalog validation rejects invalid geometry, references, intro lead-in and
+incompatible selectable family boundaries before play starts. Thus validated
+challenge centers retain their authored shape; the bounds clamp still protects
+the gap-only path. The legacy catalog above does not select these new families.
 
 ## Bounds and parity
 
@@ -20,6 +47,19 @@ Generation uses independent indexed sampling, not mutable PRNG draws for map sha
 
 ## Verification and limits
 
-The fixture producer retains 12 complete-state replay cases, 30 operations, 24200 accumulated advance ticks, 5 rejection cases and 4 mixer vectors. It includes a custom-physics bounded 24000-tick witness; this is not a default physics survivability claim. Default random gaps require active steering. Custom configurations are not promised universally reachable.
+The fixture producer retains 13 complete-state replay cases, 40 operations, 29200
+accumulated advance ticks, 5 rejection cases and 4 mixer vectors. Its legacy
+gap-only custom-physics 24000-tick witness retains the previous speed/spacing; it
+is not default-world evidence. A separate 5000-tick default trace records ten
+snapshots across all bands and refill, with controls based on observed gaps.
+
+Both languages also test all 26 selectable family edges from nine sampled entry
+states per edge and a 64-seed, 5000-tick default corpus. The direct witnesses keep
+the previous lane target for 18 ticks after the new pipe center reaches X360000
+before adapting. This is bounded controller-specific evidence; the sampled
+entry envelope is not closed under all composed exit states and does not prove a
+universal human reaction window. Owner playtests, final tuning and real-device
+acceptance remain open. Arbitrary custom configurations have no universal
+reachability guarantee.
 
 Run `npm run build:sim`, `npx vitest run packages/game-sim/test`, `npm run test:parity`, `npm run test:go:race`, and `go -C services/core/simulation vet ./...`. Regenerate fixtures only after reviewing a deliberate rule change: build the sim, then run `node contracts/simulation/generate-fixtures.mjs`.

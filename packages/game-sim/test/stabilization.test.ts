@@ -10,10 +10,11 @@ describe('parent stabilization regressions', () => {
     expect(() => canonicalJSON({ value: undefined })).toThrow();
   });
   it('selects authored world patterns using the seed instead of a fixed catalog cycle', () => {
+    const legacy = { ...DEFAULT_CONFIG, challenges: null };
     const layouts = new Set(Array.from({ length: 16 }, (_, seed) =>
-      createRun(descriptor(seed)).pipes.map(p => p.gapCenter).join(',')));
+      createRun(descriptor(seed, legacy), legacy).pipes.map(p => p.gapCenter).join(',')));
     expect(layouts.size).toBeGreaterThan(1);
-    expect(createRun(descriptor(1)).pipes).toEqual(createRun(descriptor(1)).pipes);
+    expect(createRun(descriptor(1, legacy), legacy).pipes).toEqual(createRun(descriptor(1, legacy), legacy).pipes);
   });
   it('rejects changed tuning hidden under the default configuration identity', () => {
     const changed = { ...DEFAULT_CONFIG, flight: { ...DEFAULT_CONFIG.flight, gravity: 81 } };
@@ -31,7 +32,7 @@ describe('parent stabilization regressions', () => {
     expect(() => step({ ...state, tick: Number.MAX_SAFE_INTEGER }, [])).toThrow(/counter|tick|limit/i);
   });
   it('generates bounded, seeded reachable gap layouts over multiple world fills', () => {
-    const config = { ...DEFAULT_CONFIG, pipes: { ...DEFAULT_CONFIG.pipes, horizon: 2_500_000 } };
+    const config = { ...DEFAULT_CONFIG, challenges: null, pipes: { ...DEFAULT_CONFIG.pipes, spacing: 225000, horizon: 2_500_000 } };
     const ids = new Set<number>();
     for (let seed = 0; seed < 24; seed++) {
       const custom = createRun(descriptor(seed, config), config);
