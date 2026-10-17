@@ -9,6 +9,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import EconomyBase
+from app.economy.wallet.models import Wallet, WalletLedgerEntry  # noqa: F401
 
 
 class CompletionEvidence(EconomyBase):

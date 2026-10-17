@@ -31,7 +31,7 @@ pytestmark = pytest.mark.skipif(
             "ECONOMY_DATABASE_URL",
             "alembic-economy.ini",
             "completion_inbox",
-            "0001_completion_inbox",
+            "0002_wallet_ledger",
         ),
     ],
 )

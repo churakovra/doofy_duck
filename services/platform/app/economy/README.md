@@ -1,10 +1,24 @@
 # Economy boundaries
 
-The current Economy module stores verified run-completion evidence in
-`models.py`. Evidence is not a balance change or reward. Currency issuance,
-purchases, and account inventory are disabled.
+The Economy module stores verified run-completion evidence in `models.py`.
+Evidence is not a balance change or reward. The internal `wallet/` package
+provides account/currency balance projections, immutable signed ledger entries,
+transactional idempotent posting, linked adjustments, and read-only paginated
+reconciliation. It has no routes or issuance callers. Currency issuance,
+settlement, purchases, and account inventory remain disabled.
+
+Wallet currency values are `FEATHER` and `GAME_STAR`, each represented as an
+integer balance in the range 0 through the signed 64-bit maximum. A posting
+records its source kind/reference and policy version; callers own the transaction
+and may combine postings with future Economy work in one commit. The database
+rejects ledger updates and deletes. Migration downgrade deletes wallet history
+and is for disposable development databases only.
+
+`app.economy.wallet.ledger.reconcile_wallets` reports ledger sums against the
+balance projection in bounded pages. It uses one SQL statement per page and
+never repairs data.
 
 The `inventory` package is reserved for future account-owned item ownership and
 inventory rules. The `shop` package is reserved for future catalog and purchase
-orchestration. These packages only document ownership boundaries; they contain
-no routes, persistence models, balances, or purchase behavior.
+orchestration. These packages have no routes, inventory behavior, or purchase
+behavior.

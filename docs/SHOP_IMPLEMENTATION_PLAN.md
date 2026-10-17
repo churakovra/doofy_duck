@@ -54,20 +54,27 @@ start around 100–200. The owner requests a 1:1 funding denomination for purcha
 in-game Stars versus Telegram Stars. This is direction for the later PAY contract,
 not payment activation, interchangeability of assets or a cash-out promise.
 
-The owner approved 1:1 verified pickup credit with hard per-run caps of 30 coins
-and seven in-game Stars. Coins should be accessible without task completion;
-practice remains local and cannot fund account purchases. The owner clarified
-that the proposed Star tasks were intended to establish a valid Telegram user
-able to pay, rather than specific mandatory tasks. Telegram research below
-informs the final eligibility proposal; confirmation is pending.
-Before wallet activation gameplay earns coins only, not Stars; whether existing
-verified coin facts receive historical account credit still requires an explicit
-activation/backfill decision. No existing practice balances are imported.
+The owner approved 1:1 verified pickup credit with a hard per-run cap of 30 coins.
+The earlier proposed seven-Star cap was explicitly superseded: gameplay Stars have
+no hard seven-Star ceiling. Proposed generation is one Star per 8–16 score points,
+with difficulty targeting typical deaths around score 50–70. The owner approved seeded collectible spawning every 8–16 passed pipes: credit
+requires actual collection. Natural-difficulty tuning targets typical deaths,
+with no scripted death or score ceiling. Implement generation changes in a
+separate TypeScript/Go parity milestone with authored fixtures and independent
+review; exact placement and reachability follow existing simulation conventions.
+
+Coins need no task completion; practice remains local and cannot fund account
+purchases. The owner approved authenticated Telegram users earning/spending
+gameplay Stars without prior donation or mandatory tasks. Purchased credit requires
+a validated successful XTR payment; payment ability is not an eligibility precheck.
+Before wallet activation gameplay earns coins only, not Stars; retained server-verified historical coin facts are approved for once-only backfill,
+capped at 30 per run. Activation cutoff, dry-run and execution controls still need
+definition before any backfill runs. No existing practice balances are imported.
 
 Initial catalog direction: 2–3 coin-priced and two Star-priced cosmetics for each
 of skins and maps/backgrounds. The owner accepted proposing two coin-priced and two Star-priced items per
-category plus one additional free default. Exact items/prices and whether
-“versions” mean separate products remain to be approved. Coin-priced
+category plus one additional free default. The owner subsequently approved the catalog and prices below. Premium visual
+assets still require visual approval; cosmetics do not alter gameplay. Coin-priced
 items are not zero-cost items. Current storage work does not activate rewards.
 
 The owner confirmed intentionally stopping Docker during the interrupted recovery
@@ -293,9 +300,50 @@ fulfillment; a frontend invoice-close event alone cannot authorize credit.
 Users may acquire Stars during checkout. Telegram Premium status does not
 establish ability to pay. Regional/payment restrictions can still affect checkout.
 
-Proposal awaiting owner confirmation: authenticated Telegram accounts may earn
+Owner-approved eligibility: authenticated Telegram accounts may earn
 and spend verified gameplay Stars without prior payment or extra tasks.
 Only purchased funding requires validated successful payment. This keeps free
 play available without claiming that every authenticated account can transact.
 The 1:1 funding denomination does not imply developer cash proceeds equal the
 consumer's purchase price; digital-goods funding remains the separate PAY phase.
+
+## Approved initial catalog
+
+| Category | Item | Price |
+| --- | --- | --- |
+| Skin | Classic | Free default |
+| Skin | Mint | 20 coins |
+| Skin | Rose | 200 coins |
+| Skin | Celestial | 100 in-game Stars |
+| Skin | Royal | 200 in-game Stars |
+| Background/map | Meadow | Free default |
+| Background/map | Dusk | 20 coins |
+| Background/map | Winter | 200 coins |
+| Background/map | Nebula | 100 in-game Stars |
+| Background/map | Aurora | 200 in-game Stars |
+
+The owner approved these offers during implementation. Stable server IDs and
+versioned quote schemas remain engineering work. Existing Classic/Mint/Rose and
+Meadow/Dusk/Winter renderer IDs must remain compatible. No XTR offer or currency
+purchase is enabled by this approval.
+
+## Implementation evidence — October 17, 2026
+
+- Recovery prerequisite: bounded authenticated Core admission implemented and
+  committed as d42a0aa. Real PostgreSQL/race/vet and routine checks passed;
+  independent review found no actionable issues. The earlier outage run was
+  intentionally interrupted by the owner stopping Docker. A complete rerun is
+  still required; no new unattended run has been launched.
+- W1.1–W1.3 and reconciliation portion of W1.5: internal wallet schema and posting
+  primitives implemented. Immutable ledger, provenance, transactional projection,
+  replay/conflict handling, no-overspend and read-only audit are present.
+- Real PostgreSQL TDD: initial nine tests failed for missing behavior, then passed.
+  Review added stale cached-balance and bounded-audit regressions; both reproduced
+  findings before correction. Final complete Python PostgreSQL suite passed 22
+  tests, including twelve wallet tests. Independent review and targeted re-review
+  completed without remaining actionable findings.
+- The authenticated wallet/history API (W1.4), an operator audit command, settlement,
+  policy activation/backfill, inventory, equipment, catalog and purchase behavior
+  are not implemented by this milestone. No existing run facts have been credited.
+- New Star generation requires its separate shared-simulation implementation.
+  Browser, real Telegram and hosted acceptance remain separate.
