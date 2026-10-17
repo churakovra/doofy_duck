@@ -11,10 +11,11 @@ from collections.abc import Callable
 from threading import Event
 from uuid import UUID
 
-from sqlalchemy import create_engine, func, select
+from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import sessionmaker
 
+from app.database import create_bounded_engine
 from app.economy.models import CompletionSettlement
 from app.economy.settlement import (
     execute_historical_backfill,
@@ -118,7 +119,7 @@ def main() -> int:
     settings = Settings.from_env()
     try:
         settings.validate_settlement_config()
-        engine = create_engine(settings.economy_database_url, pool_pre_ping=True)
+        engine = create_bounded_engine(settings.economy_database_url)
         sessions = sessionmaker(engine, expire_on_commit=False)
         try:
             if args.command == "settle":

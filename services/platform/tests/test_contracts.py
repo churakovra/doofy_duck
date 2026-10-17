@@ -32,6 +32,58 @@ def test_telegram_init_data_requires_valid_signature_and_fresh_auth_date():
         verify_telegram_init_data(stale, bot_token, now=now)
 
 
+@pytest.mark.parametrize("malformed", ["💥", "not-a-hash"])
+def test_telegram_init_data_normalizes_malformed_hashes(malformed):
+    now = datetime.now(UTC)
+    with pytest.raises(TelegramInitDataError):
+        verify_telegram_init_data(
+            f"auth_date={int(now.timestamp())}&user=%7B%22id%22%3A42%7D&hash={malformed}", "token", now=now
+        )
+
+
+def test_telegram_init_data_rejects_unencodable_signed_field_and_preserves_unicode():
+    now = datetime.now(UTC)
+    with pytest.raises(TelegramInitDataError):
+        verify_telegram_init_data(
+            f"auth_date={int(now.timestamp())}&query_id=\ud800&user=%7B%22id%22%3A42%7D&hash=00", "token", now=now
+        )
+
+    valid = signed_init_data("token", int(now.timestamp()), '{"id":42,"first_name":"Иван"}')
+    assert verify_telegram_init_data(valid, "token", now=now).first_name == "Иван"
+
+
+@pytest.mark.parametrize("user_id", ["1e999", "-1e999"])
+def test_telegram_init_data_normalizes_overflowing_user_ids(user_id):
+    now = datetime.now(UTC)
+    with pytest.raises(TelegramInitDataError):
+        verify_telegram_init_data(
+            f"auth_date={int(now.timestamp())}&user=%7B%22id%22%3A{user_id}%7D&hash=00", "token", now=now
+        )
+
+
+def test_platform_engine_bounds_postgres_waits_without_overriding_url_options(monkeypatch):
+    from app.database import create_bounded_engine
+
+    created = []
+
+    def fake_create_engine(url, **kwargs):
+        created.append((url, kwargs))
+        return type("FakeEngine", (), {"url": url, "dispose": lambda self: None})()
+
+    monkeypatch.setattr("app.database.create_engine", fake_create_engine)
+    engine = create_bounded_engine("postgresql+psycopg://user:pass@localhost/db?options=-csearch_path%3Dtenant")
+    assert "search_path=tenant" in engine.url.query["options"]
+    assert "statement_timeout=30000" in engine.url.query["options"]
+    assert "lock_timeout=5000" in engine.url.query["options"]
+    assert engine.url.query["connect_timeout"] == "5"
+    strict = create_bounded_engine(
+        "postgresql+psycopg://user:pass@localhost/db?options=--statement_timeout%3D2000%20--lock_timeout%3D500&connect_timeout=2"
+    )
+    assert strict.url.query["options"] == "--statement_timeout=2000 --lock_timeout=500"
+    assert strict.url.query["connect_timeout"] == "2"
+    assert len(created) == 2
+
+
 def test_access_credentials_are_ed25519_signed_expiring_and_user_scoped():
     issuer = Ed25519TokenIssuer.generate(kid="test-key")
     now = datetime.now(UTC)

@@ -227,7 +227,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     def csrf_valid(request: Request, csrf_header: str | None) -> bool:
         csrf_cookie = request.cookies.get(CSRF_COOKIE)
-        return bool(csrf_cookie and csrf_header and hmac.compare_digest(csrf_cookie, csrf_header))
+        try:
+            return bool(csrf_cookie and csrf_header and hmac.compare_digest(csrf_cookie, csrf_header))
+        except TypeError:
+            return False
 
     @app.get("/healthz")
     def health() -> dict[str, str]:
@@ -294,8 +297,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if not raw_refresh or not csrf_valid(request, x_csrf_token):
             raise HTTPException(status_code=403, detail="csrf check failed")
         refresh_hash = hashlib.sha256(raw_refresh.encode()).hexdigest()
+        candidate = db.execute(
+            select(RefreshSession).where(RefreshSession.refresh_hash == refresh_hash)
+        ).scalar_one_or_none()
+        if candidate is None:
+            raise HTTPException(status_code=401, detail="unauthorized")
+        db.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:family_id, 0))"),
+            {"family_id": str(candidate.family_id)},
+        )
         current = db.execute(
-            select(RefreshSession).where(RefreshSession.refresh_hash == refresh_hash).with_for_update()
+            select(RefreshSession)
+            .where(RefreshSession.refresh_hash == refresh_hash)
+            .with_for_update()
+            .execution_options(populate_existing=True)
         ).scalar_one_or_none()
         if current is None:
             raise HTTPException(status_code=401, detail="unauthorized")
@@ -833,7 +848,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         db: Session = Depends(get_economy_db),
     ) -> dict[str, str | bool]:
         expected = f"Bearer {config.service_token}"
-        if not authorization or not hmac.compare_digest(authorization, expected):
+        try:
+            authorized = bool(authorization and hmac.compare_digest(authorization, expected))
+        except TypeError:
+            authorized = False
+        if not authorized:
             raise HTTPException(status_code=401, detail="unauthorized")
         payload, digest = _payload_hash(event)
         identity_clause = or_(

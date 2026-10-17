@@ -42,13 +42,17 @@ def verify_telegram_init_data(
             raise TelegramInitDataError("invalid Telegram user")
     except TelegramInitDataError:
         raise
-    except (ValueError, KeyError, TypeError, json.JSONDecodeError) as exc:
+    except (ValueError, KeyError, TypeError, OverflowError, json.JSONDecodeError) as exc:
         raise TelegramInitDataError("invalid initialization data") from exc
 
-    data_check = "\n".join(f"{key}={value}" for key, value in sorted(fields.items()))
-    secret = hmac.new(b"WebAppData", bot_token.encode(), hashlib.sha256).digest()
-    expected_hash = hmac.new(secret, data_check.encode(), hashlib.sha256).hexdigest()
-    if not hmac.compare_digest(supplied_hash, expected_hash):
+    try:
+        data_check = "\n".join(f"{key}={value}" for key, value in sorted(fields.items()))
+        secret = hmac.new(b"WebAppData", bot_token.encode("utf-8"), hashlib.sha256).digest()
+        expected_hash = hmac.new(secret, data_check.encode("utf-8"), hashlib.sha256).hexdigest()
+        valid_signature = hmac.compare_digest(supplied_hash, expected_hash)
+    except (UnicodeEncodeError, TypeError):
+        raise TelegramInitDataError("invalid initialization data") from None
+    if not valid_signature:
         raise TelegramInitDataError("invalid initialization signature")
     current = int((now or datetime.now(UTC)).timestamp())
     if auth_date > current + 30 or current - auth_date > int(max_age.total_seconds()):

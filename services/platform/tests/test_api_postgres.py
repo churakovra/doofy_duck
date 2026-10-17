@@ -3,6 +3,8 @@ from __future__ import annotations
 import base64
 import json
 import os
+import threading
+import time
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from urllib.parse import urlsplit
@@ -79,6 +81,9 @@ def test_telegram_login_issues_own_account_and_rotating_csrf_protected_session(c
 
     missing_csrf = client.post("/api/v1/auth/refresh")
     assert missing_csrf.status_code == 403
+    malformed_csrf = client.post("/api/v1/auth/refresh", headers=[(b"X-CSRF-Token", b"\xff")])
+    assert malformed_csrf.status_code == 403
+    assert client.post("/api/v1/auth/logout", headers=[(b"X-CSRF-Token", b"\xff")]).status_code == 403
     rotated = client.post("/api/v1/auth/refresh", headers={"X-CSRF-Token": csrf_cookie})
     assert rotated.status_code == 200
     assert rotated.json()["access_token"] != body["access_token"]
@@ -99,6 +104,138 @@ def test_telegram_login_issues_own_account_and_rotating_csrf_protected_session(c
         cookies={"dd_refresh": new_refresh, "dd_csrf": new_csrf},
     )
     assert revoked_replacement.status_code == 401
+
+
+def test_refresh_replay_revokes_descendant_inserted_while_replay_waits(client):
+    from fastapi.testclient import TestClient
+    from sqlalchemy import text
+
+    from app import database
+
+    login = client.post(
+        "/api/v1/auth/telegram",
+        json={"init_data": signed_init_data("integration-bot-token", int(datetime.now(UTC).timestamp()))},
+    )
+    assert login.status_code == 200
+    original_refresh = client.cookies["dd_refresh"]
+    original_csrf = client.cookies["dd_csrf"]
+    independent = TestClient(client.app)
+    independent_login = independent.post(
+        "/api/v1/auth/telegram",
+        json={"init_data": signed_init_data("integration-bot-token", int(datetime.now(UTC).timestamp()))},
+    )
+    assert independent_login.status_code == 200
+    independent_refresh = independent.cookies["dd_refresh"]
+    independent_csrf = independent.cookies["dd_csrf"]
+    first_rotation = client.post(
+        "/api/v1/auth/refresh",
+        headers={"X-CSRF-Token": original_csrf},
+        cookies={"dd_refresh": original_refresh, "dd_csrf": original_csrf},
+    )
+    assert first_rotation.status_code == 200
+    child_refresh = client.cookies["dd_refresh"]
+    child_csrf = client.cookies["dd_csrf"]
+    rotate_client = TestClient(client.app)
+    replay_client = TestClient(client.app)
+    insert_reached = threading.Event()
+    release_insert = threading.Event()
+
+    def pause_descendant_insert(conn, cursor, statement, parameters, context, executemany):
+        if statement.lstrip().upper().startswith("INSERT INTO REFRESH_SESSIONS") and not insert_reached.is_set():
+            insert_reached.set()
+            assert release_insert.wait(5), "timed out waiting to release refresh insert"
+
+    sqlalchemy_event.listen(database.platform_engine, "before_cursor_execute", pause_descendant_insert)
+    rotated = []
+    replayed = []
+    try:
+        rotate_thread = threading.Thread(
+            target=lambda: rotated.append(
+                rotate_client.post(
+                    "/api/v1/auth/refresh",
+                    headers={"X-CSRF-Token": child_csrf},
+                    cookies={"dd_refresh": child_refresh, "dd_csrf": child_csrf},
+                )
+            )
+        )
+        rotate_thread.start()
+        assert insert_reached.wait(5), "rotation did not reach descendant insert"
+        replay_thread = threading.Thread(
+            target=lambda: replayed.append(
+                replay_client.post(
+                    "/api/v1/auth/refresh",
+                    headers={"X-CSRF-Token": original_csrf},
+                    cookies={"dd_refresh": original_refresh, "dd_csrf": original_csrf},
+                )
+            )
+        )
+        replay_thread.start()
+        deadline = time.monotonic() + 5
+        observed_block = False
+        while time.monotonic() < deadline:
+            with database.platform_engine.connect() as connection:
+                observed_block = bool(
+                    connection.execute(
+                        text(
+                            "SELECT EXISTS (SELECT 1 FROM pg_stat_activity "
+                            "WHERE wait_event_type='Lock' AND cardinality(pg_blocking_pids(pid)) > 0)"
+                        )
+                    ).scalar_one()
+                )
+            if observed_block:
+                break
+            time.sleep(0.02)
+        assert observed_block, "replay did not block behind the family rotation lock"
+    finally:
+        release_insert.set()
+    rotate_thread.join(timeout=5)
+    replay_thread.join(timeout=5)
+    sqlalchemy_event.remove(database.platform_engine, "before_cursor_execute", pause_descendant_insert)
+    assert not rotate_thread.is_alive() and not replay_thread.is_alive()
+    assert rotated[0].status_code == 200
+    assert replayed[0].status_code == 401
+
+    descendant = rotate_client.cookies["dd_refresh"]
+    descendant_csrf = rotate_client.cookies["dd_csrf"]
+    revoked = rotate_client.post(
+        "/api/v1/auth/refresh",
+        headers={"X-CSRF-Token": descendant_csrf},
+        cookies={"dd_refresh": descendant, "dd_csrf": descendant_csrf},
+    )
+    assert revoked.status_code == 401
+
+    assert (
+        independent.post(
+            "/api/v1/auth/refresh",
+            headers={"X-CSRF-Token": independent_csrf},
+            cookies={"dd_refresh": independent_refresh, "dd_csrf": independent_csrf},
+        ).status_code
+        == 200
+    )
+
+
+def test_postgres_lock_wait_is_cancelled_by_caller_timeout():
+    from sqlalchemy import text
+    from sqlalchemy.engine import make_url
+    from sqlalchemy.exc import OperationalError
+
+    from app.database import create_bounded_engine
+
+    parsed = make_url(PLATFORM_URL)
+    query = dict(parsed.query)
+    query["options"] = "-c lock_timeout=50ms"
+    engine = create_bounded_engine(parsed.set(query=query).render_as_string(hide_password=False))
+    try:
+        with engine.connect() as holder, engine.connect() as waiter:
+            transaction = holder.begin()
+            holder.execute(text("SELECT pg_advisory_xact_lock(7301841)"))
+            started = time.monotonic()
+            with pytest.raises(OperationalError, match="lock timeout"):
+                waiter.execute(text("SELECT pg_advisory_xact_lock(7301841)"))
+            assert time.monotonic() - started < 2
+            transaction.rollback()
+    finally:
+        engine.dispose()
 
 
 def test_valid_access_token_cannot_be_forged_for_another_account(client):
@@ -138,6 +275,10 @@ def test_completion_inbox_authenticates_core_and_deduplicates_business_identity(
         "completed_at": "2026-10-17T10:00:00Z",
     }
     assert client.post("/internal/v1/run-completions", json=event).status_code == 401
+    assert (
+        client.post("/internal/v1/run-completions", json=event, headers=[(b"Authorization", b"\xff")]).status_code
+        == 401
+    )
     headers = {"Authorization": "Bearer integration-core-token"}
     first = client.post("/internal/v1/run-completions", json=event, headers=headers)
     repeated = client.post("/internal/v1/run-completions", json=event, headers=headers)
@@ -758,6 +899,11 @@ def test_supported_failure_retry_is_explicit_bounded_and_does_not_credit_inline(
     )
     with database.EconomySession.begin() as session:
         assert settlement.process_settlement_batch(session, settings=settings, limit=10) == 1
+    monkeypatch.setattr(
+        settlement,
+        "SUPPORTED_SIMULATION_IDENTITIES",
+        {("99.0.0", "1.2.0", "dd-v1-stepped-v1"): settlement.POLICY_VERSION},
+    )
     monkeypatch.setattr(settlement, "SUPPORTED_SIMULATION_IDENTITY", ("99.0.0", "1.2.0", "dd-v1-stepped-v1"))
 
     with database.EconomySession.begin() as session:
@@ -981,11 +1127,11 @@ def test_shop_catalog_and_default_inventory_are_account_scoped_and_currency_neut
             ("skin", "classic"),
             ("background", "meadow"),
         }
-        assert equipment.json() == {
-            "equipment": [
-                {"item_type": "skin", "item_id": "classic", "revision": 1},
-                {"item_type": "background", "item_id": "meadow", "revision": 1},
-            ]
+        equipment_rows = equipment.json()["equipment"]
+        assert len(equipment_rows) == 2
+        assert {(row["item_type"], row["item_id"], row["revision"]) for row in equipment_rows} == {
+            ("skin", "classic", 1),
+            ("background", "meadow", 1),
         }
         first_page = shop.get("/api/v1/shop/inventory?limit=1", headers=headers).json()
         assert first_page["items"][0]["item_type"] == "background"
