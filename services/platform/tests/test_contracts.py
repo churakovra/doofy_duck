@@ -79,3 +79,209 @@ def test_settlement_requires_explicit_timezone_aware_activation_timestamp(monkey
     settings = Settings.from_env()
     assert settings.economy_settlement_enabled
     assert settings.economy_settlement_activated_at is not None
+
+
+def test_settlement_policies_keep_legacy_stars_out_and_credit_new_stars_without_a_cap():
+    from app.economy.settlement import historical_coin_reward, settlement_rewards
+
+    legacy_identity = ("1.3.0", "1.2.0", "dd-v1-stepped-v1")
+    star_identity = ("1.4.0", "1.3.0", "dd-v1-star-interval-v1")
+
+    assert settlement_rewards(legacy_identity, feathers=20, game_stars=9, feathers_remaining=10) == (10, 0)
+    assert settlement_rewards(star_identity, feathers=20, game_stars=9, feathers_remaining=10) == (10, 9)
+    assert settlement_rewards(star_identity, feathers=20, game_stars=700, feathers_remaining=0) == (0, 700)
+    assert historical_coin_reward(legacy_identity, 20, 10) == (10, "verified-pickups-v1")
+    assert historical_coin_reward(star_identity, 20, 10) == (10, "verified-pickups-v2-historical-coins")
+    assert historical_coin_reward(star_identity, 20, 0) == (0, "verified-pickups-v2-historical-coins")
+    assert (
+        settlement_rewards(("99.0.0", "1.2.0", "dd-v1-stepped-v1"), feathers=20, game_stars=9, feathers_remaining=10)
+        is None
+    )
+
+
+def test_wallet_audit_cli_parser_supports_bounded_read_only_pages():
+    from app.economy.settlement_cli import _parser
+
+    args = _parser().parse_args(["wallet-audit", "--limit", "25", "--after", "00000000-0000-4000-8000-000000000001"])
+
+    assert args.command == "wallet-audit"
+    assert args.limit == 25
+    assert args.after == "00000000-0000-4000-8000-000000000001"
+
+
+def test_settlement_worker_retries_with_bounded_backoff_and_stops_cleanly():
+    from threading import Event
+
+    from sqlalchemy.exc import SQLAlchemyError
+
+    from app.economy.settlement_cli import _parser, run_worker_loop
+
+    args = _parser().parse_args(["worker", "--idle-seconds", "1", "--max-backoff-seconds", "2"])
+    assert args.command == "worker"
+    assert args.limit == 100
+
+    stop_event = Event()
+    outcomes = iter((SQLAlchemyError("offline"), SQLAlchemyError("offline"), 0))
+    delays: list[float] = []
+    errors: list[bool] = []
+
+    def process_batch() -> int:
+        result = next(outcomes)
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+    def wait(seconds: float) -> bool:
+        delays.append(seconds)
+        if len(delays) == 3:
+            stop_event.set()
+        return stop_event.is_set()
+
+    run_worker_loop(
+        process_batch,
+        stop_event=stop_event,
+        idle_seconds=1,
+        max_backoff_seconds=2,
+        wait=wait,
+        report_error=lambda: errors.append(True),
+    )
+
+    assert delays == [1, 2, 1]
+    assert errors == [True, True]
+
+
+def test_settlement_worker_waits_when_a_batch_only_finds_a_waiting_life():
+    from threading import Event
+
+    from app.economy.settlement import settlement_batch_progress
+    from app.economy.settlement_cli import run_worker_loop
+
+    stop_event = Event()
+    waits: list[float] = []
+    batch_reasons = ["waiting_for_prior_life"]
+
+    def process_batch() -> int:
+        assert batch_reasons == ["waiting_for_prior_life"]
+        return settlement_batch_progress(["pending"])
+
+    def wait(seconds: float) -> bool:
+        waits.append(seconds)
+        stop_event.set()
+        return True
+
+    run_worker_loop(
+        process_batch,
+        stop_event=stop_event,
+        idle_seconds=2,
+        max_backoff_seconds=30,
+        wait=wait,
+    )
+
+    assert waits == [2]
+    assert settlement_batch_progress(["pending", "committed"]) == 1
+
+
+def test_purchase_rechecks_quote_expiry_after_wallet_lock_and_keeps_exact_replay_available(monkeypatch):
+    from datetime import UTC, datetime, timedelta
+    from types import SimpleNamespace
+    from uuid import uuid4
+
+    from app.economy.shop.service import ShopError, _purchase_fingerprint, commit_purchase
+
+    account_id = uuid4()
+    quote_id = uuid4()
+    purchase_id = uuid4()
+    anchor = datetime(2026, 10, 17, 12, tzinfo=UTC)
+    quote = SimpleNamespace(
+        id=quote_id,
+        account_id=account_id,
+        item_type="skin",
+        item_id="mint",
+        currency="FEATHER",
+        amount=20,
+        catalog_version="cosmetics-v1",
+        eligibility_version="telegram-account-v1",
+        expires_at=anchor + timedelta(seconds=300),
+    )
+    request = SimpleNamespace(
+        request_fingerprint=_purchase_fingerprint(account_id, quote_id),
+        purchase_id=purchase_id,
+    )
+    purchase = SimpleNamespace(id=purchase_id, account_id=account_id, quote_id=quote_id)
+
+    class Result:
+        def __init__(self, value):
+            self.value = value
+
+        def scalar_one_or_none(self):
+            return self.value
+
+    class FakeSession:
+        def __init__(self, *, replay=False):
+            self.replay = replay
+            self.wallet_locked = False
+
+        def execute(self, statement):
+            if statement.table.name == "shop_purchase_requests":
+                return Result(None if self.replay else purchase_id)
+            return Result(None)
+
+        def scalar(self, statement):
+            sql = str(statement)
+            if "FROM shop_purchase_requests" in sql:
+                return request
+            if "FROM shop_quotes" in sql:
+                return quote
+            if "FROM wallets" in sql:
+                self.wallet_locked = True
+                return SimpleNamespace(balance=100)
+            if "FROM shop_purchases" in sql:
+                return purchase
+            if "FROM cosmetic_entitlements" in sql:
+                return None
+            raise AssertionError(f"unexpected query: {sql}")
+
+        def add(self, _value):
+            pass
+
+        def flush(self):
+            pass
+
+    fresh_session = FakeSession()
+    expired = quote.expires_at + timedelta(seconds=1)
+
+    class AdvancingDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return expired if fresh_session.wallet_locked else anchor + timedelta(seconds=299)
+
+    from app.economy.shop import service
+
+    monkeypatch.setattr(service, "datetime", AdvancingDateTime)
+    ledger_posts: list[bool] = []
+    monkeypatch.setattr(
+        service, "post_entry", lambda *_args, **_kwargs: ledger_posts.append(True) or SimpleNamespace(id=uuid4())
+    )
+
+    with pytest.raises(ShopError, match="quote has expired"):
+        commit_purchase(
+            fresh_session,
+            account_id=account_id,
+            quote_id=quote_id,
+            idempotency_key="same-purchase",
+            enabled=True,
+        )
+    assert fresh_session.wallet_locked
+    assert ledger_posts == []
+
+    replay_session = FakeSession(replay=True)
+    replay = commit_purchase(
+        replay_session,
+        account_id=account_id,
+        quote_id=quote_id,
+        idempotency_key="same-purchase",
+        enabled=False,
+        now=expired,
+    )
+    assert replay.replayed
+    assert replay.purchase is purchase

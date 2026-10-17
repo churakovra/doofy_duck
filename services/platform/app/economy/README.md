@@ -18,7 +18,9 @@ and is for disposable development databases only.
 balance projection in bounded pages. It uses one SQL statement per page and
 never repairs data.
 
-The `inventory` package is reserved for future account-owned item ownership and
-inventory rules. The `shop` package is reserved for future catalog and purchase
-orchestration. These packages have no routes, inventory behavior, or purchase
-behavior.
+The `inventory` and `shop` packages provide account-owned cosmetic defaults,
+inventory and equipment, versioned quotes, and atomic internal-currency
+purchases. Shop writes remain disabled by default. Purchase settlement and
+historical coin backfill are separate operator-controlled paths; the read-only
+`wallet-audit` settlement CLI command reports projection discrepancies without
+repairing them.

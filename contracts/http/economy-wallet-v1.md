@@ -87,13 +87,18 @@ stay pending with historical_backfill_required until the explicit backfill is
 reviewed. Facts delivered after the cutoff but completed before it do not earn
 live currency.
 
-Policy verified-pickups-v1 accepts only simulation 1.3.0, generator 1.2.0,
-config dd-v1-stepped-v1. It credits verified FEATHER collections at 1:1 with a
-30 FEATHER cap across all lives in a run. This legacy simulation identity does
-not authorize GAME_STAR issuance; collected legacy Stars are recorded as
-uncredited with reason legacy_star_generation. Other simulation identities
-become actionable_failure and receive no currency. A later simulation/policy
-identity must be explicitly reviewed and added by a separate change.
+Policy verified-pickups-v1 accepts simulation 1.3.0, generator 1.2.0, config
+dd-v1-stepped-v1. It credits verified FEATHER collections at 1:1 with a 30
+FEATHER cap across all lives in a run. This legacy simulation identity does not
+authorize GAME_STAR issuance; collected legacy Stars are recorded as uncredited
+with reason legacy_star_generation.
+
+Policy verified-pickups-v2-stars accepts simulation 1.4.0, generator 1.3.0,
+config dd-v1-star-interval-v1. It credits verified FEATHER and GAME_STAR
+collections at 1:1. FEATHER remains capped at 30 per run; GAME_STAR has no hard
+settlement cap. Its ledger entries use policy version
+verified-pickups-v2-stars. Other simulation identities become actionable_failure
+and receive no currency.
 
 Life indices settle in increasing order starting at zero. A later life remains
 pending with waiting_for_prior_life until every lower index is committed or
@@ -110,8 +115,25 @@ cd services/platform
 uv run python -m app.economy.settlement_cli settle --limit 100
 ```
 
-The worker does nothing while the gate is off. It reports safe JSON counts and
-returns nonzero when actionable failures exist.
+The one-shot command does nothing while the gate is off. It reports safe JSON
+counts and returns nonzero when actionable failures exist. For continuous
+processing, `worker` requires settlement enabled and a configured activation
+cutoff, commits each bounded batch separately, waits when the queue is empty, and
+uses bounded exponential backoff after database errors. SIGINT and SIGTERM stop
+it cleanly. Run it under an external process supervisor when continuous local
+processing is needed:
+
+```sh
+cd services/platform
+uv run python -m app.economy.settlement_cli worker --limit 100
+```
+
+The read-only wallet reconciliation command reports bounded pages and exits
+nonzero when a projection differs from its ledger. It never repairs balances:
+
+```sh
+uv run python -m app.economy.settlement_cli wallet-audit --limit 100
+```
 
 Historical backfill is coin-only and capped at 30 per run. Dry run is the default:
 
@@ -121,8 +143,12 @@ uv run python -m app.economy.settlement_cli backfill --limit 500
 ```
 
 Applying a bounded page requires --execute, enabled settlement, an explicit
-activation timestamp, and a nonproduction environment. It is idempotent and
-returns a continuation indicator when more facts remain:
+activation timestamp, and a nonproduction environment. Historical backfill
+credits verified FEATHER only under the known 1.3.0 and 1.4.0 simulation
+identities, at 1:1 with the same 30-per-run cap. Historical GAME_STAR pickups
+remain uncredited under both identities. Unknown identities remain actionable.
+The operation is idempotent and returns a continuation indicator when more facts
+remain:
 
 ```sh
 uv run python -m app.economy.settlement_cli backfill --limit 500 --execute

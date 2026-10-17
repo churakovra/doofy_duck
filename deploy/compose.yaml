@@ -30,6 +30,9 @@ services:
       DEV_AUTH_USER_ID: "100000001"
       PLATFORM_DATABASE_URL: postgresql+psycopg://platform:${PLATFORM_DB_PASSWORD}@postgres:5432/platform
       ECONOMY_DATABASE_URL: postgresql+psycopg://economy:${ECONOMY_DB_PASSWORD}@postgres:5432/economy
+      ECONOMY_SETTLEMENT_ENABLED: ${ECONOMY_SETTLEMENT_ENABLED:-false}
+      ECONOMY_SETTLEMENT_ACTIVATED_AT: ${ECONOMY_SETTLEMENT_ACTIVATED_AT:-}
+      ECONOMY_SHOP_ENABLED: ${ECONOMY_SHOP_ENABLED:-false}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?set in generated local env}
       ACCESS_TOKEN_PRIVATE_KEY_B64: ${ACCESS_TOKEN_PRIVATE_KEY_B64:?set in generated local env}
       ACCESS_TOKEN_KEY_ID: ${ACCESS_TOKEN_KEY_ID:?set in generated local env}

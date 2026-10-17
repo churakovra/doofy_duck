@@ -20,6 +20,13 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import EconomyBase
+from app.economy.shop.models import (  # noqa: F401
+    CosmeticEntitlement,
+    CosmeticEquipment,
+    ShopPurchase,
+    ShopPurchaseRequest,
+    ShopQuote,
+)
 from app.economy.wallet.models import Wallet, WalletLedgerEntry  # noqa: F401
 
 

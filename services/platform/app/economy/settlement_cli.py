@@ -4,7 +4,11 @@ import argparse
 import base64
 import binascii
 import json
+import math
+import signal
 import sys
+from collections.abc import Callable
+from threading import Event
 from uuid import UUID
 
 from sqlalchemy import create_engine, func, select
@@ -18,6 +22,7 @@ from app.economy.settlement import (
     process_settlement_batch,
     retry_supported_failures,
 )
+from app.economy.wallet.ledger import reconcile_wallets
 from app.settings import Settings
 
 
@@ -27,6 +32,10 @@ def _parser() -> argparse.ArgumentParser:
 
     worker = subparsers.add_parser("settle", help="process one bounded batch of eligible completions")
     worker.add_argument("--limit", type=int, default=100)
+    background_worker = subparsers.add_parser("worker", help="continuously settle bounded batches")
+    background_worker.add_argument("--limit", type=int, default=100)
+    background_worker.add_argument("--idle-seconds", type=float, default=2.0)
+    background_worker.add_argument("--max-backoff-seconds", type=float, default=30.0)
 
     backfill = subparsers.add_parser("backfill", help="inspect or explicitly apply historical coin backfill")
     backfill.add_argument("--limit", type=int, default=500)
@@ -39,7 +48,41 @@ def _parser() -> argparse.ArgumentParser:
     retry = subparsers.add_parser("retry-failures", help="requeue a bounded page of newly supported failures")
     retry.add_argument("--limit", type=int, default=100)
     retry.add_argument("--after", help="continue after an encoded run/life cursor")
+    audit = subparsers.add_parser("wallet-audit", help="read-only wallet ledger reconciliation")
+    audit.add_argument("--limit", type=int, default=100)
+    audit.add_argument("--after", help="continue after a wallet UUID cursor")
     return parser
+
+
+def run_worker_loop(
+    process_batch: Callable[[], int],
+    *,
+    stop_event: Event,
+    idle_seconds: float,
+    max_backoff_seconds: float,
+    wait: Callable[[float], bool] | None = None,
+    report_error: Callable[[], None] | None = None,
+) -> None:
+    """Run bounded settlement transactions until cancellation, idling or backing off between batches."""
+    if not math.isfinite(idle_seconds) or idle_seconds <= 0:
+        raise ValueError("idle_seconds must be a positive finite number")
+    if not math.isfinite(max_backoff_seconds) or max_backoff_seconds < idle_seconds:
+        raise ValueError("max_backoff_seconds must be finite and at least idle_seconds")
+    wait_for_stop = wait or stop_event.wait
+    backoff = idle_seconds
+    while not stop_event.is_set():
+        try:
+            processed = process_batch()
+        except SQLAlchemyError:
+            if report_error is not None:
+                report_error()
+            if wait_for_stop(backoff):
+                break
+            backoff = min(backoff * 2, max_backoff_seconds)
+            continue
+        backoff = idle_seconds
+        if processed <= 0 and wait_for_stop(idle_seconds):
+            break
 
 
 def _decode_cursor(value: str | None) -> tuple[UUID, int] | None:
@@ -100,6 +143,34 @@ def main() -> int:
                 )
                 return 1 if failures else 0
 
+            if args.command == "worker":
+                if not settings.economy_settlement_enabled or settings.economy_settlement_activated_at is None:
+                    raise ValueError("worker requires enabled settlement and an activation timestamp")
+                stop_event = Event()
+                previous_sigint = signal.signal(signal.SIGINT, lambda _signum, _frame: stop_event.set())
+                previous_sigterm = signal.signal(signal.SIGTERM, lambda _signum, _frame: stop_event.set())
+
+                def process_batch() -> int:
+                    with sessions.begin() as session:
+                        return process_settlement_batch(session, settings=settings, limit=args.limit)
+
+                def report_database_error() -> None:
+                    print(json.dumps({"error": "settlement_worker_database_error"}), file=sys.stderr, flush=True)
+
+                try:
+                    run_worker_loop(
+                        process_batch,
+                        stop_event=stop_event,
+                        idle_seconds=args.idle_seconds,
+                        max_backoff_seconds=args.max_backoff_seconds,
+                        report_error=report_database_error,
+                    )
+                finally:
+                    signal.signal(signal.SIGINT, previous_sigint)
+                    signal.signal(signal.SIGTERM, previous_sigterm)
+                print(json.dumps({"command": "worker", "status": "stopped"}, sort_keys=True))
+                return 0
+
             if args.command == "retry-failures":
                 after = _decode_cursor(args.after)
                 with sessions.begin() as session:
@@ -121,6 +192,35 @@ def main() -> int:
                     )
                 )
                 return 0
+
+            if args.command == "wallet-audit":
+                after_wallet_id = UUID(args.after) if args.after is not None else None
+                with sessions() as session:
+                    page = reconcile_wallets(session, limit=args.limit, after_wallet_id=after_wallet_id)
+                discrepancies = [item for item in page.items if item.discrepancy != 0]
+                print(
+                    json.dumps(
+                        {
+                            "command": "wallet-audit",
+                            "wallets_checked": len(page.items),
+                            "discrepancy_count": len(discrepancies),
+                            "items": [
+                                {
+                                    "wallet_id": str(item.wallet_id),
+                                    "account_id": str(item.account_id),
+                                    "currency": item.currency.value,
+                                    "balance": str(item.balance),
+                                    "ledger_total": str(item.ledger_total),
+                                    "discrepancy": str(item.discrepancy),
+                                }
+                                for item in page.items
+                            ],
+                            "next_cursor": str(page.next_wallet_id) if page.next_wallet_id else None,
+                        },
+                        sort_keys=True,
+                    )
+                )
+                return 1 if discrepancies else 0
 
             cutoff = settings.economy_settlement_activated_at
             if cutoff is None:

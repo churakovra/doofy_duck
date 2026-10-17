@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -15,8 +16,15 @@ from app.economy.wallet.models import Wallet, WalletCurrency
 from app.settings import Settings
 
 POLICY_VERSION = "verified-pickups-v1"
+STAR_POLICY_VERSION = "verified-pickups-v2-stars"
+HISTORICAL_STAR_POLICY_VERSION = "verified-pickups-v2-historical-coins"
 COIN_RUN_CAP = 30
 SUPPORTED_SIMULATION_IDENTITY = ("1.3.0", "1.2.0", "dd-v1-stepped-v1")
+STAR_SIMULATION_IDENTITY = ("1.4.0", "1.3.0", "dd-v1-star-interval-v1")
+SUPPORTED_SIMULATION_IDENTITIES = {
+    SUPPORTED_SIMULATION_IDENTITY: POLICY_VERSION,
+    STAR_SIMULATION_IDENTITY: STAR_POLICY_VERSION,
+}
 TERMINAL_STATUSES = ("committed", "ineligible")
 
 
@@ -70,7 +78,7 @@ def enqueue_settlement(session: Session, evidence: CompletionEvidence, settings:
 
 
 def process_settlement_batch(session: Session, *, settings: Settings, limit: int = 100) -> int:
-    """Settle up to limit post-activation facts in the caller's transaction."""
+    """Settle up to limit facts and return the count moved out of pending."""
     settings.validate_settlement_config()
     if type(limit) is not int or not 1 <= limit <= 500:
         raise ValueError("limit must be an integer from 1 to 500")
@@ -101,11 +109,9 @@ def process_settlement_batch(session: Session, *, settings: Settings, limit: int
     )
     rows = [(settlement, evidence) for settlement, evidence in session.execute(statement).all()]
     _lock_live_batch_resources(session, rows)
-    handled = 0
     for settlement, evidence in rows:
         _process_live_settlement(session, settlement, evidence)
-        handled += 1
-    return handled
+    return settlement_batch_progress(settlement.status for settlement, _evidence in rows)
 
 
 def retry_supported_failures(
@@ -129,9 +135,16 @@ def retry_supported_failures(
         .where(
             CompletionSettlement.status == "actionable_failure",
             CompletionSettlement.completed_at >= cutoff,
-            CompletionEvidence.payload["simulation_version"].as_string() == SUPPORTED_SIMULATION_IDENTITY[0],
-            CompletionEvidence.payload["generator_version"].as_string() == SUPPORTED_SIMULATION_IDENTITY[1],
-            CompletionEvidence.payload["config_id"].as_string() == SUPPORTED_SIMULATION_IDENTITY[2],
+            or_(
+                *[
+                    (
+                        (CompletionEvidence.payload["simulation_version"].as_string() == identity[0])
+                        & (CompletionEvidence.payload["generator_version"].as_string() == identity[1])
+                        & (CompletionEvidence.payload["config_id"].as_string() == identity[2])
+                    )
+                    for identity in SUPPORTED_SIMULATION_IDENTITIES
+                ]
+            ),
         )
         .order_by(CompletionSettlement.run_id, CompletionSettlement.life_index)
         .limit(limit + 1)
@@ -161,7 +174,9 @@ def _process_live_settlement(session: Session, settlement: CompletionSettlement,
         settlement.reason = "waiting_for_prior_life"
         return
 
-    if _simulation_identity(evidence.payload) != SUPPORTED_SIMULATION_IDENTITY:
+    identity = _simulation_identity(evidence.payload)
+    policy_version = SUPPORTED_SIMULATION_IDENTITIES.get(identity)
+    if policy_version is None:
         settlement.status = "actionable_failure"
         settlement.reason = "unsupported_simulation_identity"
         settlement.settled_at = datetime.now(UTC)
@@ -169,29 +184,50 @@ def _process_live_settlement(session: Session, settlement: CompletionSettlement,
 
     cap = _lock_run_cap(session, settlement.run_id, settlement.account_id)
     collections = evidence.payload["collections"]
-    requested = int(collections[WalletCurrency.FEATHER.value])
-    amount = min(requested, COIN_RUN_CAP - cap.feathers_credited)
+    rewards = settlement_rewards(
+        identity,
+        feathers=int(collections[WalletCurrency.FEATHER.value]),
+        game_stars=int(collections[WalletCurrency.GAME_STAR.value]),
+        feathers_remaining=COIN_RUN_CAP - cap.feathers_credited,
+    )
+    if rewards is None:
+        raise RuntimeError("supported simulation identity lost its settlement policy")
+    feathers, game_stars = rewards
     try:
-        _credit_completion(
-            session,
-            settlement=settlement,
-            currency=WalletCurrency.FEATHER,
-            amount=amount,
-            source_reference=str(settlement.event_id),
-        )
+        with session.begin_nested():
+            _credit_completion(
+                session,
+                settlement=settlement,
+                currency=WalletCurrency.FEATHER,
+                amount=feathers,
+                source_reference=str(settlement.event_id),
+                policy_version=policy_version,
+            )
+            _credit_completion(
+                session,
+                settlement=settlement,
+                currency=WalletCurrency.GAME_STAR,
+                amount=game_stars,
+                source_reference=str(settlement.event_id),
+                policy_version=policy_version,
+            )
     except WalletError:
         settlement.status = "actionable_failure"
         settlement.reason = "wallet_posting_failed"
         settlement.settled_at = datetime.now(UTC)
         return
 
-    cap.feathers_credited += amount
+    cap.feathers_credited += feathers
     cap.updated_at = func.now()
-    settlement.feathers_credited = amount
-    settlement.stars_credited = 0
-    settlement.policy_version = POLICY_VERSION
+    settlement.feathers_credited = feathers
+    settlement.stars_credited = game_stars
+    settlement.policy_version = policy_version
     settlement.status = "committed"
-    settlement.reason = "legacy_star_generation" if int(collections[WalletCurrency.GAME_STAR.value]) else None
+    settlement.reason = (
+        "legacy_star_generation"
+        if identity == SUPPORTED_SIMULATION_IDENTITY and int(collections[WalletCurrency.GAME_STAR.value])
+        else None
+    )
     settlement.settled_at = datetime.now(UTC)
 
 
@@ -202,6 +238,7 @@ def _credit_completion(
     currency: WalletCurrency,
     amount: int,
     source_reference: str,
+    policy_version: str = POLICY_VERSION,
 ) -> None:
     if amount <= 0:
         return
@@ -214,7 +251,7 @@ def _credit_completion(
         amount=amount,
         source_kind="verified_completion",
         source_reference=source_reference,
-        policy_version=POLICY_VERSION,
+        policy_version=policy_version,
         correlation_reference=f"{settlement.run_id}:{settlement.life_index}",
     )
 
@@ -240,20 +277,29 @@ def _lock_live_batch_resources(session: Session, rows: list[tuple[CompletionSett
     supported = [
         (settlement, evidence)
         for settlement, evidence in rows
-        if _simulation_identity(evidence.payload) == SUPPORTED_SIMULATION_IDENTITY
+        if _simulation_identity(evidence.payload) in SUPPORTED_SIMULATION_IDENTITIES
     ]
     run_accounts = {settlement.run_id: settlement.account_id for settlement, _evidence in supported}
     caps = {
         run_id: _lock_run_cap(session, run_id, account_id)
         for run_id, account_id in sorted(run_accounts.items(), key=lambda item: item[0].int)
     }
-    wallets: set[UUID] = set()
+    wallets: set[tuple[UUID, WalletCurrency]] = set()
     for settlement, evidence in supported:
-        requested = int(evidence.payload["collections"][WalletCurrency.FEATHER.value])
-        if min(requested, COIN_RUN_CAP - caps[settlement.run_id].feathers_credited) > 0:
-            wallets.add(settlement.account_id)
-    for account_id in sorted(wallets, key=lambda value: value.int):
-        _lock_wallet_row(session, account_id, WalletCurrency.FEATHER)
+        collections = evidence.payload["collections"]
+        rewards = settlement_rewards(
+            _simulation_identity(evidence.payload),
+            feathers=int(collections[WalletCurrency.FEATHER.value]),
+            game_stars=int(collections[WalletCurrency.GAME_STAR.value]),
+            feathers_remaining=COIN_RUN_CAP - caps[settlement.run_id].feathers_credited,
+        )
+        if rewards is None:
+            continue
+        for currency, amount in zip(WalletCurrency, rewards, strict=True):
+            if amount > 0:
+                wallets.add((settlement.account_id, currency))
+    for account_id, currency in sorted(wallets, key=lambda item: (item[0].int, item[1].value)):
+        _lock_wallet_row(session, account_id, currency)
 
 
 def _lock_wallet_row(session: Session, account_id: UUID, currency: WalletCurrency) -> None:
@@ -324,13 +370,17 @@ def plan_historical_backfill(
         if not _prior_indexes_done(evidence.run_id, evidence.life_index, done):
             waiting += 1
             continue
-        if _simulation_identity(evidence.payload) != SUPPORTED_SIMULATION_IDENTITY:
+        if _simulation_identity(evidence.payload) not in SUPPORTED_SIMULATION_IDENTITIES:
             unsupported += 1
             continue
         supported += 1
         cap_used = caps.get(evidence.run_id, 0) + planned.get(evidence.run_id, 0)
         requested = int(evidence.payload["collections"][WalletCurrency.FEATHER.value])
-        planned[evidence.run_id] = planned.get(evidence.run_id, 0) + min(requested, COIN_RUN_CAP - cap_used)
+        reward = historical_coin_reward(_simulation_identity(evidence.payload), requested, COIN_RUN_CAP - cap_used)
+        if reward is None:
+            unsupported += 1
+            continue
+        planned[evidence.run_id] = planned.get(evidence.run_id, 0) + reward[0]
         done.setdefault(evidence.run_id, set()).add(evidence.life_index)
     return BackfillPlan(
         completion_count=supported,
@@ -386,7 +436,8 @@ def execute_historical_backfill(
             settlement.reason = "waiting_for_prior_life"
             waiting += 1
             continue
-        if _simulation_identity(evidence.payload) != SUPPORTED_SIMULATION_IDENTITY:
+        identity = _simulation_identity(evidence.payload)
+        if identity not in SUPPORTED_SIMULATION_IDENTITIES:
             settlement.status = "actionable_failure"
             settlement.reason = "unsupported_simulation_identity"
             settlement.settled_at = datetime.now(UTC)
@@ -394,7 +445,10 @@ def execute_historical_backfill(
             continue
         cap = _lock_run_cap(session, evidence.run_id, settlement.account_id)
         requested = int(evidence.payload["collections"][WalletCurrency.FEATHER.value])
-        amount = min(requested, COIN_RUN_CAP - cap.feathers_credited)
+        historical_reward = historical_coin_reward(identity, requested, COIN_RUN_CAP - cap.feathers_credited)
+        if historical_reward is None:
+            raise RuntimeError("supported simulation identity lost its historical policy")
+        amount, policy_version = historical_reward
         try:
             _credit_completion(
                 session,
@@ -402,6 +456,7 @@ def execute_historical_backfill(
                 currency=WalletCurrency.FEATHER,
                 amount=amount,
                 source_reference=str(evidence.event_id),
+                policy_version=policy_version,
             )
         except WalletError:
             settlement.status = "actionable_failure"
@@ -417,7 +472,7 @@ def execute_historical_backfill(
             if int(evidence.payload["collections"][WalletCurrency.GAME_STAR.value])
             else "historical_backfill"
         )
-        settlement.policy_version = POLICY_VERSION
+        settlement.policy_version = policy_version
         settlement.feathers_credited = amount
         settlement.stars_credited = 0
         settlement.settled_at = datetime.now(UTC)
@@ -496,7 +551,7 @@ def _lock_backfill_batch_resources(
     eligible = [
         evidence
         for evidence, status in rows
-        if status not in TERMINAL_STATUSES and _simulation_identity(evidence.payload) == SUPPORTED_SIMULATION_IDENTITY
+        if status not in TERMINAL_STATUSES and _simulation_identity(evidence.payload) in SUPPORTED_SIMULATION_IDENTITIES
     ]
     run_accounts = {evidence.run_id: UUID(str(evidence.payload["account_id"])) for evidence in eligible}
     caps = {
@@ -546,6 +601,35 @@ def _prior_indexes_done(run_id: UUID, life_index: int, done: dict[UUID, set[int]
 
 def _simulation_identity(payload: dict[str, Any]) -> tuple[str, str, str]:
     return payload["simulation_version"], payload["generator_version"], payload["config_id"]
+
+
+def settlement_batch_progress(statuses: Iterable[str]) -> int:
+    """Count settlements advanced out of pending; deferred lives are not progress."""
+    return sum(status != "pending" for status in statuses)
+
+
+def settlement_rewards(
+    identity: tuple[str, str, str], *, feathers: int, game_stars: int, feathers_remaining: int
+) -> tuple[int, int] | None:
+    """Return approved live rewards for a simulation identity, or None if unsupported."""
+    if identity == SUPPORTED_SIMULATION_IDENTITY:
+        return min(feathers, max(feathers_remaining, 0)), 0
+    if identity == STAR_SIMULATION_IDENTITY:
+        return min(feathers, max(feathers_remaining, 0)), game_stars
+    return None
+
+
+def historical_coin_reward(
+    identity: tuple[str, str, str], feathers: int, feathers_remaining: int
+) -> tuple[int, str] | None:
+    """Return the approved coin-only historical reward for a known profile."""
+    if identity == SUPPORTED_SIMULATION_IDENTITY:
+        policy_version = POLICY_VERSION
+    elif identity == STAR_SIMULATION_IDENTITY:
+        policy_version = HISTORICAL_STAR_POLICY_VERSION
+    else:
+        return None
+    return min(feathers, max(feathers_remaining, 0)), policy_version
 
 
 def _initial_reason(evidence: CompletionEvidence, settings: Settings) -> str:

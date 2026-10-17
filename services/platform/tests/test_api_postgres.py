@@ -356,7 +356,7 @@ def test_settlement_policy_caps_coins_and_keeps_legacy_stars_uncredited(client):
         economy_settlement_activated_at=datetime.now(UTC) - timedelta(minutes=1),
     )
     with database.EconomySession.begin() as session:
-        assert process_settlement_batch(session, settings=settings, limit=10) == 1
+        assert process_settlement_batch(session, settings=settings, limit=10) == 0
     with database.EconomySession() as session:
         pending = session.scalar(select(CompletionSettlement).where(CompletionSettlement.run_id == run_id))
         assert pending is not None
@@ -383,6 +383,176 @@ def test_settlement_policy_caps_coins_and_keeps_legacy_stars_uncredited(client):
 
     status = client.get(f"/api/v1/completions/{run_id}/1", headers={"Authorization": f"Bearer {token}"})
     assert status.json()["credited"] == {"FEATHER": "10", "GAME_STAR": "0"}
+
+
+def test_new_settlement_policy_credits_uncapped_stars_and_keeps_coins_capped(client):
+    from app import database
+    from app.economy.models import CompletionSettlement
+    from app.economy.settlement import process_settlement_batch
+    from app.economy.wallet.models import Wallet, WalletLedgerEntry
+
+    token, account_id = _login(client, 420030)
+    run_id = UUID(int=430)
+    for life_index, stars in enumerate((900, 700)):
+        _accept_completion(
+            client,
+            _completion_event(
+                account_id=account_id,
+                run_id=run_id,
+                life_index=life_index,
+                feathers=20,
+                stars=stars,
+                simulation_version="1.4.0",
+                generator_version="1.3.0",
+                config_id="dd-v1-star-interval-v1",
+            ),
+        )
+
+    settings = replace(
+        client.app.state.settings,
+        economy_settlement_enabled=True,
+        economy_settlement_activated_at=datetime.now(UTC) - timedelta(minutes=1),
+    )
+    with database.EconomySession.begin() as session:
+        assert process_settlement_batch(session, settings=settings, limit=10) == 2
+    with database.EconomySession() as session:
+        rows = session.scalars(
+            select(CompletionSettlement)
+            .where(CompletionSettlement.run_id == run_id)
+            .order_by(CompletionSettlement.life_index)
+        ).all()
+        assert [(row.policy_version, row.feathers_credited, row.stars_credited) for row in rows] == [
+            ("verified-pickups-v2-stars", 20, 900),
+            ("verified-pickups-v2-stars", 10, 700),
+        ]
+        assert (
+            session.scalar(select(Wallet.balance).where(Wallet.account_id == account_id, Wallet.currency == "FEATHER"))
+            == 30
+        )
+        assert (
+            session.scalar(
+                select(Wallet.balance).where(Wallet.account_id == account_id, Wallet.currency == "GAME_STAR")
+            )
+            == 1600
+        )
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(WalletLedgerEntry)
+                .where(WalletLedgerEntry.policy_version == "verified-pickups-v2-stars")
+            )
+            == 4
+        )
+    status = client.get(f"/api/v1/completions/{run_id}/1", headers={"Authorization": f"Bearer {token}"})
+    assert status.json()["credited"] == {"FEATHER": "10", "GAME_STAR": "700"}
+
+
+def test_historical_backfill_credits_coins_for_both_known_profiles_and_no_stars(client):
+    from app import database
+    from app.economy.models import CompletionSettlement
+    from app.economy.settlement import execute_historical_backfill, plan_historical_backfill
+    from app.economy.wallet.models import Wallet
+
+    _, account_id = _login(client, 420031)
+    cutoff = datetime.now(UTC)
+    old_identity_event = _completion_event(
+        account_id=account_id,
+        run_id=UUID(int=431),
+        feathers=20,
+        stars=50,
+        completed_at=cutoff - timedelta(hours=1),
+    )
+    new_identity_event = _completion_event(
+        account_id=account_id,
+        run_id=UUID(int=432),
+        feathers=20,
+        stars=700,
+        completed_at=cutoff - timedelta(minutes=30),
+        simulation_version="1.4.0",
+        generator_version="1.3.0",
+        config_id="dd-v1-star-interval-v1",
+    )
+    _accept_completion(client, old_identity_event)
+    _accept_completion(client, new_identity_event)
+    settings = replace(
+        client.app.state.settings,
+        economy_settlement_enabled=True,
+        economy_settlement_activated_at=cutoff,
+    )
+    with database.EconomySession() as session:
+        plan = plan_historical_backfill(session, activated_at=cutoff, limit=100)
+        assert plan.completion_count == 2
+        assert plan.feathers_to_credit == 40
+        assert plan.game_stars_to_credit == 0
+    with database.EconomySession.begin() as session:
+        result = execute_historical_backfill(session, settings=settings, limit=100, execute=True)
+        assert result.feathers_credited == 40
+        assert result.game_stars_credited == 0
+    with database.EconomySession() as session:
+        settlements = session.scalars(select(CompletionSettlement).order_by(CompletionSettlement.run_id)).all()
+        assert [row.policy_version for row in settlements] == [
+            "verified-pickups-v1",
+            "verified-pickups-v2-historical-coins",
+        ]
+        assert all(row.stars_credited == 0 for row in settlements)
+        assert (
+            session.scalar(select(Wallet.balance).where(Wallet.account_id == account_id, Wallet.currency == "FEATHER"))
+            == 40
+        )
+        assert (
+            session.scalar(
+                select(Wallet.balance).where(Wallet.account_id == account_id, Wallet.currency == "GAME_STAR")
+            )
+            is None
+        )
+
+
+def test_failed_star_posting_rolls_back_live_coin_posting_too(client, monkeypatch):
+    from app import database
+    from app.economy.models import CompletionSettlement
+    from app.economy.settlement import process_settlement_batch
+    from app.economy.wallet.ledger import BalanceOverflow
+    from app.economy.wallet.models import WalletLedgerEntry
+
+    _, account_id = _login(client, 420032)
+    event = _completion_event(
+        account_id=account_id,
+        run_id=UUID(int=433),
+        feathers=20,
+        stars=5,
+        simulation_version="1.4.0",
+        generator_version="1.3.0",
+        config_id="dd-v1-star-interval-v1",
+    )
+    _accept_completion(client, event)
+    settings = replace(
+        client.app.state.settings,
+        economy_settlement_enabled=True,
+        economy_settlement_activated_at=datetime.now(UTC) - timedelta(minutes=1),
+    )
+    from app.economy import settlement
+
+    original_credit = settlement._credit_completion
+
+    def fail_star_post(*args, **kwargs):
+        if kwargs["currency"].value == "GAME_STAR":
+            raise BalanceOverflow("injected Star wallet overflow")
+        return original_credit(*args, **kwargs)
+
+    monkeypatch.setattr(settlement, "_credit_completion", fail_star_post)
+    with database.EconomySession.begin() as session:
+        assert process_settlement_batch(session, settings=settings, limit=10) == 1
+    with database.EconomySession() as session:
+        row = session.scalar(select(CompletionSettlement).where(CompletionSettlement.run_id == UUID(int=433)))
+        assert row is not None and row.status == "actionable_failure"
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(WalletLedgerEntry)
+                .where(WalletLedgerEntry.correlation_reference == f"{UUID(int=433)}:0")
+            )
+            == 0
+        )
 
 
 def test_settlement_does_not_issue_pre_activation_or_unknown_simulation_facts(client):
@@ -774,3 +944,514 @@ def test_historical_backfill_dry_run_is_read_only_and_execution_is_once_only(cli
         assert replay.feathers_credited == 0
     with database.EconomySession() as session:
         assert session.scalar(select(Wallet.balance).where(Wallet.account_id == account_id)) == 30
+
+
+def _shop_test_client(client, *, enabled: bool):
+    """Build a second app over the fixture databases with the requested shop gate."""
+    from app.main import create_app
+
+    settings = replace(client.app.state.settings, economy_shop_enabled=enabled)
+    return TestClient(create_app(settings))
+
+
+def test_shop_catalog_and_default_inventory_are_account_scoped_and_currency_neutral(client):
+    from app import database
+    from app.economy.wallet.models import Wallet, WalletLedgerEntry
+
+    with _shop_test_client(client, enabled=False) as shop:
+        token, account_id = _login(shop, 420010)
+        other_token, other_account_id = _login(shop, 420011)
+        headers = {"Authorization": f"Bearer {token}"}
+        other_headers = {"Authorization": f"Bearer {other_token}"}
+
+        catalog = shop.get("/api/v1/shop/catalog", headers=headers)
+        assert catalog.status_code == 200
+        body = catalog.json()
+        assert body["catalog_version"] == "cosmetics-v1"
+        assert body["enabled"] is False
+        prices = {(row["item_type"], row["item_id"]): row["price"] for row in body["items"]}
+        assert prices[("skin", "mint")] == {"currency": "FEATHER", "amount": "20"}
+        assert prices[("skin", "celestial")] == {"currency": "GAME_STAR", "amount": "100"}
+        assert prices[("background", "meadow")] is None
+
+        inventory = shop.get("/api/v1/shop/inventory", headers=headers)
+        equipment = shop.get("/api/v1/shop/equipment", headers=headers)
+        assert inventory.status_code == 200
+        assert {(row["item_type"], row["item_id"]) for row in inventory.json()["items"]} == {
+            ("skin", "classic"),
+            ("background", "meadow"),
+        }
+        assert equipment.json() == {
+            "equipment": [
+                {"item_type": "skin", "item_id": "classic", "revision": 1},
+                {"item_type": "background", "item_id": "meadow", "revision": 1},
+            ]
+        }
+        first_page = shop.get("/api/v1/shop/inventory?limit=1", headers=headers).json()
+        assert first_page["items"][0]["item_type"] == "background"
+        assert first_page["next_cursor"]
+        second_page = shop.get(
+            f"/api/v1/shop/inventory?limit=1&cursor={first_page['next_cursor']}", headers=headers
+        ).json()
+        assert second_page["items"][0]["item_type"] == "skin"
+        assert second_page["next_cursor"] is None
+        other_inventory = shop.get("/api/v1/shop/inventory", headers=other_headers).json()["items"]
+        assert {(row["item_type"], row["item_id"]) for row in other_inventory} == {
+            ("skin", "classic"),
+            ("background", "meadow"),
+        }
+        assert account_id != other_account_id
+        assert (
+            shop.put(
+                "/api/v1/shop/equipment/skin",
+                headers=headers,
+                json={"item_id": "mint", "expected_revision": 1},
+            ).json()["detail"]["code"]
+            == "shop_disabled"
+        )
+
+        with database.EconomySession() as session:
+            assert session.scalar(select(func.count()).select_from(Wallet)) == 0
+            assert session.scalar(select(func.count()).select_from(WalletLedgerEntry)) == 0
+            from app.economy.shop.models import CosmeticEntitlement, CosmeticEquipment
+
+            assert (
+                session.scalar(
+                    select(func.count())
+                    .select_from(CosmeticEntitlement)
+                    .where(CosmeticEntitlement.account_id == account_id)
+                )
+                == 2
+            )
+            assert (
+                session.scalar(
+                    select(func.count())
+                    .select_from(CosmeticEquipment)
+                    .where(CosmeticEquipment.account_id == account_id)
+                )
+                == 2
+            )
+
+
+def test_shop_purchase_is_atomic_idempotent_and_replay_survives_expiry_and_gate_close(client, monkeypatch):
+    from app import database
+    from app.economy.wallet.ledger import post_entry
+    from app.economy.wallet.models import Wallet, WalletLedgerEntry
+
+    with _shop_test_client(client, enabled=True) as shop:
+        token, account_id = _login(shop, 420012)
+        headers = {"Authorization": f"Bearer {token}"}
+        with database.EconomySession.begin() as session:
+            post_entry(
+                session,
+                account_id=account_id,
+                currency="FEATHER",
+                operation_id="shop-test-funding",
+                direction="credit",
+                amount=50,
+                source_kind="internal_test",
+                source_reference="shop-test-funding",
+                policy_version="test-v1",
+            )
+
+        quote = shop.post("/api/v1/shop/quotes", headers=headers, json={"item_type": "skin", "item_id": "mint"})
+        assert quote.status_code == 201
+        assert quote.json()["amount"] == "20"
+        assert quote.json()["currency"] == "FEATHER"
+        payload = {"quote_id": quote.json()["quote_id"]}
+        purchase_headers = {**headers, "Idempotency-Key": "mint-buy-1"}
+        purchased = shop.post("/api/v1/shop/purchases", headers=purchase_headers, json=payload)
+        assert purchased.status_code == 201
+        result = purchased.json()
+        assert result["purchase"]["item_id"] == "mint"
+        assert result["purchase"]["amount"] == "20"
+        assert result["current_balance"] == "30"
+        purchase_id = result["purchase"]["purchase_id"]
+        assert (
+            shop.get("/api/v1/shop/purchases/lookup?idempotency_key=mint-buy-1", headers=headers).json()[
+                "current_balance"
+            ]
+            == "30"
+        )
+        assert shop.get(f"/api/v1/shop/purchases/{purchase_id}", headers=headers).status_code == 200
+        assert (
+            shop.get("/api/v1/shop/purchases?limit=1", headers=headers).json()["purchases"][0]["current_balance"]
+            == "30"
+        )
+        other_token, _ = _login(shop, 420021)
+        other_headers = {"Authorization": f"Bearer {other_token}"}
+        assert shop.get(f"/api/v1/shop/purchases/{purchase_id}", headers=other_headers).status_code == 404
+
+        from app.economy.shop import service as shop_service
+
+        class FutureDateTime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return datetime.now(tz) + timedelta(minutes=6)
+
+        monkeypatch.setattr(shop_service, "datetime", FutureDateTime)
+        replay = shop.post("/api/v1/shop/purchases", headers=purchase_headers, json=payload)
+        assert replay.status_code == 200
+        assert replay.json()["purchase"]["purchase_id"] == result["purchase"]["purchase_id"]
+
+        with _shop_test_client(client, enabled=False) as disabled_shop:
+            disabled_replay = disabled_shop.post("/api/v1/shop/purchases", headers=purchase_headers, json=payload)
+            assert disabled_replay.status_code == 200
+            assert disabled_replay.json()["purchase"]["purchase_id"] == result["purchase"]["purchase_id"]
+            assert disabled_replay.json()["current_balance"] == "30"
+
+        with database.EconomySession() as session:
+            assert session.scalar(select(Wallet.balance).where(Wallet.account_id == account_id)) == 30
+            assert session.scalar(select(func.count()).select_from(WalletLedgerEntry)) == 2
+
+
+def test_shop_expired_quote_rejects_new_key_without_reserving_purchase(client, monkeypatch):
+    from app import database
+    from app.economy.shop import service as shop_service
+    from app.economy.shop.models import ShopPurchaseRequest
+    from app.economy.wallet.ledger import post_entry
+
+    with _shop_test_client(client, enabled=True) as shop:
+        token, account_id = _login(shop, 420022)
+        headers = {"Authorization": f"Bearer {token}"}
+        with database.EconomySession.begin() as session:
+            post_entry(
+                session,
+                account_id=account_id,
+                currency="FEATHER",
+                operation_id="shop-test-expired-funding",
+                direction="credit",
+                amount=50,
+                source_kind="internal_test",
+                source_reference="shop-test-expired-funding",
+                policy_version="test-v1",
+            )
+        quote = shop.post("/api/v1/shop/quotes", headers=headers, json={"item_type": "skin", "item_id": "mint"}).json()
+
+        class FutureDateTime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return datetime.now(tz) + timedelta(minutes=6)
+
+        with monkeypatch.context() as scoped_patch:
+            scoped_patch.setattr(shop_service, "datetime", FutureDateTime)
+            response = shop.post(
+                "/api/v1/shop/purchases",
+                headers={**headers, "Idempotency-Key": "expired-new-operation"},
+                json={"quote_id": quote["quote_id"]},
+            )
+        assert response.status_code == 409
+        assert response.json()["detail"]["code"] == "expired_quote"
+        with database.EconomySession() as session:
+            assert session.scalar(select(func.count()).select_from(ShopPurchaseRequest)) == 0
+
+
+def test_shop_equipment_requires_owned_item_and_returns_current_on_stale_revision(client):
+    from app import database
+    from app.economy.wallet.ledger import post_entry
+
+    with _shop_test_client(client, enabled=True) as shop:
+        token, account_id = _login(shop, 420013)
+        headers = {"Authorization": f"Bearer {token}"}
+        current = shop.get("/api/v1/shop/equipment", headers=headers).json()["equipment"][0]
+        unowned = shop.put(
+            "/api/v1/shop/equipment/skin",
+            headers=headers,
+            json={"item_id": "mint", "expected_revision": current["revision"]},
+        )
+        assert unowned.status_code == 409
+        assert unowned.json()["detail"]["code"] == "item_not_owned"
+        wrong_type = shop.put(
+            "/api/v1/shop/equipment/skin",
+            headers=headers,
+            json={"item_id": "meadow", "expected_revision": current["revision"]},
+        )
+        assert wrong_type.status_code == 409
+        assert wrong_type.json()["detail"]["code"] == "wrong_item_type"
+
+        with database.EconomySession.begin() as session:
+            post_entry(
+                session,
+                account_id=account_id,
+                currency="FEATHER",
+                operation_id="shop-test-equipment-funding",
+                direction="credit",
+                amount=50,
+                source_kind="internal_test",
+                source_reference="shop-test-equipment-funding",
+                policy_version="test-v1",
+            )
+        quote = shop.post("/api/v1/shop/quotes", headers=headers, json={"item_type": "skin", "item_id": "mint"})
+        purchase = shop.post(
+            "/api/v1/shop/purchases",
+            headers={**headers, "Idempotency-Key": "mint-equip-buy"},
+            json={"quote_id": quote.json()["quote_id"]},
+        )
+        assert purchase.status_code == 201
+
+        equipped = shop.put(
+            "/api/v1/shop/equipment/skin",
+            headers=headers,
+            json={"item_id": "mint", "expected_revision": current["revision"]},
+        )
+        assert equipped.status_code == 200
+        assert equipped.json() == {"item_type": "skin", "item_id": "mint", "revision": 2}
+        stale = shop.put(
+            "/api/v1/shop/equipment/skin",
+            headers=headers,
+            json={"item_id": "classic", "expected_revision": current["revision"]},
+        )
+        assert stale.status_code == 409
+        assert stale.json()["detail"]["code"] == "stale_equipment"
+        assert stale.json()["detail"]["current"] == equipped.json()
+
+
+def test_shop_same_key_concurrency_and_changed_quote_conflict_have_one_effect(client):
+    from concurrent.futures import ThreadPoolExecutor
+
+    from app import database
+    from app.economy.wallet.ledger import post_entry
+    from app.economy.wallet.models import Wallet, WalletLedgerEntry
+
+    with _shop_test_client(client, enabled=True) as shop:
+        token, account_id = _login(shop, 420014)
+        headers = {"Authorization": f"Bearer {token}"}
+        with database.EconomySession.begin() as session:
+            post_entry(
+                session,
+                account_id=account_id,
+                currency="FEATHER",
+                operation_id="shop-test-concurrency-funding",
+                direction="credit",
+                amount=500,
+                source_kind="internal_test",
+                source_reference="shop-test-concurrency-funding",
+                policy_version="test-v1",
+            )
+        first_quote = shop.post(
+            "/api/v1/shop/quotes", headers=headers, json={"item_type": "skin", "item_id": "mint"}
+        ).json()["quote_id"]
+        second_quote = shop.post(
+            "/api/v1/shop/quotes", headers=headers, json={"item_type": "skin", "item_id": "rose"}
+        ).json()["quote_id"]
+        request_headers = {**headers, "Idempotency-Key": "one-concurrent-key"}
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            responses = list(
+                pool.map(
+                    lambda quote_id: shop.post(
+                        "/api/v1/shop/purchases",
+                        headers=request_headers,
+                        json={"quote_id": quote_id},
+                    ),
+                    [first_quote, second_quote],
+                )
+            )
+        assert sorted(response.status_code for response in responses) == [201, 409]
+
+        committed = next(response.json() for response in responses if response.status_code == 201)
+        replay = shop.post(
+            "/api/v1/shop/purchases",
+            headers=request_headers,
+            json={"quote_id": committed["purchase"]["quote_id"]},
+        )
+        assert replay.status_code == 200
+        assert replay.json()["purchase"]["purchase_id"] == committed["purchase"]["purchase_id"]
+        with database.EconomySession() as session:
+            assert session.scalar(select(Wallet.balance).where(Wallet.account_id == account_id)) == 500 - int(
+                committed["purchase"]["amount"]
+            )
+            assert session.scalar(select(func.count()).select_from(WalletLedgerEntry)) == 2
+
+
+def test_shop_same_item_competing_quotes_commit_at_most_one_purchase(client):
+    from concurrent.futures import ThreadPoolExecutor
+
+    from app import database
+    from app.economy.wallet.ledger import post_entry
+    from app.economy.wallet.models import Wallet, WalletLedgerEntry
+
+    with _shop_test_client(client, enabled=True) as shop:
+        token, account_id = _login(shop, 420015)
+        headers = {"Authorization": f"Bearer {token}"}
+        with database.EconomySession.begin() as session:
+            post_entry(
+                session,
+                account_id=account_id,
+                currency="FEATHER",
+                operation_id="shop-test-same-item-funding",
+                direction="credit",
+                amount=30,
+                source_kind="internal_test",
+                source_reference="shop-test-same-item-funding",
+                policy_version="test-v1",
+            )
+        quotes = [
+            shop.post("/api/v1/shop/quotes", headers=headers, json={"item_type": "skin", "item_id": "mint"}).json()[
+                "quote_id"
+            ]
+            for _ in range(2)
+        ]
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            responses = list(
+                pool.map(
+                    lambda pair: shop.post(
+                        "/api/v1/shop/purchases",
+                        headers={**headers, "Idempotency-Key": pair[0]},
+                        json={"quote_id": pair[1]},
+                    ),
+                    [("mint-item-a", quotes[0]), ("mint-item-b", quotes[1])],
+                )
+            )
+        assert sorted(response.status_code for response in responses) == [201, 409]
+        assert next(response.json()["detail"]["code"] for response in responses if response.status_code == 409) == (
+            "already_owned"
+        )
+        with database.EconomySession() as session:
+            assert session.scalar(select(Wallet.balance).where(Wallet.account_id == account_id)) == 10
+            assert session.scalar(select(func.count()).select_from(WalletLedgerEntry)) == 2
+
+
+def test_shop_different_items_cannot_overspend_the_same_wallet(client):
+    from concurrent.futures import ThreadPoolExecutor
+
+    from app import database
+    from app.economy.wallet.ledger import post_entry
+    from app.economy.wallet.models import Wallet, WalletLedgerEntry
+
+    with _shop_test_client(client, enabled=True) as shop:
+        token, account_id = _login(shop, 420016)
+        headers = {"Authorization": f"Bearer {token}"}
+        with database.EconomySession.begin() as session:
+            post_entry(
+                session,
+                account_id=account_id,
+                currency="FEATHER",
+                operation_id="shop-test-overspend-funding",
+                direction="credit",
+                amount=50,
+                source_kind="internal_test",
+                source_reference="shop-test-overspend-funding",
+                policy_version="test-v1",
+            )
+        quote_ids = [
+            shop.post("/api/v1/shop/quotes", headers=headers, json={"item_type": "skin", "item_id": item_id}).json()[
+                "quote_id"
+            ]
+            for item_id in ("mint", "rose")
+        ]
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            responses = list(
+                pool.map(
+                    lambda pair: shop.post(
+                        "/api/v1/shop/purchases",
+                        headers={**headers, "Idempotency-Key": pair[0]},
+                        json={"quote_id": pair[1]},
+                    ),
+                    [("buy-mint", quote_ids[0]), ("buy-rose", quote_ids[1])],
+                )
+            )
+        assert sorted(response.status_code for response in responses) == [201, 409]
+        assert next(response.json()["detail"]["code"] for response in responses if response.status_code == 409) == (
+            "insufficient_funds"
+        )
+        with database.EconomySession() as session:
+            assert session.scalar(select(Wallet.balance).where(Wallet.account_id == account_id)) == 30
+            assert session.scalar(select(func.count()).select_from(WalletLedgerEntry)) == 2
+
+
+def test_shop_failed_purchase_rolls_back_request_ledger_and_entitlement(client, monkeypatch):
+    from app import database
+    from app.economy import shop
+    from app.economy.shop.models import CosmeticEntitlement, ShopPurchase, ShopPurchaseRequest
+    from app.economy.wallet.ledger import post_entry as original_post_entry
+    from app.economy.wallet.models import Wallet, WalletLedgerEntry
+
+    with _shop_test_client(client, enabled=True) as shop_client:
+        token, account_id = _login(shop_client, 420017)
+        headers = {"Authorization": f"Bearer {token}"}
+        with database.EconomySession.begin() as session:
+            original_post_entry(
+                session,
+                account_id=account_id,
+                currency="FEATHER",
+                operation_id="shop-test-rollback-funding",
+                direction="credit",
+                amount=50,
+                source_kind="internal_test",
+                source_reference="shop-test-rollback-funding",
+                policy_version="test-v1",
+            )
+        quote = shop_client.post(
+            "/api/v1/shop/quotes", headers=headers, json={"item_type": "skin", "item_id": "mint"}
+        ).json()
+        real_post_entry = shop.service.post_entry
+
+        def post_then_fail(session, **kwargs):
+            real_post_entry(session, **kwargs)
+            raise RuntimeError("injected failure after ledger flush")
+
+        monkeypatch.setattr(shop.service, "post_entry", post_then_fail)
+        with pytest.raises(RuntimeError, match="after ledger flush"):
+            shop_client.post(
+                "/api/v1/shop/purchases",
+                headers={**headers, "Idempotency-Key": "rollback-purchase"},
+                json={"quote_id": quote["quote_id"]},
+            )
+        with database.EconomySession() as session:
+            assert session.scalar(select(Wallet.balance).where(Wallet.account_id == account_id)) == 50
+            assert session.scalar(select(func.count()).select_from(WalletLedgerEntry)) == 1
+            assert (
+                session.scalar(
+                    select(func.count())
+                    .select_from(CosmeticEntitlement)
+                    .where(
+                        CosmeticEntitlement.account_id == account_id,
+                        CosmeticEntitlement.item_id == "mint",
+                    )
+                )
+                == 0
+            )
+            assert session.scalar(select(func.count()).select_from(ShopPurchase)) == 0
+            assert session.scalar(select(func.count()).select_from(ShopPurchaseRequest)) == 0
+
+
+def test_shop_foreign_quote_cursor_and_disabled_mutations_fail_closed(client):
+    with _shop_test_client(client, enabled=True) as shop:
+        first_token, first_account_id = _login(shop, 420018)
+        second_token, second_account_id = _login(shop, 420019)
+        first_headers = {"Authorization": f"Bearer {first_token}"}
+        second_headers = {"Authorization": f"Bearer {second_token}"}
+        first_quote = shop.post(
+            "/api/v1/shop/quotes", headers=first_headers, json={"item_type": "skin", "item_id": "mint"}
+        ).json()
+        foreign = shop.post(
+            "/api/v1/shop/purchases",
+            headers={**second_headers, "Idempotency-Key": "foreign-quote"},
+            json={"quote_id": first_quote["quote_id"]},
+        )
+        assert foreign.status_code == 404
+        assert foreign.json()["detail"]["code"] == "quote_not_found"
+        assert (
+            shop.get("/api/v1/shop/purchases/lookup?idempotency_key=foreign-quote", headers=second_headers).status_code
+            == 404
+        )
+        assert shop.get("/api/v1/shop/inventory?cursor=not-a-cursor", headers=first_headers).status_code == 400
+        assert first_account_id != second_account_id
+        assert (
+            shop.post(
+                "/api/v1/shop/quotes",
+                headers=first_headers,
+                json={"item_type": "skin", "item_id": "mint", "amount": 1},
+            ).status_code
+            == 422
+        )
+
+    with _shop_test_client(client, enabled=False) as disabled_shop:
+        token, _ = _login(disabled_shop, 420020)
+        headers = {"Authorization": f"Bearer {token}"}
+        assert (
+            disabled_shop.post(
+                "/api/v1/shop/quotes", headers=headers, json={"item_type": "skin", "item_id": "mint"}
+            ).json()["detail"]["code"]
+            == "shop_disabled"
+        )

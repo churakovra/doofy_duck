@@ -111,6 +111,21 @@ operator access to Core and add `-outage-after 2m -outage-duration 5m
 checkpoint failures are reported separately; nonzero exit means an acceptance gate
 failed. See the [capacity record](docs/BACKEND_FOUNDATION.md) for actual results.
 
+Local settlement and shop mutations remain off by default. To exercise them, set
+`ECONOMY_SETTLEMENT_ENABLED=true`, choose an explicit UTC
+`ECONOMY_SETTLEMENT_ACTIVATED_AT` cutoff, and optionally set
+`ECONOMY_SHOP_ENABLED=true` in `.env.dev`, then restart the Platform service. Run
+the settlement worker in a separate terminal; Ctrl-C stops it cleanly:
+
+```sh
+docker compose --env-file .env.dev -f deploy/compose.yaml --profile local exec platform \
+  /opt/venv/bin/python -m app.economy.settlement_cli worker
+```
+
+The worker uses bounded transactions and backs off during database failures.
+Production settlement still requires the separate acceptance gates in the
+[Economy contract](contracts/http/economy-wallet-v1.md).
+
 ## Current gameplay
 
 - The wallet displays cumulative balances separately from completed-run earnings and saves locally after death. It is not an account, a Telegram Stars balance, or a redeemable reward. Earlier unsaved earnings cannot be recovered.

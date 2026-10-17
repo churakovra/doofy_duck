@@ -1,1 +1,1 @@
-"""Reserved boundary for future shop and purchase behavior; none is implemented yet."""
+"""Account-owned cosmetic offers and atomic purchase records."""

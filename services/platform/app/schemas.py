@@ -53,6 +53,23 @@ class WalletHistoryResponse(BaseModel):
     next_cursor: str | None
 
 
+class ShopQuoteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    item_type: Literal["skin", "background"]
+    item_id: str = Field(min_length=1, max_length=64)
+
+
+class ShopPurchaseRequestBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    quote_id: UUID
+
+
+class EquipmentUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    item_id: str = Field(min_length=1, max_length=64)
+    expected_revision: int = Field(ge=1, strict=True)
+
+
 class CompletionSettlementResponse(BaseModel):
     event_id: UUID
     run_id: UUID

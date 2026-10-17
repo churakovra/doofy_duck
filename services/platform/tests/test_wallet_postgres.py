@@ -74,7 +74,7 @@ def test_wallet_migration_preserves_inbox_and_installs_wallet_schema(wallet_stor
         assert session.scalar(select(func.count()).select_from(WalletLedgerEntry)) == 0
     with engine.connect() as connection:
         revision = connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
-        assert revision == "0003_completion_settlement"
+        assert revision == "0004_cosmetic_shop"
 
 
 def test_credit_debit_replay_conflict_and_adjustment_link(wallet_store):

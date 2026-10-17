@@ -19,6 +19,7 @@ class Settings:
     dev_auth_user_id: int
     economy_settlement_enabled: bool = False
     economy_settlement_activated_at: datetime | None = None
+    economy_shop_enabled: bool = False
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -54,6 +55,7 @@ class Settings:
             dev_auth_user_id=int(os.getenv("DEV_AUTH_USER_ID", "100000001")),
             economy_settlement_enabled=_bool("ECONOMY_SETTLEMENT_ENABLED", False),
             economy_settlement_activated_at=activated_at,
+            economy_shop_enabled=_bool("ECONOMY_SHOP_ENABLED", False),
         )
 
     def validate_runtime(self) -> None:
