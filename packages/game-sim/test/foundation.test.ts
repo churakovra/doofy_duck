@@ -12,6 +12,7 @@ const customConfig = (changes: Partial<GameConfig> = {}): GameConfig => ({
   pipes: { ...DEFAULT_CONFIG.pipes, ...changes.pipes },
   limits: { ...DEFAULT_CONFIG.limits, ...changes.limits },
   collectibles: changes.collectibles ?? DEFAULT_CONFIG.collectibles,
+  ...(changes.collectibles ? { starSchedule: null } : DEFAULT_CONFIG.starSchedule == null ? {} : { starSchedule: DEFAULT_CONFIG.starSchedule }),
 });
 
 describe('foundation edge cases', () => {

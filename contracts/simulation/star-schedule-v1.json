@@ -1,0 +1,14 @@
+{
+  "schedule": {
+    "minIntervalPipes": 8,
+    "maxIntervalPipes": 16,
+    "amount": 1
+  },
+  "cases": [
+    { "seed": 0, "firstStarPipeIndex": 16, "nextStarPipeIndex": 28 },
+    { "seed": 1, "firstStarPipeIndex": 10, "nextStarPipeIndex": 26 },
+    { "seed": 7, "firstStarPipeIndex": 14, "nextStarPipeIndex": 27 },
+    { "seed": 42, "firstStarPipeIndex": 13, "nextStarPipeIndex": 28 },
+    { "seed": 305419896, "firstStarPipeIndex": 14, "nextStarPipeIndex": 24 }
+  ]
+}

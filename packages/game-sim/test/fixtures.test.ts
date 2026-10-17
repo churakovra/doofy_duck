@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_CONFIG, DEFAULT_CONFIG_ID, GENERATOR_VERSION, SIMULATION_VERSION, canonicalState, createRun, createRunDescriptor, makeInput, mix32, pauseRun, restartRun, resumeRun, step } from '../src/index.js';
+import { DEFAULT_CONFIG, DEFAULT_CONFIG_ID, GENERATOR_VERSION, LEGACY_DEFAULT_CONFIG, LEGACY_DEFAULT_CONFIG_ID, LEGACY_GENERATOR_VERSION, LEGACY_SIMULATION_VERSION, SIMULATION_VERSION, canonicalState, createRun, createRunDescriptor, makeInput, mix32, pauseRun, restartRun, resumeRun, step } from '../src/index.js';
 import type { GameConfig, GameEvent, InputFrame, RunDescriptor, RunState } from '../src/index.js';
 type Operation = { kind: string; frames?: InputFrame[]; ticks?: number; flapTicks?: number[]; descriptor?: RunDescriptor; expectedState: RunState; expectedEvents: GameEvent[] };
 type Case = { name: string; syntheticInitialState: boolean; initialState: RunState; operations: Operation[] };
@@ -9,17 +9,21 @@ const fixture = JSON.parse(readFileSync('contracts/simulation/golden-v1.json', '
 describe('shared contract fixtures', () => {
   it('pins the current ruleset identity and default config', () => {
     expect(fixture.fixtureRevision).toBe('stepped-challenges-1');
-    expect(fixture.contractVersion).toBe(SIMULATION_VERSION);
-    expect(fixture.defaultConfig).toEqual(DEFAULT_CONFIG);
+    expect(fixture.contractVersion).toBe(LEGACY_SIMULATION_VERSION);
+    expect(fixture.defaultConfig).toEqual(LEGACY_DEFAULT_CONFIG);
+    expect(DEFAULT_CONFIG_ID).toBe('dd-v1-star-interval-v1');
     expect(createRunDescriptor({ runId: 'fixture-contract', seed: 1 }).configId).toBe(DEFAULT_CONFIG_ID);
+    expect(LEGACY_DEFAULT_CONFIG_ID).toBe('dd-v1-stepped-v1');
     expect(fixture.rules.speed).toContain('rampTicks');
   });
   it('keeps the shared run descriptor schema aligned with exported versions', () => {
     const schema = JSON.parse(readFileSync('contracts/simulation/run-descriptor.schema.json', 'utf8')) as {
-      properties: { simulationVersion: { const: string }; generatorVersion: { const: string } };
+      oneOf: { properties: { simulationVersion: { const: string }; generatorVersion: { const: string } } }[];
     };
-    expect(schema.properties.simulationVersion.const).toBe(SIMULATION_VERSION);
-    expect(schema.properties.generatorVersion.const).toBe(GENERATOR_VERSION);
+    expect(schema.oneOf).toEqual(expect.arrayContaining([
+      expect.objectContaining({ properties: expect.objectContaining({ simulationVersion: { const: SIMULATION_VERSION }, generatorVersion: { const: GENERATOR_VERSION }, configId: expect.any(Object) }) }),
+      expect.objectContaining({ properties: expect.objectContaining({ simulationVersion: { const: LEGACY_SIMULATION_VERSION }, generatorVersion: { const: LEGACY_GENERATOR_VERSION }, configId: expect.any(Object) }) }),
+    ]));
   });
   it('pins the actual safe opening instead of obsolete tuning', () => {
     expect(fixture.rules.generation.firstPipeX).toBe(DEFAULT_CONFIG.pipes.safeLeadIn);

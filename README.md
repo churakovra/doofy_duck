@@ -135,7 +135,7 @@ Production settlement still requires the separate acceptance gates in the
 - Velocity tilt, wing/flap motion, restrained squash/stretch and bounded visual effects improve feedback without changing authoritative hitboxes. Extra motion respects the reduced-motion setting.
 - Original synthesized flap/pickup/death sounds and a quiet music loop unlock from a user gesture. Separate sound/music controls are saved locally; backgrounding and pause silence playback.
 
-The current rules use simulation version1.3.0, generator version1.2.0, and default config ID `dd-v1-stepped-v1`. See [`docs/ARCADE_SIMULATION.md`](docs/ARCADE_SIMULATION.md) for the rules.
+The current rules use simulation version1.4.0, generator version1.3.0, and default config ID `dd-v1-star-interval-v1`. Existing 1.3.0/1.2.0 runs retain the prior `dd-v1-stepped-v1` rules. See [`docs/ARCADE_SIMULATION.md`](docs/ARCADE_SIMULATION.md) for the rules.
 
 ## Verification commands
 

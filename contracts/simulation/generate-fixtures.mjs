@@ -2,8 +2,12 @@
 // Existing fixtures are checked by tests; regeneration is never an automatic test step.
 import { writeFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
-import { DEFAULT_CONFIG, PATTERN_CATALOG, configIdFor, createRunDescriptor, createRun, step, pauseRun, resumeRun, restartRun, makeInput, canonicalState, mix32, worldSpeedAt } from '../../packages/game-sim/dist/index.js';
-const descriptor = (name, seed = 1, config = DEFAULT_CONFIG) => createRunDescriptor({ runId: name, seed }, config);
+import { LEGACY_DEFAULT_CONFIG as DEFAULT_CONFIG, PATTERN_CATALOG, configIdFor, createRunDescriptor, createRun, step, pauseRun, resumeRun, restartRun, makeInput, canonicalState, mix32, worldSpeedAt } from '../../packages/game-sim/dist/index.js';
+const descriptor = (name, seed = 1, config = DEFAULT_CONFIG) => ({
+  ...createRunDescriptor({ runId: name, seed }, config),
+  simulationVersion: '1.3.0',
+  generatorVersion: '1.2.0',
+});
 const snapshot = s => JSON.parse(canonicalState(s));
 const cases = [];
 function scenario(name, config = DEFAULT_CONFIG, seed = 1, alter) {

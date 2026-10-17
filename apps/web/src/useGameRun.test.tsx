@@ -292,6 +292,7 @@ describe('run clock integration', () => {
     const onEvents = vi.fn();
     const config: GameConfig = {
       ...DEFAULT_CONFIG,
+      starSchedule: null,
       challenges: null,
       pipes: {
         ...DEFAULT_CONFIG.pipes, safeLeadIn: 51_000, horizon: 51_000,

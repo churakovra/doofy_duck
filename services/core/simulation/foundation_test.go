@@ -22,6 +22,7 @@ func TestFoundationCollectiblePrototypeKeys(t *testing.T) {
 		t.Run(typeID, func(t *testing.T) {
 			c := DefaultConfiguration()
 			c.Collectibles = []Definition{{typeID, 1, 1, 0, 0, 3, 7000, "appearance-v1"}}
+			c.StarSchedule = nil
 			s := foundationRun(t, c)
 			s.Phase = Running
 			s.Collectibles = []Collectible{{"edge-item", typeID, s.Duck.X, s.Duck.Y, 3, 7000, false}}

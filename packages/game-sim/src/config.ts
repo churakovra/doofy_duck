@@ -1,5 +1,5 @@
 import { deepFreeze } from "./internal.js";
-import { GENERATOR_VERSION, SIMULATION_VERSION, type FlightConfig, type GameConfig, type GapPattern, type PipeConfig, type RunDescriptor } from "./types.js";
+import { DEFAULT_CONFIG_ID, GENERATOR_VERSION, LEGACY_DEFAULT_CONFIG_ID, LEGACY_GENERATOR_VERSION, LEGACY_SIMULATION_VERSION, SIMULATION_VERSION, type FlightConfig, type GameConfig, type GapPattern, type PipeConfig, type RunDescriptor } from "./types.js";
 
 export const PATTERN_CATALOG: readonly GapPattern[] = deepFreeze([
   { id: "center", gaps: [280000, 280000, 280000, 280000] },
@@ -7,7 +7,7 @@ export const PATTERN_CATALOG: readonly GapPattern[] = deepFreeze([
   { id: "fall-rise", gaps: [300000, 280000, 260000, 280000] },
 ]);
 
-export const DEFAULT_CONFIG: GameConfig = deepFreeze({
+export const LEGACY_DEFAULT_CONFIG: GameConfig = deepFreeze({
   flight: {
     gravity: 320,
     flapVelocity: -5600,
@@ -76,6 +76,18 @@ export const DEFAULT_CONFIG: GameConfig = deepFreeze({
     ],
   },
 });
+export const DEFAULT_CONFIG: GameConfig = deepFreeze({
+  ...LEGACY_DEFAULT_CONFIG,
+  limits: { ...LEGACY_DEFAULT_CONFIG.limits, maxActiveCollectibles: 3 },
+  collectibles: LEGACY_DEFAULT_CONFIG.collectibles.map(definition =>
+    definition.typeId === "GAME_STAR" ? { ...definition, weight: 0 } : definition,
+  ),
+  spawnNoneWeight: 66,
+  starSchedule: {
+    minIntervalPipes: 8,
+    maxIntervalPipes: 16,
+  },
+});
 const integer = (v: unknown): v is number => Number.isSafeInteger(v);
 export function validateConfig(c: GameConfig): GameConfig {
   const f = c?.flight,
@@ -133,6 +145,17 @@ export function validateConfig(c: GameConfig): GameConfig {
     throw Error("invalid runtime limits");
   if (!integer(c.spawnNoneWeight) || c.spawnNoneWeight < 0)
     throw Error("invalid no-item weight");
+  if (c.starSchedule !== undefined && c.starSchedule !== null) {
+    const schedule = c.starSchedule;
+    const starDefinition = c.collectibles.find(definition => definition.typeId === "GAME_STAR");
+    if (!integer(schedule.minIntervalPipes) || schedule.minIntervalPipes < 8 ||
+        !integer(schedule.maxIntervalPipes) || schedule.maxIntervalPipes < schedule.minIntervalPipes ||
+        schedule.maxIntervalPipes > 16 || !starDefinition || starDefinition.weight !== 0 ||
+        c.limits.maxActiveCollectibles < 3 ||
+        !Number.isSafeInteger(p.spacing * schedule.minIntervalPipes) ||
+        p.spacing * schedule.minIntervalPipes <= p.horizon + (starDefinition?.radius ?? 0) + p.maxSpeed)
+      throw Error("invalid scheduled Star capacity or interval geometry");
+  }
   if (c.challenges !== undefined && c.challenges !== null) {
     const set = c.challenges;
     if (!integer(set.pipesPerFamily) || set.pipesPerFamily < 1 || set.pipesPerFamily > 16 ||
@@ -212,6 +235,12 @@ export function validateConfig(c: GameConfig): GameConfig {
   return c;
 }
 export function validateDescriptor(d: RunDescriptor): RunDescriptor {
+  const supportedRules =
+    (d?.simulationVersion === SIMULATION_VERSION && d?.generatorVersion === GENERATOR_VERSION) ||
+    (d?.simulationVersion === LEGACY_SIMULATION_VERSION && d?.generatorVersion === LEGACY_GENERATOR_VERSION);
+  const supportedConfig = d?.configId === DEFAULT_CONFIG_ID ||
+    d?.configId === LEGACY_DEFAULT_CONFIG_ID ||
+    (typeof d?.configId === "string" && d.configId.startsWith("dd-v1-config:") && d.configId.length > "dd-v1-config:".length);
   if (
     !d ||
     typeof d.runId !== "string" ||
@@ -219,12 +248,13 @@ export function validateDescriptor(d: RunDescriptor): RunDescriptor {
     !integer(d.seed) ||
     d.seed < 0 ||
     d.seed > 0xffffffff ||
-    d.simulationVersion !== SIMULATION_VERSION ||
-    d.generatorVersion !== GENERATOR_VERSION ||
-    !d.configId
+    !supportedRules ||
+    !supportedConfig ||
+    (d.configId === DEFAULT_CONFIG_ID && d.simulationVersion !== SIMULATION_VERSION) ||
+    (d.configId === LEGACY_DEFAULT_CONFIG_ID && d.simulationVersion !== LEGACY_SIMULATION_VERSION)
   )
     throw Error(
-      "invalid descriptor, seed, or unsupported simulation version or generator version",
+      "invalid descriptor, seed, config ID, or unsupported simulation version or generator version",
     );
   return d;
 }

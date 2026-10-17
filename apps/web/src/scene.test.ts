@@ -69,6 +69,7 @@ describe('scene rendering', () => {
   it('chooses collectible art by definition appearance and falls back for unknown appearances', () => {
     const config = {
       ...DEFAULT_CONFIG,
+      starSchedule: null,
       collectibles: [
         { ...DEFAULT_CONFIG.collectibles[0]!, typeId: 'FEATHER', appearance: 'game-star-v1' },
       ],

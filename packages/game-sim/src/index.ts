@@ -1,5 +1,6 @@
 export {
   DEFAULT_CONFIG,
+  LEGACY_DEFAULT_CONFIG,
   PATTERN_CATALOG,
   validateConfig,
   validateDescriptor,
@@ -8,6 +9,9 @@ export { MAX_COUNTER } from "./internal.js";
 export {
   DEFAULT_CONFIG_ID,
   GENERATOR_VERSION,
+  LEGACY_DEFAULT_CONFIG_ID,
+  LEGACY_GENERATOR_VERSION,
+  LEGACY_SIMULATION_VERSION,
   SIMULATION_VERSION,
   makeInput,
   mix32,
@@ -32,6 +36,7 @@ export type {
   RunDescriptor,
   RunDescriptorIdentity,
   RunState,
+  StarScheduleConfig,
   StepResult,
 } from "./types.js";
 export { canonicalJSON, canonicalState, configIdFor } from "./canonical.js";

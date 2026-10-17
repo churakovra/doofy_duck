@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_CONFIG, createRunDescriptor, createRun, generateNext, makeInput, step, worldSpeedAt } from '../src/index.js';
+import { DEFAULT_CONFIG, LEGACY_DEFAULT_CONFIG, createRunDescriptor, createRun, generateNext, makeInput, step, worldSpeedAt } from '../src/index.js';
 
 const descriptor = (seed = 1, config = DEFAULT_CONFIG) => createRunDescriptor({ runId: `retune-${seed}`, seed }, config);
 
@@ -20,7 +20,7 @@ describe('focused arcade retune', () => {
   });
 
   it('varies seeded gap centers within bounded adjacent changes', () => {
-    const config = { ...DEFAULT_CONFIG, challenges: null, pipes: { ...DEFAULT_CONFIG.pipes, horizon: 2_500_000 } };
+    const config = { ...LEGACY_DEFAULT_CONFIG, challenges: null, pipes: { ...LEGACY_DEFAULT_CONFIG.pipes, horizon: 2_500_000 } };
     const centers = createRun(descriptor(142, config), config).pipes.map(pipe => pipe.gapCenter);
     expect(new Set(centers).size).toBeGreaterThan(3);
     expect(centers[0]).toBeGreaterThanOrEqual(245000);
@@ -37,7 +37,7 @@ describe('focused arcade retune', () => {
   });
 
   it('retains seeded gap-walk continuity after every live pipe has been pruned', () => {
-    const config = { ...DEFAULT_CONFIG, challenges: null, pipes: { ...DEFAULT_CONFIG.pipes, horizon: 2_500_000 } };
+    const config = { ...LEGACY_DEFAULT_CONFIG, challenges: null, pipes: { ...LEGACY_DEFAULT_CONFIG.pipes, horizon: 2_500_000 } };
     const run = createRun(descriptor(142, config), config);
     const prior = run.pipes.at(-1)!.gapCenter;
     const pruned = { ...run, pipes: [] };
@@ -46,7 +46,7 @@ describe('focused arcade retune', () => {
   });
 
   it('records a real seeded FEATHER pickup and deterministic terminal death after taps stop', () => {
-    const config = { ...DEFAULT_CONFIG, challenges: null, pipes: { ...DEFAULT_CONFIG.pipes, spacing: 225000, maxSpeed: 5800 } };
+    const config = { ...LEGACY_DEFAULT_CONFIG, challenges: null, pipes: { ...LEGACY_DEFAULT_CONFIG.pipes, spacing: 225000, maxSpeed: 5800 } };
     let state = createRun(descriptor(0, config), config);
     let sequence = 0;
     const taps = new Set([1, 19, 52, 86, 120, 166]);

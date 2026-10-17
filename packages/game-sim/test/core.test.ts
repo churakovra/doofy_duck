@@ -142,6 +142,7 @@ describe('collectible definitions and pickup', () => {
       ...DEFAULT_CONFIG,
       collectibles: [],
       spawnNoneWeight: 1,
+      starSchedule: null,
     };
     let state = createRun(createRunDescriptor({ runId: descriptor.runId, seed: descriptor.seed }, config), config);
     state = step(state, [press(0)]).state;

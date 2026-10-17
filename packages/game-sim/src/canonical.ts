@@ -1,5 +1,5 @@
-import { DEFAULT_CONFIG, PATTERN_CATALOG, validateConfig } from "./config.js";
-import { DEFAULT_CONFIG_ID, type GameConfig, type RunState } from "./types.js";
+import { DEFAULT_CONFIG, LEGACY_DEFAULT_CONFIG, PATTERN_CATALOG, validateConfig } from "./config.js";
+import { DEFAULT_CONFIG_ID, LEGACY_DEFAULT_CONFIG_ID, type GameConfig, type RunState } from "./types.js";
 
 export function canonicalJSON(value: unknown): string {
   if (typeof value === "number" && !Number.isSafeInteger(value))
@@ -17,9 +17,15 @@ export function canonicalJSON(value: unknown): string {
 /** Collision-free local identity: custom IDs contain the complete canonical rules. */
 export function configIdFor(config: GameConfig): string {
   validateConfig(config);
-  const encode = (value: GameConfig) => canonicalJSON({ configuration: { ...value, challenges: value.challenges ?? null }, patterns: PATTERN_CATALOG });
+  const encode = (value: GameConfig) => {
+    const normalized = { ...value, challenges: value.challenges ?? null } as GameConfig & { starSchedule?: GameConfig["starSchedule"] };
+    if (normalized.starSchedule == null) delete normalized.starSchedule;
+    return canonicalJSON({ configuration: normalized, patterns: PATTERN_CATALOG });
+  };
   const content = encode(config);
-  return content === encode(DEFAULT_CONFIG) ? DEFAULT_CONFIG_ID : `dd-v1-config:${content}`;
+  if (content === encode(DEFAULT_CONFIG)) return DEFAULT_CONFIG_ID;
+  if (content === encode(LEGACY_DEFAULT_CONFIG)) return LEGACY_DEFAULT_CONFIG_ID;
+  return `dd-v1-config:${content}`;
 }
 
 export const canonicalState = (s: RunState): string => canonicalJSON(s);

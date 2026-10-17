@@ -112,6 +112,10 @@ func ConfigIDFor(c Config) (string, error) {
 	if cur == def {
 		return DefaultConfigID, nil
 	}
+	legacy, _ := CanonicalJSON(canonicalLegacyDefaultConfig)
+	if cur == legacy {
+		return LegacyDefaultConfigID, nil
+	}
 	body, e := CanonicalJSON(struct {
 		Configuration Config    `json:"configuration"`
 		Patterns      []Pattern `json:"patterns"`

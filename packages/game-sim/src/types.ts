@@ -7,9 +7,12 @@ export interface RunDescriptor {
   readonly generatorVersion: string;
   readonly configId: string;
 }
-export const SIMULATION_VERSION = "1.3.0";
-export const GENERATOR_VERSION = "1.2.0";
-export const DEFAULT_CONFIG_ID = "dd-v1-stepped-v1";
+export const SIMULATION_VERSION = "1.4.0";
+export const GENERATOR_VERSION = "1.3.0";
+export const DEFAULT_CONFIG_ID = "dd-v1-star-interval-v1";
+export const LEGACY_SIMULATION_VERSION = "1.3.0";
+export const LEGACY_GENERATOR_VERSION = "1.2.0";
+export const LEGACY_DEFAULT_CONFIG_ID = "dd-v1-stepped-v1";
 export interface RunDescriptorIdentity {
   readonly runId: string;
   readonly seed: number;
@@ -63,7 +66,12 @@ export interface GameConfig {
   readonly limits: LimitsConfig;
   readonly collectibles: readonly CollectibleDefinition[];
   readonly spawnNoneWeight: number;
+  readonly starSchedule?: StarScheduleConfig | null;
   readonly challenges?: ChallengeSet | null;
+}
+export interface StarScheduleConfig {
+  readonly minIntervalPipes: number;
+  readonly maxIntervalPipes: number;
 }
 export type ChallengeBand = "intro" | "cruise" | "pressure" | "recovery";
 export interface ChallengeFamily {
@@ -132,6 +140,8 @@ export interface RunState {
   readonly nextInputSequence: number;
   readonly lastCollectiblePipe: number;
   readonly nextSpawnPipeIndex: number;
+  readonly nextStarPipeIndex?: number;
+  readonly starScheduleOrdinal?: number;
   readonly inputHistory: readonly InputFrame[];
   readonly finalizationCount: number;
 }
