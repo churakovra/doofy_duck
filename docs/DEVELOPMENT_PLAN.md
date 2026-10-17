@@ -1,6 +1,6 @@
 # Development plan toward the first public release
 
-Updated October 17, 2026, after feature 1 implementation and verification. This is a proposed
+Updated October 17, 2026, after feature 1 verification and local wardrobe implementation. This is a proposed
 implementation sequence, not approval of prices, economics, infrastructure
 deployment, or unresolved game mechanics.
 
@@ -40,7 +40,7 @@ required by the root instructions.
 | 2 / ACCOUNT | Launch inside Telegram and access the player's own account | Identity contracts, service/tooling decisions | Authenticated Platform/Core/Economy skeleton; forged, expired and cross-user access rejected; real Telegram launch |
 | 3 / RUN | Save server-verified free-run progress and best score | ACCOUNT; lifecycle spec | Go checkpoint replay, durable accepted results, bounded retry/reconnect/expiry behavior; no currency issuance yet |
 | 4 / WALLET | Keep verified coins and in-game Stars across devices | RUN; approved issuance policy and durable delivery | Ledger credit from verified facts; duplicate/out-of-order delivery and outage recovery; pending credit visible |
-| 5 / ART | Choose a duck skin and background through a usable preview flow | SPEC: visual direction | Approved launch assets, stable catalog IDs, equipment preview and missing-asset fallback; gameplay unchanged |
+| 5 / ART — functional locally; launch art open | Choose a duck skin and background through a usable preview flow | Local test content implemented; approved visual direction/assets remain a release gate | Stable catalog IDs, independent preview/apply, local equipment saving and image fallback; approved launch assets still required |
 | 6 / SHOP | Buy specific cosmetics at visible prices and equip owned items | WALLET, ART, approved prices | Atomic debit/grant, ownership enforcement, concurrent/repeated request checks and cross-device persistence |
 | 7 / CONTINUE | Spend in-game Stars to continue once with the score preserved | WALLET; specified lifecycle, price and safe resume | TS/Go parity; no second continue, duplicate charge or duplicate earnings; debit/resume reconciliation |
 | 8 / PAY | Complete actual Telegram Stars purchases and receive the purchased entitlement | ACCOUNT; catalog, order and fulfillment rules | Validated payment ingress, idempotent fulfillment, cancellation/status/refund reconciliation and controlled end-to-end acceptance |
@@ -48,8 +48,9 @@ required by the root instructions.
 
 Operations, privacy/measurement design and abuse controls start with ACCOUNT and
 grow with each backend feature. They are part of delivering those features, not
-a final cleanup task. ART can overlap GAME and ACCOUNT once the visual direction
-is approved; PAY can overlap later SHOP/CONTINUE work after order contracts settle.
+a final cleanup task. ART functionality uses temporary test content and can
+overlap GAME and ACCOUNT; commercial artwork still requires visual direction
+approval. PAY can overlap later SHOP/CONTINUE work after order contracts settle.
 Existing audio, settings and translation systems need extension and acceptance,
 not replacement.
 
@@ -70,6 +71,27 @@ not replacement.
 Local feature implementation is done. The [verification report](CHALLENGE_RESULTS.md)
 records the bounded evidence and counterexample limits; the unchecked items are
 release acceptance, not claims established by automated tests.
+
+### Feature 5 local wardrobe — October 17, 2026
+
+- [x] Add three freely selectable test skins and three worlds with stable IDs,
+  independent draft preview, Apply/cancel and bilingual non-game-state controls.
+- [x] Save device-local equipment IDs with validation and visible session-only
+  fallback; keep cosmetics outside simulation identity and commercial ownership.
+- [x] Share procedural drawing and optional body/wing/background image placement
+  between preview and gameplay, with fallback and asynchronous lifecycle guards.
+- [x] Pass focused web checks, full routine verification (250 unit/fixture tests,
+  types, lint, Go tests and production build), independent lifecycle review,
+  documentation links and diff checks on this implementation. Routine verification
+  used a temporary writable Go cache because the sandbox restricts the default.
+- [ ] Approve final visual direction, launch assets and licensing/source records.
+- [ ] Complete browser layout/resource decoding and real Telegram/device acceptance;
+  browser suites were not run for this implementation.
+
+Functionality is complete locally with temporary content. The
+[authoring guide](COSMETICS.md) describes adding items and replacing artwork
+without changing saved IDs or the wardrobe flow. This does not complete SHOP or
+approve commercial artwork.
 
 ### Specification preparation — October 16, 2026
 
@@ -143,7 +165,7 @@ despite the already playable client.
 | Varied, stepped, fair challenges with recovery | Implemented locally: seeded families/recovery and bounded TS/Go physics evidence | Owner playtests/final tuning, real-device acceptance; universal reachability is not established |
 | Telegram Mini App and saved player progress | Browser game and untrusted local storage | Telegram integration, identity, authoritative services and persistence |
 | Coins and in-game Stars, separate from XTR | Product wording aligned; `FEATHER`/`GAME_STAR` local balances | Approved issuance policy, authoritative ledger |
-| Owned/equipped skins and backgrounds | Renderer palette boundary | Catalog, assets, inventory, equip, shop and purchase transactions |
+| Owned/equipped skins and backgrounds | Local wardrobe with three test skins/worlds, preview/apply, saved equipment and replaceable image resources | Approved launch art, authoritative inventory/equip, shop and purchase transactions |
 | Actual Telegram Stars purchases | Not implemented | Product/pricing decisions, provider integration, fulfillment and refunds |
 | At most one paid continue preserving score | Death is terminal | Lifecycle design, safe resume, authorization and accounting |
 | Russian and English | Typed bilingual catalogs, saved locale selection, localized errors and plurals | Real Telegram/device acceptance in both languages |
@@ -212,11 +234,17 @@ Owner playtests assess challenge, variety, and recovery before tuning is frozen.
 
 ### 3. Prototype the cosmetic experience
 
-Add stable catalog IDs, skin/background definitions, asset loading, equipment
-preview, and selection screens using the renderer boundary. Establish the final
-visual direction before producing the full asset catalog. Development inventory
-may use explicit test data; it cannot become proof of commercial ownership.
-Product quotes/prices remain provisional until the economy specification exists.
+Implemented locally as feature 5 / ART functionality: three procedural test skins
+and three worlds, stable catalog IDs, independent draft selection, combined
+preview, explicit Apply/cancel, and device-local equipment preferences. Optional
+body/wing/background images share preview/gameplay placement with procedural
+fallback and guarded asynchronous loading. See the
+[cosmetic authoring guide](COSMETICS.md) for adding or replacing content.
+
+Final visual direction, approved launch assets and source/licensing records
+remain open. Test selections are not proof of commercial ownership; account
+inventory and purchases remain SHOP work. Browser and real-device acceptance
+have not been established by this local implementation.
 
 Acceptance: changing appearance leaves hitboxes, rules identity, scoring and
 replay outcomes unchanged; missing assets have a usable fallback. The flow is

@@ -54,7 +54,12 @@ The renderer draws floor and ceiling boundaries from the run configuration.
 Its current viewport remains 360 by 580 presentation pixels. A rule set intended
 for a different world extent also needs a deliberately designed camera; accepting
 a simulation configuration alone does not guarantee it fits the browser view.
-The palette boundary is a starting point for art assets, not an inventory or shop.
+The local wardrobe resolves independently selected stable skin/background IDs
+into this appearance boundary and optional body, wing and background textures.
+Preview and gameplay share image placement; procedural art remains the fallback
+while resources load or after failure. Equipment is an untrusted device-local
+preference, not commercial inventory or ownership. See the
+[cosmetic authoring guide](COSMETICS.md) for adding and replacing content.
 
 ## Events, statistics, and progress
 

@@ -21,6 +21,7 @@ Follow the [development workflow](../AGENTS.md#development-workflow) and
 | [Local wallet](WALLET_UPDATE.md) | Record validation, settlement, tab ownership, and storage fallback |
 | [Audio implementation](AUDIO_IMPLEMENTATION.md) | Controller API, integration, and playback lifecycle |
 | [Flight feel](FLIGHT_FEEL.md) | Cosmetic motion, bounded effects, and reduced motion |
+| [Cosmetic authoring](COSMETICS.md) | Local wardrobe flow, stable catalog IDs, replaceable art, image conventions and fallback |
 | [Renderer lifecycle](RENDERER_LIFECYCLE.md) | Serialized Pixi initialization/destruction and checks |
 | [Native simulation benchmarks](SIMULATION_BENCHMARKS.md) | Reproducible workload, allocations, and measured local baseline |
 | [Earlier arcade integration verification](ARCADE_FIXES_RESULTS.md) | Historical integration checks dated 2026-10-14 |

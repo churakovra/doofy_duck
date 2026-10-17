@@ -31,6 +31,8 @@ while Pixi reads simulation state and draws cosmetic feedback.
 | [clock.ts](../apps/web/src/clock.ts), [input.ts](../apps/web/src/input.ts) | Tick scheduling and accepted pointer/keyboard actions |
 | [GameCanvas.tsx](../apps/web/src/GameCanvas.tsx) | Serialized Pixi lifecycle and frame presentation |
 | [scene.ts](../apps/web/src/scene.ts), [appearance.ts](../apps/web/src/appearance.ts), [feel.ts](../apps/web/src/feel.ts) | Scene drawing, physics-neutral palettes, bounded cosmetic effects |
+| [GameWardrobe.tsx](../apps/web/src/GameWardrobe.tsx), [GameWardrobePreview.tsx](../apps/web/src/GameWardrobePreview.tsx), [wardrobe.ts](../apps/web/src/wardrobe.ts) | Local draft/apply wardrobe, static preview, stable cosmetic catalogs and equipment preferences |
+| [wardrobe-assets.ts](../apps/web/src/wardrobe-assets.ts), [wardrobe-image-layer.ts](../apps/web/src/wardrobe-image-layer.ts) | Asynchronous cosmetic texture loading and shared preview/gameplay image placement with procedural fallback |
 | [useGameProgress.ts](../apps/web/src/useGameProgress.ts), [local-progress.ts](../apps/web/src/local-progress.ts) | Thin React subscription adapter and pure injected local progress session |
 | [wallet.ts](../apps/web/src/wallet.ts), [wallet-session.ts](../apps/web/src/wallet-session.ts), [storage.ts](../apps/web/src/storage.ts) | Local record validation, deduplication, tab ownership, persistence fallback |
 | [useGameAudio.ts](../apps/web/src/useGameAudio.ts), [audio.ts](../apps/web/src/audio.ts) | Audio lifecycle, preferences, synthesized sounds/music |

@@ -35,6 +35,13 @@ Open `http://127.0.0.1:4173/`. The root dev command builds the simulation worksp
 
 Open Menu before a flight, while paused, or after a run to choose Русский or English and control sound effects and music independently. These preferences save on this device when browser storage is available, and changing language preserves the current run. While flying, the screen shows only the score. The game pauses automatically when the app is backgrounded; resume explicitly after returning.
 
+Open Wardrobe / Гардероб before starting, while paused or after a run to preview
+and equip a duck skin and background independently. Apply saves the pair on this
+device when storage is available; closing discards the preview. The three skins
+and three worlds are freely selectable test cosmetics, not account inventory or
+approved launch art. See the [cosmetic authoring guide](docs/COSMETICS.md) to add
+catalog entries or replace drawings with image assets.
+
 Touch/click the field or press Space to flap. Screen buttons do not also flap. Backgrounding pauses; returning requires explicit resume. Restart is free. Personal best is untrusted local storage, not an online score.
 
 ## Current gameplay
