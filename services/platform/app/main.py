@@ -8,7 +8,7 @@ import logging
 import os
 import secrets
 import uuid
-from collections.abc import Awaitable, Callable, Iterator
+from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 
@@ -23,11 +23,13 @@ from app import database
 from app.auth import TelegramIdentity, TelegramInitDataError, verify_telegram_init_data
 from app.economy.models import CompletionEvidence
 from app.platform.models import Account, RefreshSession
+from app.request_logging import configure_json_logger, install_request_logging
 from app.schemas import AccessResponse, AccountResponse, DevAuthRequest, RunLifeCompleted, TelegramAuthRequest
 from app.settings import Settings
 from app.tokens import ACCESS_TTL_SECONDS, AccessTokenError, Ed25519TokenIssuer, TokenClaims, verify_access_token
 
 logger = logging.getLogger("doofy.platform")
+configure_json_logger(logger)
 REFRESH_COOKIE = "dd_refresh"
 CSRF_COOKIE = "dd_csrf"
 REFRESH_TTL = timedelta(days=30)
@@ -71,26 +73,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = config
     app.state.issuer = issuer
     app.state.public_keys = public_keys
-
-    @app.middleware("http")
-    async def safe_request_log(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
-        request_id = request.headers.get("X-Request-ID", "")
-        if not request_id or len(request_id) > 128:
-            request_id = str(uuid.uuid4())
-        try:
-            response = await call_next(request)
-        except Exception:
-            logger.error("request_failed request_id=%s path=%s status=500", request_id, request.url.path)
-            raise
-        logger.info(
-            "request_complete request_id=%s method=%s path=%s status=%d",
-            request_id,
-            request.method,
-            request.url.path,
-            response.status_code,
-        )
-        response.headers["X-Request-ID"] = request_id
-        return response
+    install_request_logging(app, logger)
 
     def get_platform_db() -> Iterator[Session]:
         yield from database.platform_session()
