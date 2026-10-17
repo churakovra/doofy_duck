@@ -32,6 +32,16 @@ const MAX_ACTIVE_TICKS = 216_000;
 
 function traceKey(accountId: string, runId: string): string { return `${accountId}:${runId}`; }
 
+function checkpointKeyRange(key: string): IDBKeyRange {
+  const prefix = `${key}:checkpoint:`;
+  return IDBKeyRange.bound(prefix, `${prefix}\uffff`);
+}
+
+function accountKeyRange(accountId: string): IDBKeyRange {
+  const prefix = `${accountId}:`;
+  return IDBKeyRange.bound(prefix, `${prefix}\uffff`);
+}
+
 export function isValidStoredTrace(value: unknown, accountId: string, runId: string): value is AccountTrace {
   if (!value || typeof value !== 'object') return false;
   const trace = value as Partial<AccountTrace>;
@@ -148,7 +158,7 @@ function idbRequest<T>(request: IDBRequest<T>): Promise<T> {
 
 export class IndexedDbTraceStorage implements TraceStorage {
   private readonly memory = new MemoryTraceStorage();
-  private readonly knownPending = new Map<string, Set<number>>();
+  private readonly knownPending = new Map<string, { revision: number; sequences: Set<number> }>();
   private failed = false;
   constructor(private readonly database: Promise<IDBDatabase> = openTraceDatabase()) {}
   get persistent(): boolean { return !this.failed; }
@@ -159,16 +169,23 @@ export class IndexedDbTraceStorage implements TraceStorage {
       const db = await this.database;
       const store = db.transaction(STORE_NAME, 'readonly').objectStore(STORE_NAME);
       const key = traceKey(accountId, runId);
-      const records = await idbRequest(store.getAll()) as { key: string; trace?: unknown; checkpoint?: unknown }[];
-      const meta = records.find((record) => record.key === `${key}:meta`);
+      const [meta, records] = await Promise.all([
+        idbRequest(store.get(`${key}:meta`)) as Promise<{ trace?: { storageRevision?: number } & object } | undefined>,
+        idbRequest(store.getAll(checkpointKeyRange(key))) as Promise<{ key: string; checkpoint?: unknown }[]>,
+      ]);
       if (!meta?.trace) return undefined;
-      const checkpointRecords = records.filter((record) => record.key.startsWith(`${key}:checkpoint:`))
-        .sort((left, right) => Number(left.key.slice(`${key}:checkpoint:`.length)) - Number(right.key.slice(`${key}:checkpoint:`.length)));
+      const checkpointRecords = records.sort((left, right) =>
+        Number(left.key.slice(`${key}:checkpoint:`.length)) - Number(right.key.slice(`${key}:checkpoint:`.length)));
       const pending = checkpointRecords.map((record) => record.checkpoint);
       const candidate = { ...(meta.trace as object), pending };
       if (!isValidStoredTrace(candidate, accountId, runId)) return undefined;
       if (checkpointRecords.some((record, index) => record.key !== `${key}:checkpoint:${candidate.pending[index]?.sequence}`)) return undefined;
-      this.knownPending.set(key, new Set(candidate.pending.map(({ sequence }) => sequence)));
+      const revision = meta.trace.storageRevision;
+      if (Number.isSafeInteger(revision)) {
+        this.knownPending.set(key, { revision: revision as number, sequences: new Set(candidate.pending.map(({ sequence }) => sequence)) });
+      } else {
+        this.knownPending.delete(key);
+      }
       return structuredClone(candidate);
     } catch {
       this.failed = true;
@@ -184,16 +201,22 @@ export class IndexedDbTraceStorage implements TraceStorage {
       const transaction = db.transaction(STORE_NAME, 'readwrite');
       const transactionResult = transactionDone(transaction);
       const store = transaction.objectStore(STORE_NAME);
-      const [meta, records] = await Promise.all([
-        idbRequest(store.get(`${key}:meta`)) as Promise<{ trace?: { writerGeneration?: number } } | undefined>,
-        idbRequest(store.getAll()) as Promise<{ key: string }[]>,
-      ]);
+      const knownPending = this.knownPending.get(key);
+      const metaRequest = idbRequest(store.get(`${key}:meta`)) as Promise<{ trace?: { writerGeneration?: number; storageRevision?: number } } | undefined>;
+      const meta = await metaRequest;
       if (Number.isSafeInteger(meta?.trace?.writerGeneration) && meta!.trace!.writerGeneration! > trace.writerGeneration) {
         await transactionResult;
         return;
       }
-      const previous = new Set(records.filter((record) => record.key.startsWith(`${key}:checkpoint:`))
-        .map((record) => Number(record.key.slice(`${key}:checkpoint:`.length))));
+      const revision = Number.isSafeInteger(meta?.trace?.storageRevision) ? meta!.trace!.storageRevision! : 0;
+      const hasCurrentCache = meta?.trace !== undefined && knownPending?.revision === revision;
+      const checkpointKeysRequest = !hasCurrentCache
+        ? idbRequest(store.getAllKeys(checkpointKeyRange(key))) as Promise<IDBValidKey[]>
+        : Promise.resolve([] as IDBValidKey[]);
+      const checkpointKeys = await checkpointKeysRequest;
+      const previous = hasCurrentCache ? knownPending!.sequences : new Set(checkpointKeys
+        .filter((checkpointKey): checkpointKey is string => typeof checkpointKey === 'string')
+        .map((checkpointKey) => Number(checkpointKey.slice(`${key}:checkpoint:`.length))));
       const nextSet = new Set(trace.pending.map(({ sequence }) => sequence));
       for (const checkpoint of trace.pending) {
         if (!previous.has(checkpoint.sequence)) store.put({ key: `${key}:checkpoint:${checkpoint.sequence}`, checkpoint: structuredClone(checkpoint) });
@@ -201,13 +224,14 @@ export class IndexedDbTraceStorage implements TraceStorage {
       for (const sequence of previous) if (!nextSet.has(sequence)) store.delete(`${key}:checkpoint:${sequence}`);
       const metadata = {
         accountId: trace.accountId, runId: trace.runId,
+        storageRevision: revision + 1,
         writerGeneration: trace.writerGeneration, writerToken: trace.writerToken,
         nextCheckpointSequence: trace.nextCheckpointSequence, activeTicks: trace.activeTicks,
         unsentTicks: trace.unsentTicks,
       };
       store.put({ key: `${key}:meta`, trace: structuredClone(metadata) });
       await transactionResult;
-      this.knownPending.set(key, nextSet);
+      this.knownPending.set(key, { revision: revision + 1, sequences: nextSet });
     } catch {
       this.failed = true;
       await this.memory.save(trace);
@@ -222,16 +246,16 @@ export class IndexedDbTraceStorage implements TraceStorage {
       const transaction = db.transaction(STORE_NAME, 'readwrite');
       const done = transactionDone(transaction);
       const store = transaction.objectStore(STORE_NAME);
-      const [meta, records] = await Promise.all([
+      const [meta, checkpointKeys] = await Promise.all([
         idbRequest(store.get(`${key}:meta`)) as Promise<{ trace?: { writerGeneration?: number } } | undefined>,
-        idbRequest(store.getAll()) as Promise<{ key: string }[]>,
+        idbRequest(store.getAllKeys(checkpointKeyRange(key))) as Promise<IDBValidKey[]>,
       ]);
       if (writerGeneration !== undefined && meta?.trace?.writerGeneration !== writerGeneration) {
         await done;
         return;
       }
       store.delete(`${key}:meta`);
-      for (const record of records) if (record.key.startsWith(`${key}:checkpoint:`)) store.delete(record.key);
+      for (const checkpointKey of checkpointKeys) if (typeof checkpointKey === 'string') store.delete(checkpointKey);
       await done;
       this.knownPending.delete(key);
     } catch {
@@ -244,10 +268,10 @@ export class IndexedDbTraceStorage implements TraceStorage {
     if (this.failed) return this.memory.clearAccount(accountId);
     try {
       const db = await this.database;
-      const records = await idbRequest(db.transaction(STORE_NAME, 'readonly').objectStore(STORE_NAME).getAll()) as { key: string; trace?: Pick<AccountTrace, 'accountId'> }[];
+      const keys = await idbRequest(db.transaction(STORE_NAME, 'readonly').objectStore(STORE_NAME).getAllKeys(accountKeyRange(accountId))) as IDBValidKey[];
       const transaction = db.transaction(STORE_NAME, 'readwrite');
       const store = transaction.objectStore(STORE_NAME);
-      for (const record of records) if (record.trace?.accountId === accountId || record.key.startsWith(`${accountId}:`)) store.delete(record.key);
+      for (const key of keys) if (typeof key === 'string') store.delete(key);
       await transactionDone(transaction);
       for (const key of this.knownPending.keys()) if (key.startsWith(`${accountId}:`)) this.knownPending.delete(key);
     } catch {

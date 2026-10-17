@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { acknowledgeCheckpoint, acknowledgeLatestTrace, appendTraceTick, IndexedDbTraceStorage, isValidStoredTrace, MemoryTraceStorage, type AccountTrace } from './account-trace';
 
 function newTrace(): AccountTrace {
@@ -70,4 +70,160 @@ describe('account replay trace', () => {
     await storage.remove('account-a', 'run-a', 1);
     expect(await storage.load('account-a', 'run-a')).toMatchObject({ writerGeneration: 2, writerToken: 'new-token' });
   });
+
+  it('does not reread earlier checkpoint payloads while saving appended ticks', async () => {
+    vi.stubGlobal('IDBKeyRange', { bound: (lower: string, upper: string) => ({ lower, upper }) });
+    try {
+      const database = new TraceDatabaseFixture();
+      const storage = new IndexedDbTraceStorage(Promise.resolve(database.asDatabase()));
+      let trace = newTrace();
+      for (let index = 0; index < 240; index++) {
+        trace = appendTraceTick(trace, []);
+        await storage.save(trace);
+      }
+
+      expect(database.wholeStoreReads).toBe(0);
+      expect(database.checkpointPayloadReads).toBe(0);
+      expect(database.keyOnlyReads).toBe(1);
+      expect([...database.records.keys()].filter((key) => key.includes(':checkpoint:'))).toHaveLength(2);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('rebuilds pending checkpoints after another storage instance clears the account', async () => {
+    vi.stubGlobal('IDBKeyRange', { bound: (lower: string, upper: string) => ({ lower, upper }) });
+    try {
+      const database = new TraceDatabaseFixture();
+      const storageA = new IndexedDbTraceStorage(Promise.resolve(database.asDatabase()));
+      const storageB = new IndexedDbTraceStorage(Promise.resolve(database.asDatabase()));
+      let trace = newTrace();
+      for (let index = 0; index < 120; index++) trace = appendTraceTick(trace, []);
+      await storageA.save(trace);
+
+      await storageB.clearAccount('account-a');
+      trace = appendTraceTick(trace, []);
+      await storageA.save(trace);
+
+      const reloaded = await new IndexedDbTraceStorage(Promise.resolve(database.asDatabase())).load('account-a', 'run-a');
+      expect(reloaded?.pending).toEqual(trace.pending);
+      expect(reloaded?.unsentTicks).toEqual(trace.unsentTicks);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('rebuilds pending checkpoints after another storage instance removes the run', async () => {
+    vi.stubGlobal('IDBKeyRange', { bound: (lower: string, upper: string) => ({ lower, upper }) });
+    try {
+      const database = new TraceDatabaseFixture();
+      const storageA = new IndexedDbTraceStorage(Promise.resolve(database.asDatabase()));
+      const storageB = new IndexedDbTraceStorage(Promise.resolve(database.asDatabase()));
+      let trace = newTrace();
+      for (let index = 0; index < 120; index++) trace = appendTraceTick(trace, []);
+      await storageA.save(trace);
+
+      await storageB.remove('account-a', 'run-a');
+      trace = appendTraceTick(trace, []);
+      await storageA.save(trace);
+
+      const reloaded = await new IndexedDbTraceStorage(Promise.resolve(database.asDatabase())).load('account-a', 'run-a');
+      expect(reloaded?.pending).toEqual(trace.pending);
+      expect(reloaded?.unsentTicks).toEqual(trace.unsentTicks);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('does not let an IndexedDB writer replace a trace from a newer generation', async () => {
+    vi.stubGlobal('IDBKeyRange', { bound: (lower: string, upper: string) => ({ lower, upper }) });
+    try {
+      const database = new TraceDatabaseFixture();
+      const storageA = new IndexedDbTraceStorage(Promise.resolve(database.asDatabase()));
+      const storageB = new IndexedDbTraceStorage(Promise.resolve(database.asDatabase()));
+      let oldTrace = newTrace();
+      for (let index = 0; index < 120; index++) oldTrace = appendTraceTick(oldTrace, []);
+      await storageA.save(oldTrace);
+
+      const newTraceAtGeneration2 = { ...newTrace(), writerGeneration: 2, writerToken: 'new-writer' };
+      await storageB.save(newTraceAtGeneration2);
+      await storageA.save(oldTrace);
+
+      const reloaded = await new IndexedDbTraceStorage(Promise.resolve(database.asDatabase())).load('account-a', 'run-a');
+      expect(reloaded).toMatchObject({ writerGeneration: 2, writerToken: 'new-writer', pending: [] });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });
+
+class TraceDatabaseFixture {
+  readonly records = new Map<string, { key: string; [name: string]: unknown }>();
+  wholeStoreReads = 0;
+  checkpointPayloadReads = 0;
+  keyOnlyReads = 0;
+
+  asDatabase(): IDBDatabase {
+    return {
+      transaction: () => {
+        const transaction = {
+          oncomplete: null as ((event: Event) => void) | null,
+          onabort: null as ((event: Event) => void) | null,
+          onerror: null as ((event: Event) => void) | null,
+          objectStore: () => ({
+            get: (key: string) => {
+              if (key.includes(':checkpoint:')) this.checkpointPayloadReads++;
+              this.completeLater(transaction);
+              return this.request(this.records.get(key));
+            },
+            getAll: (range?: IDBKeyRange) => {
+              this.wholeStoreReads++;
+              this.completeLater(transaction);
+              return this.request(this.select(range));
+            },
+            getAllKeys: (range?: IDBKeyRange) => {
+              this.keyOnlyReads++;
+              this.completeLater(transaction);
+              return this.request(this.select(range).map(({ key }) => key));
+            },
+            put: (record: { key: string; [name: string]: unknown }) => {
+              this.records.set(record.key, record);
+              this.completeLater(transaction);
+              return {};
+            },
+            delete: (key: string) => {
+              this.records.delete(key);
+              this.completeLater(transaction);
+              return {};
+            },
+          }),
+        };
+        return transaction as unknown as IDBTransaction;
+      },
+    } as unknown as IDBDatabase;
+  }
+
+  private select(range?: IDBKeyRange) {
+    const bounds = range as unknown as { lower?: string; upper?: string } | undefined;
+    return [...this.records.values()].filter(({ key }) =>
+      !bounds || ((bounds.lower === undefined || key >= bounds.lower) && (bounds.upper === undefined || key <= bounds.upper)));
+  }
+
+  private request<T>(result: T): IDBRequest<T> {
+    const request = {
+      result: undefined as T | undefined,
+      error: null,
+      onsuccess: null as ((event: Event) => void) | null,
+      onerror: null as ((event: Event) => void) | null,
+    };
+    queueMicrotask(() => {
+      request.result = result;
+      request.onsuccess?.(new Event('success'));
+    });
+    return request as unknown as IDBRequest<T>;
+  }
+
+  private completeLater(transaction: { oncomplete: ((event: Event) => void) | null }) {
+    setTimeout(() => transaction.oncomplete?.(new Event('complete')), 0);
+  }
+}
