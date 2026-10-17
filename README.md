@@ -7,7 +7,11 @@ gameplay foundation, not that commercial release.
 
 A locally playable endless pipe game: tap to flap, pass pipes for points, collect occasional coins/in-game Stars pickups into a local in-game wallet, pause, die, and restart. React/PixiJS presents a pure TypeScript simulation; a native Go package checks the same full-state/event fixtures.
 
-This is a local development foundation, **not a commercial release**. No accounts, authoritative wallet, payments, gift redemption, paid advantages, leaderboards, or live valuable rewards. Art is placeholder work, not an approved visual direction.
+This is a development foundation, **not a commercial release**. An optional local
+Python/Go/PostgreSQL stack adds Telegram accounts and server-verified runs. Account
+currency issuance, purchases, paid continue, gifts and leaderboards remain disabled.
+Art is placeholder work. Hosted capacity and real Telegram acceptance remain open;
+see the [backend implementation record](docs/BACKEND_FOUNDATION.md).
 
 ## Project navigation
 
@@ -16,11 +20,12 @@ This is a local development foundation, **not a commercial release**. No account
 - [Code map](docs/ARCHITECTURE.md): runtime flow, file ownership, and checks by task.
 - [Foundation](docs/FOUNDATION.md): extension points for rules, cosmetics, and event consumers.
 - [Documentation map](docs/README.md): current rules, product vision, future architecture, and supporting research.
-- [Latest recorded verification](docs/CHALLENGE_RESULTS.md): October 17 challenge implementation checks, bounded physics evidence and remaining acceptance work.
+- [Backend verification](docs/BACKEND_FOUNDATION.md): ACCOUNT/RUN checks, capacity measurements and external acceptance gates.
+- [Challenge verification](docs/CHALLENGE_RESULTS.md): October 17 challenge checks and bounded physics evidence.
 
 ## Requirements
 
-Local verification toolchain: Node.js 26.11.1, npm 11.20.0, Go 1.27.2. Direct JavaScript dependencies are exact-pinned in package.json/package-lock.json; Go uses only the standard library. The package engine requirements currently need Node26, not an arbitrary older LTS. No Python, PostgreSQL, RabbitMQ, Docker, bot token, or cloud server is needed for this slice.
+Local verification toolchain: Node.js 26.11.1, npm 11.20.0, Go 1.27.2. Direct JavaScript dependencies are exact-pinned in package.json/package-lock.json; the pure Go simulation uses only the standard library. The package engine requirements currently need Node26, not an arbitrary older LTS. Local practice needs no Python, PostgreSQL, Docker, bot token or cloud server. The optional account stack uses Python 3.15.0, uv 0.13.1, pinned pgx dependencies and Docker Compose with PostgreSQL 18.0. RabbitMQ is deferred.
 
 ## Start locally
 
@@ -44,6 +49,68 @@ catalog entries or replace drawings with image assets.
 
 Touch/click the field or press Space to flap. Screen buttons do not also flap. Backgrounding pauses; returning requires explicit resume. Restart is free. Personal best is untrusted local storage, not an online score.
 
+## Account-backed local development
+
+Generate ignored local credentials once, then start the stack from the repository root:
+
+```sh
+(cd services/platform && uv run python ../../deploy/scripts/generate-dev-keys.py)
+docker compose --env-file .env.dev -f deploy/compose.yaml --profile local up --build -d
+npm run dev
+```
+
+Open `http://127.0.0.1:4173/`, choose account mode and enter a positive development
+Telegram user ID. Vite proxies API requests to the one-origin gateway on port 8080.
+The static build is also served at `http://127.0.0.1:8080/`; its production frontend
+uses Telegram login, while the development UI is available through Vite. Development
+login is explicitly enabled only in the local backend configuration. Never use the
+ignored `.env.dev` credentials for a public deployment.
+
+Account runs use server-issued identities and verified checkpoints, retain unsent
+inputs on this device where storage permits, and let an already-started flight
+finish locally through an outage. A completed unresolved run waits for gameplay
+verification before another account flight starts; receipt delivery retries independently.
+Device takeover requires
+confirmation. A run ends after at most one hour of active flight; pauses do not
+consume active ticks. Verified pickups are evidence only: account rewards are not
+enabled, and local practice funds are never imported.
+
+Automatic session refresh requires browser Web Locks and writable local storage.
+If either is unavailable, explicit reauthentication remains available; pending runs
+stay on the server. IndexedDB failure separately warns that unsent inputs may be
+lost when the page closes. Verified completed results can be reopened after login
+or reload, including from another device.
+
+Run the local cross-service smoke after startup:
+
+```sh
+(cd services/platform && uv run python ../../deploy/scripts/backend-smoke.py)
+```
+
+This command uses disposable development accounts and checks account ownership,
+Go replay, and exactly one stored completion receipt. It requires Docker access.
+See [service contracts](contracts/http/account-auth-v1.md), the
+[Core API](contracts/http/core-run-v1.md) and the
+[operations runbook](docs/BACKEND_OPERATIONS.md). Provider, budget and deployment
+approval remain separate; the Compose production overlay is a template, not an
+HA deployment or release acceptance result.
+
+The load harness requires development authentication and disposable accounts. Run
+only against the local/test stack, with a new account ID range for each experiment:
+
+```sh
+uv run --project services/platform --env-file .env.dev go -C services/core/backend run ./cmd/loadtest \
+  -core http://127.0.0.1:8080 -platform http://127.0.0.1:8080 \
+  -clients 1000 -duration 1h2m -checkpoints-per-second 500 \
+  -minimum-checkpoint-rate 475 -telegram-user-id-start 920000000
+```
+
+For outage delivery tests, run the harness inside the backend network with direct
+operator access to Core and add `-outage-after 2m -outage-duration 5m
+-reconnect-spread 1m`. The gateway hides operator routes. Startup retries and measured
+checkpoint failures are reported separately; nonzero exit means an acceptance gate
+failed. See the [capacity record](docs/BACKEND_FOUNDATION.md) for actual results.
+
 ## Current gameplay
 
 - The wallet displays cumulative balances separately from completed-run earnings and saves locally after death. It is not an account, a Telegram Stars balance, or a redeemable reward. Earlier unsaved earnings cannot be recovered.
@@ -66,6 +133,8 @@ npm run test:go:race
 npm run test:parity
 npm run build
 npm run check                   # routine: types, lint, unit/fixture tests, Go tests, build
+npm run check:backend           # Python lint/types/unit and Core unit/race/vet
+npm run check:backend:integration # requires all three dedicated PostgreSQL test URLs
 
 # Optional browser verification, only when requested:
 npx playwright install chromium  # one-time browser prerequisite
@@ -74,6 +143,14 @@ npm run test:dev                 # development browser suite; run separately aft
 npm run check:browser            # both browser suites, sequentially
 npm run check:full               # routine checks followed by both browser suites
 ```
+
+Backend integration uses `PLATFORM_TEST_DATABASE_URL`, `ECONOMY_TEST_DATABASE_URL`
+and `CORE_TEST_DATABASE_URL` against dedicated `*_test` databases. The integration
+command fails when these variables are absent. Native Python needs libpq for
+PostgreSQL tests; `services/platform/Dockerfile.test` supplies a pinned Linux test
+environment. Unit-only checks explicitly report database tests as skipped when
+URLs are absent. Backend CI defines real PostgreSQL checks; a committed workflow
+is not evidence of a hosted CI run.
 
 Native-only commands:
 
@@ -90,7 +167,10 @@ Playwright starts an isolated **production preview on127.0.0.1:4174** and an iso
 
 - `apps/web`: renderer and HUD, run/progress/audio hooks, fixed-step scheduler, local storage, browser tests.
 - `packages/game-sim`: pure deterministic TypeScript rules and semantic/fixture tests.
-- `services/core/simulation`: native Go rules and parity verification; no HTTP service.
+- `services/core/simulation`: native Go rules and parity verification.
+- `services/core/backend`: Go HTTP verification, PostgreSQL checkpoints and completion outbox.
+- `services/platform`: Python identity/sessions and Economy completion inbox; no account issuance.
+- `deploy`: isolated local Compose, gateway templates, credential helper and end-to-end smoke.
 - `contracts/simulation`: exact rules, authored pattern catalog, canonical fixtures and offline producer.
 - `docs/PRODUCT_VISION.md`: approved product purpose and commercial scope.
 

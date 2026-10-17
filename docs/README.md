@@ -33,11 +33,11 @@ rules and component notes describe current behavior. Recorded checks retain thei
 execution date and are not a live health indicator. Physical Telegram/mobile
 behavior, named-device performance, and owner gameplay assessment remain open.
 
-## Future architecture and supporting research
+## Service architecture and supporting research
 
 | Document | Use it for |
 | --- | --- |
-| [ADR-001](ADR-001-MICROSERVICES.md) | Selected future Python/Go service ownership and consistency boundaries |
+| [ADR-001](ADR-001-MICROSERVICES.md) | Approved Python/Go service ownership and consistency boundaries |
 | [ADR-002](ADR-002-CLIENT-AND-REWARDS.md) | HTTP verification direction, currency boundaries, and later gift workflow |
 | [ADR-003](ADR-003-CURRENCY-AND-BROKER.md) | Current currency names, approved HTTP delivery and deferred RabbitMQ |
 | [Telegram audio research](TELEGRAM_AUDIO_RESEARCH.md) | Browser-policy basis and real-device validation limits |

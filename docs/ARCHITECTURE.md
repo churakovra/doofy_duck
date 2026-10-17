@@ -1,9 +1,10 @@
 # Code map
 
-This is a local browser game and two implementations of the same deterministic
-simulation. There is no running Go HTTP service, account system, or distributed
-backend in this repository. The root [README](../README.md) owns setup commands;
-the [documentation map](README.md) separates current behavior, product goals, and future architecture.
+The repository contains a standalone local practice game and an optional account-backed
+Python/Go/PostgreSQL stack. Account currency issuance, purchases, paid continue and
+hosted deployment remain outside the delivered foundation. The root [README](../README.md)
+owns commands; [backend evidence](BACKEND_FOUNDATION.md) distinguishes executed checks
+from hosted and real Telegram acceptance.
 
 ## Runtime flow
 
@@ -21,11 +22,30 @@ The browser runs the TypeScript simulation. The Go library independently replays
 the contract; the browser does not call it. React presents HUD/lifecycle changes,
 while Pixi reads simulation state and draws cosmetic feedback.
 
+Account mode uses the same simulation and renderer, with `AccountGame` coordinating
+memory-only access credentials, exact per-tick input recording, IndexedDB recovery,
+checkpoint submission and status reconciliation. It never settles the practice wallet.
+
+```text
+Browser → one-origin gateway → Python Platform: identity/session/account
+                            → Go Core: issued run → replay → PostgreSQL checkpoints
+                                                     └→ durable outbox → Python inbox
+```
+
+Python owns separate Platform/Economy modules and databases; Core owns its database.
+There are no cross-service SQL reads. Completion receipts store verified facts without
+issuing currency. See [approved ownership](ADR-001-MICROSERVICES.md) and the versioned
+[account](../contracts/http/account-auth-v1.md)/[run](../contracts/http/core-run-v1.md) contracts.
+
 ## Source ownership
 
 | Path | Responsibility |
 | --- | --- |
 | [apps/web/src/main.tsx](../apps/web/src/main.tsx) | React mount and error boundary |
+| `apps/web/src/AccountGame.tsx`, `account-api.ts`, `account-trace.ts` | Account-mode lifecycle, in-memory access credentials, exact input transport and validated IndexedDB recovery |
+| `services/platform/app`, `services/platform/migrations` | Telegram auth, signed tokens, rotating refresh sessions, account lookup and idempotent completion inbox |
+| `services/core/backend` | Go HTTP authorization, run ownership, replay/checkpoints, writer fencing, outage windows, outbox and load harness |
+| `deploy` | Compose, gateway routing, isolated development credentials and cross-service smoke |
 | [Game.tsx](../apps/web/src/Game.tsx), [GameButton.tsx](../apps/web/src/GameButton.tsx), [GameSettings.tsx](../apps/web/src/GameSettings.tsx) | UI composition, shared button variants/input isolation, and the always-available settings menu |
 | [useGameRun.ts](../apps/web/src/useGameRun.ts) | Run descriptors, lifecycle, queued input, fixed-step advancement |
 | [clock.ts](../apps/web/src/clock.ts), [input.ts](../apps/web/src/input.ts) | Tick scheduling and accepted pointer/keyboard actions |
@@ -91,8 +111,9 @@ executing that frame's ticks. The clock stays latched until explicit resume;
 idle/paused/dead presentation does not accumulate simulation debt. Interpolation
 is bounded to 0–1. Inputs queued before an overload pause are discarded.
 
-Local progress is browser-owned and untrusted. The pure session accepts storage
-and lock dependencies; it has no server-wallet implementation. Its frozen
+Practice progress is browser-owned and untrusted. The pure practice session accepts storage
+and lock dependencies; it has no server-wallet implementation. Account mode stores verified
+completion evidence separately and never imports practice balances. Its frozen
 snapshots cannot transfer authority to client balances. Paid continue transitions
 and their accounting remain feature work.
 

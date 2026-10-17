@@ -1,6 +1,6 @@
 # Development plan toward the first public release
 
-Updated October 17, 2026, after feature 1 verification and local wardrobe implementation. This is a proposed
+Updated October 17, 2026, after challenge, local wardrobe and ACCOUNT/RUN implementation. This is a proposed
 implementation sequence, not approval of prices, economics, infrastructure
 deployment, or unresolved game mechanics.
 
@@ -37,8 +37,8 @@ required by the root instructions.
 | --- | --- | --- | --- |
 | Preparation / SPEC — done | Prepare challenge, run/continue/settlement and economy specifications; register art, pilot and infrastructure decisions | Product vision and current-code review | [Specification package](MVP_SPECIFICATIONS.md); acceptance examples and owned decision gates; completion recorded below |
 | 1 / GAME — done locally | Stepped challenge families and recovery sections make repeated flights varied and fair | SPEC: difficulty | [Implementation and checks](CHALLENGE_RESULTS.md); bounded physics evidence passed; owner tuning/device acceptance remains open |
-| 2 / ACCOUNT | Launch inside Telegram and access the player's own account | Identity contracts, service/tooling decisions | Authenticated Platform/Core/Economy skeleton; forged, expired and cross-user access rejected; real Telegram launch |
-| 3 / RUN | Save server-verified free-run progress and best score | ACCOUNT; lifecycle spec | Go checkpoint replay, durable accepted results, bounded retry/reconnect/expiry behavior; no currency issuance yet |
+| 2 / ACCOUNT — implemented locally; Telegram acceptance open | Launch inside Telegram and access the player's own account | Identity contracts, service/tooling decisions | Platform identity and rotating sessions, Core authorization and real-database checks; real Telegram launch remains required |
+| 3 / RUN — implemented locally; capacity acceptance in progress | Save server-verified free-run progress and best score | ACCOUNT; lifecycle spec | Go checkpoint replay, persisted results/best, writer fencing, offline recovery and durable completion delivery; see dated backend evidence |
 | 4 / WALLET | Keep verified coins and in-game Stars across devices | RUN; approved issuance policy and durable delivery | Ledger credit from verified facts; duplicate/out-of-order delivery and outage recovery; pending credit visible |
 | 5 / ART — functional locally; launch art open | Choose a duck skin and background through a usable preview flow | Local test content implemented; approved visual direction/assets remain a release gate | Stable catalog IDs, independent preview/apply, local equipment saving and image fallback; approved launch assets still required |
 | 6 / SHOP | Buy specific cosmetics at visible prices and equip owned items | WALLET, ART, approved prices | Atomic debit/grant, ownership enforcement, concurrent/repeated request checks and cross-device persistence |
@@ -123,13 +123,14 @@ and implementation evidence. Currency issuance remains disabled until earning ru
 are approved. Checkpoints save evidence; credit is only eligible after a verified
 death or cap completion. The next account-backed flight waits for result verification.
 
-GAME and ART are implemented locally. ACCOUNT and RUN are the authorized next
-engineering work, with WALLET activation, SHOP, CONTINUE and PAY remaining later gates.
+GAME, ART and ACCOUNT/RUN have local implementations. Finish measured capacity and
+real Telegram acceptance before resuming SHOP planning. WALLET activation additionally
+requires approved earning eligibility, rates, caps and spending policy.
 
 The owner needs to decide challenge targets and recovery behavior, continue price
 and safe-resume behavior, launch products/prices and earning rules, visual
-direction, and pilot countries/devices/budget. Engineering should propose the
-checkpoint/retry contracts and pending broker/tooling decisions for review.
+direction, and pilot countries/devices/budget. Checkpoint/retry contracts, tooling
+and HTTP delivery are implemented; provider selection and hosted acceptance remain open.
 No arbitrary prices, currency conversion or delivery dates are assumed here.
 
 ## Release checklist
@@ -160,13 +161,13 @@ despite the already playable client.
 | --- | --- | --- |
 | Single-tap flight, scoring, free new runs | Implemented locally | Telegram/device acceptance and gameplay tuning |
 | Varied, stepped, fair challenges with recovery | Implemented locally: seeded families/recovery and bounded TS/Go physics evidence | Owner playtests/final tuning, real-device acceptance; universal reachability is not established |
-| Telegram Mini App and saved player progress | Browser game and untrusted local storage | Telegram integration, identity, authoritative services and persistence |
+| Telegram Mini App and saved player progress | Telegram authentication implementation, rotating sessions, authoritative run/checkpoint/result persistence and account best | Real Telegram/device acceptance, hosted capacity and failover acceptance |
 | Coins and in-game Stars, separate from XTR | Product wording aligned; `FEATHER`/`GAME_STAR` local balances | Approved issuance policy, authoritative ledger |
 | Owned/equipped skins and backgrounds | Local wardrobe with three test skins/worlds, preview/apply, saved equipment and replaceable image resources | Approved launch art, authoritative inventory/equip, shop and purchase transactions |
 | Actual Telegram Stars purchases | Not implemented | Product/pricing decisions, provider integration, fulfillment and refunds |
 | At most one paid continue preserving score | Death is terminal | Lifecycle design, safe resume, authorization and accounting |
 | Russian and English | Typed bilingual catalogs, saved locale selection, localized errors and plurals | Real Telegram/device acceptance in both languages |
-| Operational and abuse protection | Local validation and simulation parity | Service authorization, limits, detection, monitoring and recovery |
+| Operational and abuse protection | Service ownership/authorization, request limits, durable retries and local recovery tests | Hosted alerts, abuse policy, restore/failover drills and operational acceptance |
 
 ## Delivery sequence
 
@@ -249,6 +250,9 @@ usable in both languages. Account ownership/purchases arrive in milestone 6.
 
 ### 4. Establish Telegram identity and service contracts
 
+Local implementation is present; real Telegram acceptance remains open. The
+[backend record](BACKEND_FOUNDATION.md) owns executed verification evidence.
+
 Implement the approved Python application (Platform and Economy modules) and Go Core
 behind one public origin. Start with an authenticated end-to-end
 service skeleton, versioned HTTP/event contracts, service-owned database
@@ -264,6 +268,10 @@ forged or cross-user requests fail. Each service builds independently; no servic
 reads another service's database. Contract compatibility checks enter CI.
 
 ### 5. Deliver verified gameplay into authoritative progress
+
+Run verification, offline recovery and completion-fact delivery are implemented
+locally. Currency issuance is disabled; this milestone's ledger credit is still
+blocked on earning-policy approval.
 
 Build the first complete backend slice: authenticate → issue a server-owned run
 descriptor → play locally → submit bounded ordered input checkpoints → replay
@@ -358,10 +366,11 @@ explicit; prior verification reports do not validate later changes.
 
 ## Recommended next work
 
-Implement feature 2 / ACCOUNT after the dependent infrastructure/authentication
-decisions in the [specification package](MVP_SPECIFICATIONS.md). The next backend
-slice is authenticated verified free runs, followed by authoritative wallet
-credit when issuance and durable delivery are decided. In parallel, collect
+Complete the [ACCOUNT/RUN acceptance record](BACKEND_FOUNDATION.md), including
+measured sustained capacity and real Telegram recovery. Select hosting only after
+measuring resource use and obtaining provider/budget/deployment approval. Resume SHOP
+planning after authenticated verified runs are accepted; activate wallet credit only
+after the earning and spending rules are approved. In parallel, collect
 owner feedback on the implemented challenge tuning; keep its acceptance limits
 visible rather than treating the automated witnesses as a human playtest.
 

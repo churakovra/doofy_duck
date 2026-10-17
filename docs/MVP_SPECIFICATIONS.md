@@ -6,8 +6,9 @@ only the milestone that depends on them.
 
 Read this with the [development plan](DEVELOPMENT_PLAN.md), [current simulation rules](ARCADE_SIMULATION.md), [foundation
 boundaries](FOUNDATION.md), [service architecture](ADR-001-MICROSERVICES.md), and [currency/broker
-proposal](ADR-003-CURRENCY-AND-BROKER.md). Current gameplay is local TypeScript and Go simulation; the commercial services,
-account, persistent run lifecycle, ledger, and continue are not implemented. The
+proposal](ADR-003-CURRENCY-AND-BROKER.md). The local practice game and optional account/run backend are implemented separately;
+account issuance, the ledger, commerce and continue remain disabled. Hosted acceptance
+and real Telegram evidence are recorded separately in [backend foundation](BACKEND_FOUNDATION.md). The
 current challenge contract is defined in the linked simulation rules.
 
 ## Decision labels and authority
@@ -133,7 +134,8 @@ abandonment of an unfinished run, discarding unsubmitted progress.
 
 A locally finished flight shows waiting/retry until verified or definitively
 rejected. The next account-backed flight waits for this result. Gameplay verification
-and completion-fact delivery have distinct statuses; a delivery outage is recoverable.
+and completion-fact delivery have distinct statuses; once gameplay is durably verified,
+pending or rejected receipt delivery cannot block the next flight or invalidate the score.
 
 Checkpoints preserve collection evidence but never credit currency during flight.
 On each verified death or cap completion, Core atomically records one immutable
