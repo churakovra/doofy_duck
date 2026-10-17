@@ -15,6 +15,7 @@ Follow the [development workflow](../AGENTS.md#development-workflow) and
 | [Foundation](FOUNDATION.md) | Extension boundaries for rule configuration, cosmetics, events, and future statistics |
 | [Development plan](DEVELOPMENT_PLAN.md) | MVP finish line, prioritized feature backlog, next batch, dependencies, and release acceptance gates |
 | [MVP specifications](MVP_SPECIFICATIONS.md) | Proposed difficulty, run/continue/settlement and economy rules, acceptance scenarios, and owned product/release/infrastructure decision gates |
+| [SHOP implementation backlog](SHOP_IMPLEMENTATION_PLAN.md) | Item 6 tasks, WALLET prerequisites, decision gates and verification sequence |
 | [Backend foundation](BACKEND_FOUNDATION.md) | Approved ACCOUNT/RUN scope, implementation evidence and outstanding hosted acceptance |
 | [Backend operations](BACKEND_OPERATIONS.md) | Hosted acceptance, outage response, durable delivery, restore and rollback runbook |
 | [Challenge verification](CHALLENGE_RESULTS.md) | Feature 1 implementation, executed checks dated 2026-10-17, bounded physics/replay evidence and open playtest/device acceptance |

@@ -297,6 +297,9 @@ and another device. Input verification alone is not human-play detection.
 
 ### 6. Connect the shop and equipment to Economy
 
+See the [SHOP implementation backlog](SHOP_IMPLEMENTATION_PLAN.md) for prerequisite
+decisions, WALLET tasks, catalog/inventory, purchase transactions, UI and acceptance.
+
 Implement the approved catalog, owned inventory, equip operations, and purchases
 using internal coins/in-game Stars. Economy validates prices and ownership and
 atomically debits balances and grants items. Replace development inventory with
