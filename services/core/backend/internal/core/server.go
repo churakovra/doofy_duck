@@ -555,7 +555,7 @@ func (s *Server) checkpoint(w http.ResponseWriter, r *http.Request) {
 	var completed any
 	var reasonValue any
 	if reason != "" {
-		status = "completion_pending"
+		status = "completed"
 		verificationStatus, deliveryStatus = "verified", "pending"
 		completed = s.now()
 		reasonValue = reason

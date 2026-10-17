@@ -131,11 +131,9 @@ func (w *CompletionWorker) finish(ctx context.Context, e leasedEvent, accepted b
 	}
 	defer tx.Rollback(ctx)
 	status := "rejected"
-	runStatus := "rejected"
 	deliveryStatus := "rejected"
 	if accepted {
 		status = "delivered"
-		runStatus = "completed"
 		deliveryStatus = "delivered"
 	}
 	tag, err := tx.Exec(ctx, `UPDATE core_outbox SET status=$2,lease_until=NULL,lease_token=NULL,delivered_at=CASE WHEN $2='delivered' THEN now() ELSE NULL END,last_error=NULL WHERE event_id=$1 AND status='leased' AND lease_token=$3`, e.EventID, status, e.LeaseToken)
@@ -145,8 +143,12 @@ func (w *CompletionWorker) finish(ctx context.Context, e leasedEvent, accepted b
 	if tag.RowsAffected() != 1 {
 		return nil
 	}
-	if _, err = tx.Exec(ctx, `UPDATE core_runs SET status=$2,delivery_status=$3 WHERE id=$1 AND status='completion_pending'`, e.RunID, runStatus, deliveryStatus); err != nil {
+	tag, err = tx.Exec(ctx, `UPDATE core_runs SET delivery_status=$2 WHERE id=$1 AND verification_status='verified' AND delivery_status='pending'`, e.RunID, deliveryStatus)
+	if err != nil {
 		return err
+	}
+	if tag.RowsAffected() != 1 {
+		return fmt.Errorf("verified run delivery state is no longer pending")
 	}
 	return tx.Commit(ctx)
 }

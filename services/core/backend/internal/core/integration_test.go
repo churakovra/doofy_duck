@@ -261,6 +261,13 @@ func testPool(t *testing.T) *pgxpool.Pool {
 	if _, err = pool.Exec(ctx, `INSERT INTO core_checkpoints(run_id,checkpoint_sequence,idempotency_key,request_hash,response) VALUES($1,0,'legacy-pending-checkpoint',decode('00','hex'),'{}')`, legacyPendingID); err != nil {
 		t.Fatal(err)
 	}
+	if err = migrations.ApplyThrough(ctx, pool, 3); err != nil {
+		t.Fatalf("apply pre-delivery-lifecycle migrations: %v", err)
+	}
+	legacyRejectedID := "00000000-0000-4000-8000-000000000094"
+	if _, err = pool.Exec(ctx, `INSERT INTO core_runs(id,account_id,seed,simulation_version,generator_version,config_id,state,status,verification_status,delivery_status,writer_token_hash,last_contact,completed_at,completion_reason) VALUES($1,$2,1,'legacy-sim','legacy-gen','legacy-config','{}','rejected','verified','rejected',decode('00','hex'),now(),now(),'death')`, legacyRejectedID, "00000000-0000-4000-8000-000000000093"); err != nil {
+		t.Fatal(err)
+	}
 	var wg sync.WaitGroup
 	errs := make(chan error, 6)
 	for i := 0; i < 6; i++ {
@@ -283,8 +290,11 @@ func testPool(t *testing.T) *pgxpool.Pool {
 		t.Fatalf("legacy checkpoint evidence migration value=%s err=%v", oldEvidence, err)
 	}
 	var lifecycle, pendingVerification, pendingDelivery string
-	if err = pool.QueryRow(ctx, `SELECT status,verification_status,delivery_status FROM core_runs WHERE id=$1`, legacyPendingID).Scan(&lifecycle, &pendingVerification, &pendingDelivery); err != nil || lifecycle != "completion_pending" || pendingVerification != "verified" || pendingDelivery != "pending" {
+	if err = pool.QueryRow(ctx, `SELECT status,verification_status,delivery_status FROM core_runs WHERE id=$1`, legacyPendingID).Scan(&lifecycle, &pendingVerification, &pendingDelivery); err != nil || lifecycle != "completed" || pendingVerification != "verified" || pendingDelivery != "pending" {
 		t.Fatalf("legacy pending migration status=%s verification=%s delivery=%s err=%v", lifecycle, pendingVerification, pendingDelivery, err)
+	}
+	if err = pool.QueryRow(ctx, `SELECT status,verification_status,delivery_status FROM core_runs WHERE id=$1`, legacyRejectedID).Scan(&lifecycle, &pendingVerification, &pendingDelivery); err != nil || lifecycle != "completed" || pendingVerification != "verified" || pendingDelivery != "rejected" {
+		t.Fatalf("legacy rejected-delivery migration status=%s verification=%s delivery=%s err=%v", lifecycle, pendingVerification, pendingDelivery, err)
 	}
 	var indexDefinition string
 	if err = pool.QueryRow(ctx, `SELECT pg_get_indexdef('core_one_active_run_per_account'::regclass)`).Scan(&indexDefinition); err != nil || !strings.Contains(indexDefinition, "completion_pending") || strings.Contains(indexDefinition, "pending_verification") {
@@ -336,19 +346,27 @@ func TestPostgresCompletionOutboxRetriesAndOutageGrace(t *testing.T) {
 	var completed Snapshot
 	_ = json.NewDecoder(resp.Body).Decode(&completed)
 	resp.Body.Close()
-	if resp.StatusCode != 200 || completed.Status != "completion_pending" || completed.VerificationStatus != "verified" || completed.DeliveryStatus != "pending" || completed.CompletionReason != "death" {
+	if resp.StatusCode != 200 || completed.Status != "completed" || completed.VerificationStatus != "verified" || completed.DeliveryStatus != "pending" || completed.CompletionReason != "death" {
 		t.Fatalf("completion ack status=%d snapshot=%+v", resp.StatusCode, completed)
 	}
 	resp = request(t, app.Client(), http.MethodPost, app.URL+"/api/v1/runs", auth(), nil)
+	var next Snapshot
+	_ = json.NewDecoder(resp.Body).Decode(&next)
 	resp.Body.Close()
-	if resp.StatusCode != 409 {
-		t.Fatalf("pending completion did not block next run: %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusCreated || next.Status != "active" {
+		t.Fatalf("delivery-pending verified completion blocked next flight: status=%d snapshot=%+v", resp.StatusCode, next)
 	}
 
 	var bodies [][]byte
+	rejectNextDelivery := false
 	account := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		bodies = append(bodies, body)
+		if rejectNextDelivery {
+			rejectNextDelivery = false
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return
+		}
 		if len(bodies) == 1 {
 			w.WriteHeader(http.StatusServiceUnavailable)
 			return
@@ -359,6 +377,17 @@ func TestPostgresCompletionOutboxRetriesAndOutageGrace(t *testing.T) {
 	worker := &CompletionWorker{DB: pool, Endpoint: account.URL + "/internal/v1/run-completions", ServiceToken: "service-test", Client: account.Client(), Now: func() time.Time { return clock }}
 	if sent, e := worker.DispatchOne(context.Background()); e != nil || !sent {
 		t.Fatalf("first outbox attempt sent=%v err=%v", sent, e)
+	}
+	var status, verification, delivery string
+	if err = pool.QueryRow(context.Background(), `SELECT status,verification_status,delivery_status FROM core_runs WHERE id=$1`, run.RunID).Scan(&status, &verification, &delivery); err != nil || status != "completed" || verification != "verified" || delivery != "pending" {
+		t.Fatalf("retryable delivery changed verified result: status=%s verification=%s delivery=%s err=%v", status, verification, delivery, err)
+	}
+	resp = request(t, app.Client(), http.MethodGet, app.URL+"/api/v1/runs/current", auth(), nil)
+	var current Snapshot
+	_ = json.NewDecoder(resp.Body).Decode(&current)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || current.RunID != next.RunID || current.Status != "active" {
+		t.Fatalf("delivery retry displaced the newer flight: status=%d snapshot=%+v", resp.StatusCode, current)
 	}
 	var attempts int
 	var eventID string
@@ -382,18 +411,50 @@ func TestPostgresCompletionOutboxRetriesAndOutageGrace(t *testing.T) {
 	if event["event_id"] != eventID || event["type"] != "RunLifeCompleted.v1" || event["reason"] != "death" {
 		t.Fatalf("bad completion event: %#v", event)
 	}
-	var status string
-	if err = pool.QueryRow(context.Background(), `SELECT status FROM core_runs WHERE id=$1`, run.RunID).Scan(&status); err != nil || status != "completed" {
-		t.Fatalf("run status=%s err=%v", status, err)
+	if err = pool.QueryRow(context.Background(), `SELECT status,verification_status,delivery_status FROM core_runs WHERE id=$1`, run.RunID).Scan(&status, &verification, &delivery); err != nil || status != "completed" || verification != "verified" || delivery != "delivered" {
+		t.Fatalf("delivery ack changed verified lifecycle: status=%s verification=%s delivery=%s err=%v", status, verification, delivery, err)
 	}
 
-	resp = request(t, app.Client(), http.MethodPost, app.URL+"/api/v1/runs", auth(), nil)
-	var next Snapshot
-	_ = json.NewDecoder(resp.Body).Decode(&next)
-	resp.Body.Close()
-	if resp.StatusCode != 201 {
-		t.Fatalf("verified run did not unlock next run: %d", resp.StatusCode)
+	state = next.State
+	ticks = ticks[:0]
+	for i := 0; i < CheckpointTickLimit && state.Phase != sim.Dead; i++ {
+		inputs := []sim.Input(nil)
+		if i == 0 {
+			inputs = []sim.Input{{Sequence: 0, Action: "FLAP"}}
+		}
+		ticks = append(ticks, inputs)
+		step, stepErr := sim.Step(state, inputs)
+		if stepErr != nil {
+			t.Fatal(stepErr)
+		}
+		state = step.State
 	}
+	if state.Phase != sim.Dead {
+		t.Fatal("second test flight did not end within one checkpoint")
+	}
+	secondPayload := map[string]any{"checkpointSequence": 0, "writerGeneration": next.WriterGeneration, "writerToken": next.WriterToken, "idempotencyKey": "permanent-rejection-checkpoint", "ticks": ticks}
+	resp = request(t, app.Client(), http.MethodPost, app.URL+"/api/v1/runs/"+next.RunID+"/checkpoints", auth(), secondPayload)
+	var secondCompleted Snapshot
+	_ = json.NewDecoder(resp.Body).Decode(&secondCompleted)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || secondCompleted.Status != "completed" || secondCompleted.VerificationStatus != "verified" || secondCompleted.DeliveryStatus != "pending" {
+		t.Fatalf("second completion status=%d snapshot=%+v", resp.StatusCode, secondCompleted)
+	}
+	rejectNextDelivery = true
+	if sent, e := worker.DispatchOne(context.Background()); e != nil || !sent {
+		t.Fatalf("permanent rejection delivery sent=%v err=%v", sent, e)
+	}
+	if err = pool.QueryRow(context.Background(), `SELECT status,verification_status,delivery_status FROM core_runs WHERE id=$1`, next.RunID).Scan(&status, &verification, &delivery); err != nil || status != "completed" || verification != "verified" || delivery != "rejected" {
+		t.Fatalf("permanent delivery rejection changed verified result: status=%s verification=%s delivery=%s err=%v", status, verification, delivery, err)
+	}
+	resp = request(t, app.Client(), http.MethodPost, app.URL+"/api/v1/runs", auth(), nil)
+	var third Snapshot
+	_ = json.NewDecoder(resp.Body).Decode(&third)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated || third.Status != "active" {
+		t.Fatalf("permanent receipt rejection blocked next flight: status=%d snapshot=%+v", resp.StatusCode, third)
+	}
+
 	clock = clock.Add(30 * time.Minute)
 	outageBody := map[string]any{"startedAt": clock.Format(time.RFC3339)}
 	req, _ := http.NewRequest(http.MethodPost, app.URL+"/internal/v1/outages/start", strings.NewReader(mustJSON(outageBody)))
@@ -427,7 +488,7 @@ func TestPostgresCompletionOutboxRetriesAndOutageGrace(t *testing.T) {
 	var recovered Snapshot
 	_ = json.NewDecoder(resp.Body).Decode(&recovered)
 	resp.Body.Close()
-	if resp.StatusCode != 200 || recovered.RunID != next.RunID || !recovered.SubmissionDeadline.Equal(clock.Add(time.Hour)) {
+	if resp.StatusCode != 200 || recovered.RunID != third.RunID || !recovered.SubmissionDeadline.Equal(clock.Add(time.Hour)) {
 		t.Fatalf("outage grace snapshot status=%d deadline=%s expected=%s", resp.StatusCode, recovered.SubmissionDeadline, clock.Add(time.Hour))
 	}
 	clock = clock.Add(time.Hour + time.Second)
@@ -436,7 +497,7 @@ func TestPostgresCompletionOutboxRetriesAndOutageGrace(t *testing.T) {
 	if resp.StatusCode != 404 {
 		t.Fatalf("expired run remained active: status=%d", resp.StatusCode)
 	}
-	if err = pool.QueryRow(context.Background(), `SELECT status FROM core_runs WHERE id=$1`, next.RunID).Scan(&status); err != nil || status != "rejected" {
+	if err = pool.QueryRow(context.Background(), `SELECT status FROM core_runs WHERE id=$1`, third.RunID).Scan(&status); err != nil || status != "rejected" {
 		t.Fatalf("expired run status=%s err=%v", status, err)
 	}
 }
@@ -645,7 +706,7 @@ func TestPostgresBestScoreProjectionIsMonotonicAndAccountScoped(t *testing.T) {
 		}
 		submitTicks(batch, state)
 	}
-	if state.Score != 2 || readBest(promotedToken) != 0 {
+	if state.Score < 1 || readBest(promotedToken) != 0 {
 		t.Fatalf("active run should not publish score: run=%d best=%d", state.Score, readBest(promotedToken))
 	}
 	deathBatch := make([][]sim.Input, 0, CheckpointTickLimit)

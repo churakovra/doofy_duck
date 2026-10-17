@@ -26,6 +26,7 @@ paths:
     post:
       operationId: createRun
       summary: Create or recover the account's active run
+      description: Only active or genuinely unverified completion-pending runs block another flight. Once replay is verified, lifecycle becomes completed even while Platform delivery remains pending.
       responses:
         '201':
           description: New run created; response includes the initial writer token
@@ -49,7 +50,7 @@ paths:
       operationId: getCurrentRun
       responses:
         '200':
-          description: Current active or delivery-pending run
+          description: Current active or genuinely unverified completion-pending run
           content: { application/json: { schema: { $ref: '#/components/schemas/RunSnapshot' } } }
         '404': { $ref: '#/components/responses/NotFound' }
   /api/v1/runs/{run_id}:
@@ -181,9 +182,9 @@ components:
         generatorVersion: { type: string }
         configId: { type: string }
         state: { type: object, description: Complete serialized Go simulation state. }
-        status: { type: string, enum: [active, completion_pending, completed, rejected, abandoned] }
+        status: { type: string, enum: [active, completion_pending, completed, rejected, abandoned], description: Gameplay lifecycle; verified runs are completed independently of delivery. }
         verificationStatus: { type: string, enum: [in_progress, verified, rejected] }
-        deliveryStatus: { type: string, enum: [not_ready, pending, delivered, rejected] }
+        deliveryStatus: { type: string, enum: [not_ready, pending, delivered, rejected], description: Platform delivery outcome, independent of gameplay lifecycle and verification. }
         checkpointSequence: { type: integer, minimum: -1 }
         writerGeneration: { type: integer, minimum: 1 }
         activeTicks: { type: integer, minimum: 0, maximum: 216000 }

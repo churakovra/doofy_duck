@@ -69,11 +69,25 @@ def main() -> None:
             },
         )
         assert status == 200, f"checkpoint {sequence} failed: HTTP {status}"
-        if ack.get("status") == "completion_pending":
-            assert ack.get("verificationStatus") == "verified", "completion was not verified"
+        if ack.get("verificationStatus") == "verified":
+            assert ack.get("status") == "completed", "verified gameplay did not reach a terminal lifecycle state"
             completed = True
             break
     assert completed, "deterministic flight did not complete within 120 ticks"
+
+    delivery_deadline = time.monotonic() + 30
+    while time.monotonic() < delivery_deadline:
+        status, snapshot = request(f"/api/v1/runs/{run['runId']}", token=token)
+        assert status == 200, f"verified run lookup failed: HTTP {status}"
+        assert snapshot.get("status") == "completed" and snapshot.get("verificationStatus") == "verified", (
+            f"delivery changed verified gameplay lifecycle: {snapshot!r}"
+        )
+        if snapshot.get("deliveryStatus") == "delivered":
+            break
+        assert snapshot.get("deliveryStatus") != "rejected", "Platform permanently rejected completion delivery"
+        time.sleep(0.25)
+    else:
+        raise AssertionError(f"completion delivery did not finish: {snapshot.get('deliveryStatus')!r}")
 
     query = (
         "SELECT count(*) || ':' || min(payload::text) FROM completion_inbox "

@@ -6,7 +6,7 @@ Core creates run IDs, seeds, simulation descriptors, and rules config. Clients s
 
 ## `POST /api/v1/runs`
 
-Creates one server-owned run for the authenticated account. Returns `201` and the complete authoritative simulation state plus `checkpointSequence`, `writerGeneration`, `activeTicks`, `activeTickLimit` (216000), `submissionDeadline`, status, and an opaque `writerToken` (only on this initial response). An existing active run is returned with `200` for recovery and without its writer token; clients must retain their writer token or use explicit takeover before submitting. A run awaiting account delivery returns `409` and remains available through the GET routes. A run with status `completion_pending` blocks a new run (`409`) until account delivery succeeds or is definitively rejected. Completion snapshots expose `verificationStatus` separately from `deliveryStatus` so verified replay results remain visible during delivery retry. At most one active or pending run exists per account.
+Creates one server-owned run for the authenticated account. Returns `201` and the complete authoritative simulation state plus `checkpointSequence`, `writerGeneration`, `activeTicks`, `activeTickLimit` (216000), `submissionDeadline`, status, and an opaque `writerToken` (only on this initial response). An existing active run is returned with `200` for recovery and without its writer token; clients must retain their writer token or use explicit takeover before submitting. Only an active run or a genuinely unverified `completion_pending` run blocks a new run (`409`). Once replay verification succeeds, Core atomically marks the run `completed` and queues its Platform event with `deliveryStatus: pending`; the run no longer reserves the account's next flight. Delivery success or rejection changes only `deliveryStatus`, never gameplay lifecycle or verification. At most one active or unverified pending run exists per account.
 
 ## `GET /api/v1/runs/current` and `GET /api/v1/runs/{run_id}`
 
@@ -14,7 +14,7 @@ Return the same run snapshot, or `404` when it is absent or belongs to another a
 
 ## `GET /api/v1/runs/latest`
 
-Returns the most recently created run owned by the authenticated account, including completed, rejected, abandoned, active, or delivery-pending runs. Runs are ordered by `created_at` descending with `id` descending as a stable tie-break. The response is the direct run snapshot shape and never includes `writerToken`; `404` means the account has no runs. Clients should check `/current` first to recover active or delivery-pending work, then use this route to restore a verified terminal result after a reload or on another device.
+Returns the most recently created run owned by the authenticated account, including completed, rejected, abandoned, active, or delivery-pending runs. Runs are ordered by `created_at` descending with `id` descending as a stable tie-break. The response is the direct run snapshot shape and never includes `writerToken`; `404` means the account has no runs. Clients should check `/current` first to recover active or genuinely unverified pending work, then use this route to restore the latest verified terminal result after a reload or on another device.
 
 ## `GET /api/v1/runs/progress`
 
@@ -50,7 +50,7 @@ Body is `{"writerGeneration":1,"writerToken":"..."}`. Records an owner-requested
 
 ## Platform completion event
 
-A verified replay result creates a durable outbox event sent to `POST /internal/v1/run-completions` with `Authorization: Bearer CORE_TO_PLATFORM_TOKEN`. The event is `RunLifeCompleted.v1` with `event_id`, `account_id`, `run_id`, `life_index`, simulation/generator/config identity, checkpoint sequence, score, `{FEATHER,GAME_STAR}` collections and `reason` (`death` or `flight_cap`), and RFC3339 `completed_at`. This records verification only; it does not issue currency.
+A verified replay result creates a durable outbox event sent to `POST /internal/v1/run-completions` with `Authorization: Bearer CORE_TO_PLATFORM_TOKEN`. The event is `RunLifeCompleted.v1` with `event_id`, `account_id`, `run_id`, `life_index`, simulation/generator/config identity, checkpoint sequence, score, `{FEATHER,GAME_STAR}` collections and `reason` (`death` or `flight_cap`), and RFC3339 `completed_at`. The run is already `completed` with `verificationStatus: verified` while this delivery is pending; permanent delivery rejection is reported separately and does not invalidate replay verification. This records verification only; it does not issue currency.
 
 ## Health and outage operations
 
