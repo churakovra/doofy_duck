@@ -11,3 +11,12 @@ apps/web/playwright-report/
 !.env.example
 
 /local-docs/
+
+# Python backend tooling and local credentials
+**/.venv/
+**/__pycache__/
+*.py[cod]
+**/.pytest_cache/
+**/.ruff_cache/
+**/.mypy_cache/
+.env.dev

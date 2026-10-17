@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://doofyduck.invalid/contracts/events/run-life-completed-v1.schema.json",
+  "title": "RunLifeCompleted.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "event_id", "type", "account_id", "run_id", "life_index", "simulation_version",
+    "generator_version", "config_id", "checkpoint_sequence", "score", "collections", "reason", "completed_at"
+  ],
+  "properties": {
+    "event_id": {"type": "string", "format": "uuid"},
+    "type": {"const": "RunLifeCompleted.v1"},
+    "account_id": {"type": "string", "format": "uuid"},
+    "run_id": {"type": "string", "format": "uuid"},
+    "life_index": {"type": "integer", "minimum": 0},
+    "simulation_version": {"type": "string", "minLength": 1, "maxLength": 32},
+    "generator_version": {"type": "string", "minLength": 1, "maxLength": 32},
+    "config_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "checkpoint_sequence": {"type": "integer", "minimum": 0},
+    "score": {"type": "integer", "minimum": 0},
+    "collections": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["FEATHER", "GAME_STAR"],
+      "properties": {
+        "FEATHER": {"type": "integer", "minimum": 0},
+        "GAME_STAR": {"type": "integer", "minimum": 0}
+      }
+    },
+    "reason": {"enum": ["death", "flight_cap"]},
+    "completed_at": {"type": "string", "format": "date-time"}
+  }
+}
