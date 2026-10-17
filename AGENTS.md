@@ -8,9 +8,9 @@ Use [docs/README.md](docs/README.md) to select relevant documentation; do not lo
 the entire documentation archive by default. Read the nearest component
 `AGENTS.md` before editing that component.
 
-This repository implements a local endless pipe game with React/PixiJS, pure
-TypeScript simulation, and a matching native Go simulation. The commercial
-Telegram service architecture is future direction, not implemented infrastructure.
+The repository contains local practice, shared TypeScript/Go simulation, and an
+optional account/run backend. Use the current README and dated verification
+records to distinguish implemented behavior from hosted acceptance and future work.
 
 ## Boundaries
 
@@ -29,26 +29,24 @@ Telegram service architecture is future direction, not implemented infrastructur
 
 ## Development workflow
 
-Apply this workflow to every feature or fix, including work delegated to subagents:
+Apply this workflow to every feature or fix, including delegated work:
 
-1. **Understand the behavior.** Read the requirements and trace the affected code
-   path, its callers, and existing tests. Identify the expected behavior, main
-   cases, relevant edge cases, and failure conditions before changing code.
-2. **Use TDD: red, then green.** Write meaningful tests for that behavior first.
-   For a bug, include a regression test that reproduces it. Run the tests and
-   confirm they fail for the expected reason, then implement the smallest change
-   that makes them pass. Assert observable behavior against requirements rather
-   than copying the implementation's logic into the tests.
-3. **Refactor after correctness is established.** With passing tests as a safety
-   net, improve the code's structure. Keep it simple, readable, and clean: clear
-   names, focused responsibilities, and straightforward control flow. Follow the
-   surrounding code style and reuse suitable existing code. Add abstractions or
-   dependencies only when the current task needs them. Less is more.
-4. **Review your own work.** Inspect the final diff against the requirements and
-   ask: Does it behave correctly? Do tests cover the main logic and relevant edge
-   cases? Is it as clear and simple as practical? Does it fit existing conventions
-   and reuse existing code appropriately? Resolve gaps, refactor when needed, and
-   rerun the affected checks after changes before reporting completion.
+1. **Settle the contract.** Trace requirements, callers and tests. Before assigning
+   implementation, agree on shared interfaces, state transitions, ownership,
+   failure behavior and acceptance criteria. Resolve ambiguity against approved
+   requirements; identify decisions that actually need user input.
+2. **Use TDD: red, then green.** Write meaningful behavior/regression tests first,
+   run them and confirm the expected failure, then implement the smallest correct
+   change. Assert observable requirements rather than copying implementation logic.
+   A skipped database test is not red or green evidence. For behavior-preserving
+   work, use existing tests or characterization tests; do not manufacture a failure.
+3. **Refactor and self-review.** With passing tests, simplify names, responsibilities
+   and control flow. Reuse surrounding conventions and add abstractions/dependencies
+   only when needed. Inspect the complete diff and relevant failure paths; fix gaps
+   and run affected checks before handing the milestone back.
+
+Keep required acceptance work separate from optional improvements. Identify any
+necessary scope change explicitly instead of expanding work during verification.
 
 ## Branches and commits
 
@@ -77,38 +75,37 @@ Use these project conventions for all new work, including delegated work:
 
 ## Verification
 
-Run commands from the repository root. Choose checks for the affected component
-using its instructions. For documentation changes, check links and the diff;
-application tests are unnecessary. During a fix, run focused unit tests and the
-affected type/lint checks. Use `npm run check` for final routine verification:
-types, lint, unit/fixture tests, Go tests, and build. Run Go race/vet if native
-behavior changed. Playwright/browser tests are on demand only: do not run them
-after routine fixes or automatically repeat them to obtain a passing run. When
-the user explicitly requests browser verification, use `npm run check:browser`
-for both browser suites or `npm run check:full` for routine plus browser checks.
-Do not claim a check passed unless it ran in this task.
-Keep historical verification reports distinguishable from new execution evidence.
+Run commands from the repository root; component instructions select relevant checks.
+Use focused tests and affected type/lint checks during implementation. Run
+`npm run check` after integration for final routine verification: types, lint,
+unit/fixture tests, Go tests and build. Run Go race/vet for native behavior changes
+and real database checks for affected persistence paths.
+
+Repeat a full suite only after relevant changes or a specific unresolved failure;
+state the reason. Evidence applies to the tested revision: after edits or conflict
+resolution, rerun affected checks. Report skipped checks and missing environments
+explicitly; never claim execution that did not happen or reuse historical results
+as current evidence.
+
+Documentation-only work needs link/diff inspection, not application tests.
+Playwright/browser suites run only when explicitly requested: use
+`npm run check:browser` for both suites or `npm run check:full` for routine plus
+browser checks. Do not run or repeat browser suites automatically.
 
 ## Collaboration
 
 ### Responsibilities
 
-The main agent owns requirements, acceptance criteria, shared design decisions,
-task assignment, integration review, and the final report. It does not write or
-change application code, tests, scripts, or build/tooling configuration.
-Documentation-only changes may be handled directly.
+The main agent owns requirements, shared decisions, assignment, integration review
+and reporting. It does not change application code, tests, scripts or build/tooling
+configuration; documentation-only changes may be handled directly.
 
-Delegate each coherent code change to one implementation worker. That worker
-owns the complete development cycle: understand the behavior, write meaningful
-tests, confirm the expected failure, implement the change, run focused checks,
-refactor when useful, and self-review.
+One implementation worker owns each coherent feature through understanding, TDD,
+implementation, focused checks and self-review. Keep that owner through revisions;
+do not split ordinary test writing and implementation between agents.
 
-Do not create separate test-writing and implementation agents for ordinary work.
-Send revisions back to the existing worker while its context remains useful.
-
-For behavior-preserving refactors, use existing tests or add characterization
-tests before editing. Do not manufacture a failing test when behavior should
-remain unchanged.
+Keep main-agent coordination short. Review the returned milestone and its boundaries
+without duplicating the worker's implementation investigation or narrating routine work.
 
 ### Model routing
 
@@ -131,32 +128,23 @@ substitute another model.
 
 ### Delegation and concurrency
 
-Use one implementation worker by default. Add another worker only when tasks
-are independent and the benefit justifies additional context and coordination.
+Use one implementation worker by default. Add another only for independent
+components with settled interfaces, separate file ownership and a clear benefit.
+Only the main agent delegates; workers must not spawn agents. Respect concurrency
+limits and do not fill slots merely because they are available.
 
-Do not spawn agents merely to fill available concurrency slots. Only the main
-agent delegates work; workers must not spawn further agents.
+Worker briefs contain behavior/acceptance criteria, owned files, required checks
+and relevant instruction/document paths. Reference shared instructions instead of
+copying them into every brief. Workers read only needed context and follow the root
+and nearest component instructions. Use `fork_turns="none"` with model overrides.
 
-Give each worker a concise, self-contained brief containing:
-
-- Required behavior, acceptance criteria, and relevant edge cases.
-- Owned files or component boundaries.
-- Applicable root and component instructions and relevant documentation.
-- Required checks and the expected completion report.
-
-Require workers to read and follow the applicable instructions and development
-workflow. When spawning with model overrides, use `fork_turns="none"`.
-Respect runtime concurrency limits.
-
-Workers should read only the context needed for their task. Return concise
-findings and check summaries; include detailed logs only when needed to
-diagnose a failure.
+Workers complete implementation, focused checks and self-review before requesting
+integration review. Return concise findings; include detailed logs only for diagnosis.
 
 ### Ownership and integration
 
 Inspect and preserve existing user changes before assigning work.
 
-Agree on shared interfaces and behavior before parallel implementation.
 Assign one owner to each edited file. Workers must request reassignment before
 editing outside their scope.
 
@@ -170,43 +158,47 @@ automatically for every worker.
 
 ### Review and verification
 
-Every worker self-reviews its diff and runs the relevant focused checks.
-
-The main agent inspects the returned diff against acceptance criteria and
-coordinates final routine verification with `npm run check`. Avoid repeating
-checks on an unchanged state without a specific reason. Documentation-only
-changes follow the Verification section and do not require application checks.
-
-Require one independent review for:
+The main agent reviews the complete returned milestone against acceptance criteria.
+Require one batched independent review for milestones involving:
 
 - Simulation behavior, shared contracts, or TypeScript/Go parity.
 - Wallet persistence, ownership, settlement, or deduplication.
 - Security-sensitive changes.
 - Broad lifecycle or concurrency changes.
 
-Routine changes use worker self-review and main-agent review without an
-additional review agent.
+Reviewers receive requirements and the complete diff, and independently inspect
+callers, tests and failure paths. Consolidate findings into one revision request to
+the existing Luna owner. Recheck changed paths and affected callers; reopen broader
+review only when scope or evidence warrants it. Routine changes need worker and
+main-agent review, without an additional reviewer.
 
-Reviewers receive the requirements and diff and independently inspect relevant
-callers, tests, and failure paths. Implementation revisions return to Luna.
+Before sustained load tests, complete requirement-coverage review, resolve blocking
+findings, pass integration checks and freeze the tested backend revision. Record
+local, browser, real Telegram and hosted acceptance separately. Apply the
+Verification section after integration and subsequent relevant changes.
 
-Verification evidence applies to the state tested. After relevant edits,
-conflict resolution, or integration changes, rerun affected checks.
-Browser verification remains governed by the Verification section.
+### Long-running jobs
+
+Launch unattended jobs with a bounded duration, saved logs and a final summary.
+Record the tested revision, job/container identity, log location and exact result
+collection command. Do not use repeated AI turns to poll unchanged progress or
+parse routine logs that a local command can summarize.
+
+For jobs expected to take more than a few minutes, the user authorizes returning
+control after launch with a clear resume checkpoint. Collect results on the user's
+return or through an available completion notification. Do not create scheduled
+follow-ups without user authorization. Report a running job as running, not passed.
 
 ### Recovery and reporting
 
-If a worker repeats an unsuccessful approach or discovers a larger problem,
-it must report the evidence and blocker. The main agent then adjusts the task
-or provides targeted analysis; do not continue an unproductive retry loop.
+After two unsuccessful revision cycles on the same issue, stop the retry loop and
+reassess the contract, design or missing evidence before another implementation
+attempt. A worker discovering a larger problem reports it promptly. The main agent
+adjusts the task or provides targeted analysis instead of continuing the same approach.
 
 Before replacing a worker, preserve a concise handoff with changed files,
 decisions, remaining work, and check results.
 
-Each completion report states:
-
-- What changed.
-- Which checks ran and their results.
-- Remaining limitations or blockers.
-
-Never claim verification that did not run.
+Each completion report states what changed, checks actually run and their outcomes,
+and remaining limitations/blockers. Keep component-specific details in the nearest
+component instructions and avoid duplicating this workflow there.
