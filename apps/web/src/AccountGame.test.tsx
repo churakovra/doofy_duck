@@ -10,7 +10,7 @@ import { LocaleProvider } from './locale';
 const harness = vi.hoisted(() => ({
   restore: vi.fn(), loadTelegramWebApp: vi.fn(), currentRun: vi.fn(), latestRun: vi.fn(), createRun: vi.fn(), getRun: vi.fn(), submitCheckpoint: vi.fn(),
   takeover: vi.fn(), abandon: vi.fn(), login: vi.fn(), loginDev: vi.fn(), logout: vi.fn(), progress: vi.fn(),
-  traceRecords: new Map<string, unknown>(), save: vi.fn(), runOptions: null as null | { onTick(state: unknown, inputs: readonly unknown[]): void },
+  traceRecords: new Map<string, unknown>(), save: vi.fn(), runPhase: 'READY', runOptions: null as null | { onTick(state: unknown, inputs: readonly unknown[]): void },
 }));
 
 vi.mock('./telegram-web-app', async () => {
@@ -64,8 +64,8 @@ vi.mock('./useGameAudio', () => ({ useGameAudio: () => ({
 vi.mock('./useGameRun', () => ({ useGameRun: (_canPlay: unknown, _callbacks: unknown, options: typeof harness.runOptions) => {
   harness.runOptions = options;
   return {
-    phase: 'READY', score: 0, runtimeError: '', rendererReady: true, flightCapReached: false,
-    getState: () => ({ phase: 'RUNNING', tick: 1, totals: {} }), getFeedback: () => ({}),
+    phase: harness.runPhase, score: 0, runtimeError: '', rendererReady: true, flightCapReached: false,
+    getState: () => ({ phase: harness.runPhase, tick: 1, totals: {} }), getFeedback: () => ({}),
     acceptRenderer: vi.fn(), start: vi.fn(), pause: vi.fn(), restart: vi.fn(),
     onFieldPointerDown: vi.fn(), onFieldPointerUp: vi.fn(),
   };
@@ -85,7 +85,7 @@ let host: HTMLDivElement;
 
 beforeEach(async () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
-  harness.traceRecords.clear(); harness.runOptions = null;
+  harness.traceRecords.clear(); harness.runPhase = 'READY'; harness.runOptions = null;
   harness.restore.mockResolvedValue(account);
   harness.loadTelegramWebApp.mockResolvedValue({ initData: '', ready: vi.fn() });
   harness.progress.mockResolvedValue({ bestScore: 0 });
@@ -431,6 +431,61 @@ describe('account run transport', () => {
       });
     });
     expect(host.textContent).toContain('недоступен');
+  });
+
+  it('retains a locally completed flight through an outage and replays ordered checkpoints after recovery', async () => {
+    vi.useFakeTimers();
+    let networkAvailable = false;
+    const attempts: Array<{ checkpointSequence: number; ticks: unknown[] }> = [];
+    harness.submitCheckpoint.mockImplementation(async (_runId, input) => {
+      const checkpoint = input as { checkpointSequence: number; ticks: unknown[] };
+      attempts.push({ checkpointSequence: checkpoint.checkpointSequence, ticks: checkpoint.ticks.map((tick) => tick) });
+      if (!networkAvailable) throw Object.assign(new Error('temporarily_unavailable'), { status: 503, code: 'temporarily_unavailable' });
+      if (checkpoint.checkpointSequence === 0) {
+        return runSnapshot({ checkpointSequence: 0, activeTicks: 120 });
+      }
+      return runSnapshot({ checkpointSequence: 1, activeTicks: 128, status: 'completed', verificationStatus: 'verified', deliveryStatus: 'delivered' });
+    });
+    harness.runPhase = 'RUNNING';
+    await act(async () => { host.querySelector<HTMLButtonElement>('.account-panel .primary-button')?.click(); });
+
+    const onTick = harness.runOptions!.onTick;
+    for (let tick = 1; tick <= 120; tick++) act(() => onTick({ phase: 'RUNNING', tick } as never, []));
+    await act(async () => { await vi.waitFor(() => expect(harness.submitCheckpoint).toHaveBeenCalledTimes(1)); });
+    for (let tick = 121; tick <= 127; tick++) act(() => onTick({ phase: 'RUNNING', tick } as never, []));
+    harness.runPhase = 'DEAD';
+    act(() => onTick({ phase: 'DEAD', tick: 128 } as never, []));
+    await act(async () => { await vi.waitFor(() => expect(harness.submitCheckpoint).toHaveBeenCalledTimes(2)); });
+
+    const trace = harness.traceRecords.get(`${account.account_id}:${initialState.descriptor.runId}`) as {
+      accountId: string; activeTicks: number; unsentTicks: unknown[];
+      pending: Array<{ sequence: number; ticks: unknown[] }>;
+    };
+    expect(trace).toMatchObject({ accountId: account.account_id, activeTicks: 128, unsentTicks: [], pending: [{ sequence: 0 }, { sequence: 1 }] });
+    expect(trace.pending.map((checkpoint) => checkpoint.ticks.length)).toEqual([120, 8]);
+    expect(host.textContent).toContain('ожидает проверки');
+    expect(host.textContent).toContain('отправка повторится');
+    expect(host.querySelector('.account-panel .primary-button')?.textContent).not.toContain('Начать полёт с аккаунтом');
+    expect(harness.createRun).toHaveBeenCalledTimes(1);
+
+    networkAvailable = true;
+    await act(async () => { await vi.advanceTimersByTimeAsync(3_000); });
+
+    expect(attempts.map((request) => request.checkpointSequence)).toEqual([0, 0, 0, 1]);
+    expect(attempts[0]?.ticks).toEqual(trace.pending[0]?.ticks);
+    expect(attempts[1]?.ticks).toEqual(attempts[0]?.ticks);
+    expect(attempts[2]?.ticks).toEqual(attempts[0]?.ticks);
+    expect(attempts[3]?.ticks).toEqual(trace.pending[1]?.ticks);
+    expect(host.textContent).toContain('Полёт проверен и записан в аккаунт.');
+    const nextStart = [...host.querySelectorAll<HTMLButtonElement>('.account-panel button')]
+      .find((button) => button.textContent?.includes('Начать полёт с аккаунтом'));
+    expect(nextStart).toBeTruthy();
+
+    harness.createRun.mockResolvedValueOnce(runSnapshot({ runId: 'next-flight', writerToken: 'next-writer' }));
+    await act(async () => { nextStart?.click(); });
+    await vi.waitFor(() => expect(harness.traceRecords.has(`${account.account_id}:next-flight`)).toBe(true));
+    expect(harness.traceRecords.get(`${account.account_id}:next-flight`)).toMatchObject({ accountId: account.account_id });
+    expect(harness.loginDev).not.toHaveBeenCalled();
   });
 
   it('preserves a valid saved tail during explicit takeover when Web Locks are unavailable', async () => {
