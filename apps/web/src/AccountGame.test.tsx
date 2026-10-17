@@ -105,6 +105,70 @@ afterEach(() => {
 });
 
 describe('account run transport', () => {
+  it('shows a verified delivery-pending result and allows the next flight', async () => {
+    harness.latestRun.mockResolvedValue(runSnapshot({ status: 'completed', verificationStatus: 'verified', deliveryStatus: 'pending' }));
+    await act(async () => {
+      root.render(<LocaleProvider><AccountGame key="verified-delivery-pending" onBack={vi.fn()} /></LocaleProvider>);
+    });
+
+    expect(host.textContent).toContain('Полёт проверен. Запись в аккаунт ожидает подтверждения.');
+    harness.createRun.mockResolvedValueOnce(runSnapshot({ runId: 'next-flight', writerToken: 'next-writer' }));
+    await act(async () => { host.querySelector<HTMLButtonElement>('.account-panel .primary-button')?.click(); });
+
+    await vi.waitFor(() => expect(harness.traceRecords.has(`${account.account_id}:next-flight`)).toBe(true));
+  });
+
+  it('refreshes the receipt message when a pending delivery succeeds', async () => {
+    vi.useFakeTimers();
+    const pending = runSnapshot({ status: 'completed', verificationStatus: 'verified', deliveryStatus: 'pending' });
+    const delivered = runSnapshot({ status: 'completed', verificationStatus: 'verified', deliveryStatus: 'delivered' });
+    harness.currentRun.mockResolvedValue(pending);
+    harness.getRun.mockResolvedValueOnce(delivered);
+    await act(async () => {
+      root.render(<LocaleProvider><AccountGame key="delivery-poll-delivered" onBack={vi.fn()} /></LocaleProvider>);
+    });
+    expect(host.textContent).toContain('Полёт проверен. Запись в аккаунт ожидает подтверждения.');
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+
+    expect(host.textContent).toContain('Полёт проверен и записан в аккаунт.');
+    expect(host.textContent).not.toContain('Запись в аккаунт ожидает подтверждения.');
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+    expect(harness.getRun).toHaveBeenCalledTimes(1);
+  });
+
+  it('refreshes the receipt message when a pending delivery is rejected', async () => {
+    vi.useFakeTimers();
+    const pending = runSnapshot({ status: 'completed', verificationStatus: 'verified', deliveryStatus: 'pending' });
+    const rejected = runSnapshot({ status: 'completed', verificationStatus: 'verified', deliveryStatus: 'rejected' });
+    harness.currentRun.mockResolvedValue(pending);
+    harness.getRun.mockResolvedValueOnce(rejected);
+    await act(async () => {
+      root.render(<LocaleProvider><AccountGame key="delivery-poll-rejected" onBack={vi.fn()} /></LocaleProvider>);
+    });
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+
+    expect(host.textContent).toContain('Полёт проверен, но запись в аккаунт отклонена. Награда не начислена.');
+    expect(host.textContent).not.toContain('Сервер не смог подтвердить этот полёт.');
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+    expect(harness.getRun).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows delivery rejection separately from gameplay and still allows another flight', async () => {
+    harness.latestRun.mockResolvedValue(runSnapshot({ status: 'completed', verificationStatus: 'verified', deliveryStatus: 'rejected' }));
+    await act(async () => {
+      root.render(<LocaleProvider><AccountGame key="verified-delivery-rejected" onBack={vi.fn()} /></LocaleProvider>);
+    });
+
+    expect(host.textContent).toContain('Полёт проверен, но запись в аккаунт отклонена. Награда не начислена.');
+    expect(host.textContent).not.toContain('Сервер не смог подтвердить этот полёт.');
+    harness.createRun.mockResolvedValueOnce(runSnapshot({ runId: 'flight-after-delivery-rejection', writerToken: 'next-writer' }));
+    await act(async () => { host.querySelector<HTMLButtonElement>('.account-panel .primary-button')?.click(); });
+
+    await vi.waitFor(() => expect(harness.traceRecords.has(`${account.account_id}:flight-after-delivery-rejection`)).toBe(true));
+  });
+
   it('waits for Telegram SDK readiness before trying automatic Telegram login', async () => {
     let resolveTelegram!: (value: { initData: string; ready: () => void }) => void;
     harness.restore.mockRejectedValue(new Error('no saved session'));
@@ -145,6 +209,49 @@ describe('account run transport', () => {
     expect(harness.login).not.toHaveBeenCalled();
     expect(host.textContent).toContain('88');
     expect(host.textContent).not.toContain('7');
+  });
+
+  it('does not submit delayed explicit Telegram credentials after the account screen unmounts', async () => {
+    let resolveAutomatic!: (value: { initData: string; ready: () => void }) => void;
+    let resolveExplicit!: (value: { initData: string; ready: () => void }) => void;
+    harness.restore.mockRejectedValue(new Error('no saved session'));
+    harness.loadTelegramWebApp
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveAutomatic = resolve; }))
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveExplicit = resolve; }));
+    harness.login.mockResolvedValue(account);
+
+    await act(async () => {
+      root.render(<LocaleProvider><AccountGame key="delayed-explicit-login" onBack={vi.fn()} /></LocaleProvider>);
+    });
+    await vi.waitFor(() => expect(harness.loadTelegramWebApp).toHaveBeenCalledTimes(2));
+    await act(async () => { host.querySelector<HTMLButtonElement>('.account-mode-button')?.click(); });
+    await vi.waitFor(() => expect(harness.loadTelegramWebApp).toHaveBeenCalledTimes(3));
+    await act(async () => { root.render(<div />); });
+
+    await act(async () => { resolveExplicit({ initData: 'stale-explicit-init-data', ready: vi.fn() }); });
+    await act(async () => { resolveAutomatic({ initData: 'stale-bootstrap-init-data', ready: vi.fn() }); });
+
+    expect(harness.login).not.toHaveBeenCalled();
+  });
+
+  it('does not leave cross-account reauthentication busy after loading the new account', async () => {
+    const nextAccount = { account_id: 'account-b', telegram_user_id: 8, created_at: 'later' };
+    harness.submitCheckpoint.mockRejectedValueOnce({ status: 401, code: 'account_session_expired' });
+    await act(async () => { host.querySelector<HTMLButtonElement>('.account-panel .primary-button')?.click(); });
+    await act(async () => { for (let tick = 1; tick <= 120; tick++) harness.runOptions!.onTick({ phase: 'RUNNING', tick } as never, []); });
+    await vi.waitFor(() => expect(harness.submitCheckpoint).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(host.textContent).toContain('Войти через Telegram'));
+
+    harness.loadTelegramWebApp.mockResolvedValue({ initData: 'account-b-init-data', ready: vi.fn() });
+    harness.login.mockResolvedValue(nextAccount);
+    const reauthenticateButton = [...host.querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) => button.textContent?.includes('Войти через Telegram'));
+    expect(reauthenticateButton).toBeDefined();
+    await act(async () => { reauthenticateButton!.click(); });
+
+    await vi.waitFor(() => expect(host.textContent).toContain('8'));
+    const start = host.querySelector<HTMLButtonElement>('.account-panel .primary-button');
+    expect(start?.disabled).toBe(false);
   });
 
   it('ignores a delayed Telegram SDK rejection after manual login and logout', async () => {
@@ -382,7 +489,7 @@ describe('account run transport', () => {
 
   it('ignores an older completion poll after a new run starts for the same account', async () => {
     vi.useFakeTimers();
-    const runA = runSnapshot({ status: 'completion_pending', verificationStatus: 'verified', deliveryStatus: 'pending' });
+    const runA = runSnapshot({ status: 'completed', verificationStatus: 'verified', deliveryStatus: 'pending' });
     const completedA = runSnapshot({ status: 'completed', verificationStatus: 'verified', deliveryStatus: 'delivered' });
     harness.currentRun.mockResolvedValue(runA);
     let finishOlderPoll!: (snapshot: ReturnType<typeof runSnapshot>) => void;
@@ -402,7 +509,7 @@ describe('account run transport', () => {
     await vi.waitFor(() => expect(harness.traceRecords.has(`${account.account_id}:run-b`)).toBe(true));
     expect(host.textContent).toContain('Начать полёт');
 
-    await act(async () => { finishOlderPoll(completedA); });
+    await act(async () => { finishOlderPoll(runA); });
 
     expect(harness.traceRecords.has(`${account.account_id}:run-b`)).toBe(true);
     expect(host.textContent).toContain('Начать полёт');

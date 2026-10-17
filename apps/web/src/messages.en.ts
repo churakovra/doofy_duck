@@ -95,6 +95,7 @@ export const messages = Object.freeze({
   accountConnectionReady: 'Connection restored. Submitting recorded actions for verification…',
   accountStorageWarning: 'Storage is unavailable. Closing this tab may lose unsent flight actions.',
   accountPendingVerification: 'Flight verified. Waiting for account delivery confirmation.',
+  accountDeliveryPending: 'Flight verified. Account receipt is pending.',
   accountVerified: 'Flight verified and recorded in the account.',
   accountRejected: 'The server rejected this flight record. Check its status or start another flight.',
   accountSubmissionExpired: 'The submission window expired. The server will determine whether saved results remain available.',

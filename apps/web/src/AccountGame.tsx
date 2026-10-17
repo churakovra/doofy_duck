@@ -21,8 +21,9 @@ async function telegramWebAppReady() {
   return webApp;
 }
 
-async function loginWithTelegram(api: AccountApi): Promise<AccountSummary> {
+async function loginWithTelegram(api: AccountApi, isCurrent: () => boolean = () => true): Promise<AccountSummary | undefined> {
   const webApp = await telegramWebAppReady();
+  if (!isCurrent()) return undefined;
   const initData = webApp.initData?.trim() ?? '';
   if (!initData) throw new AccountApiError(400, 'telegram_init_data_missing');
   return api.login(initData);
@@ -328,7 +329,6 @@ export function AccountGame({ onBack }: { onBack(): void }) {
 
   const loadAccountState = useCallback(async (user: AccountSummary) => {
     if (accountRef.current && accountRef.current.account_id !== user.account_id) {
-      sessionEpochRef.current += 1;
       setBestScore(null);
       releaseLockRef.current?.(); releaseLockRef.current = undefined;
       if (retryTimerRef.current !== undefined) window.clearTimeout(retryTimerRef.current);
@@ -393,16 +393,21 @@ export function AccountGame({ onBack }: { onBack(): void }) {
   }, [api]);
 
   useEffect(() => {
-    if (!account || snapshot?.status !== 'completion_pending') return;
+    const shouldPoll = snapshot?.status === 'completion_pending'
+      || (snapshot?.verificationStatus === 'verified' && snapshot.deliveryStatus === 'pending');
+    if (!account || !snapshot || !shouldPoll) return;
     const epoch = sessionEpochRef.current;
     const accountId = account.account_id;
     const runId = snapshot.runId;
     let cancelled = false;
-    const isCurrentPoll = () => !cancelled
-      && epoch === sessionEpochRef.current
-      && accountRef.current?.account_id === accountId
-      && snapshotRef.current?.runId === runId
-      && snapshotRef.current.status === 'completion_pending';
+    const isCurrentPoll = () => {
+      const current = snapshotRef.current;
+      return !cancelled
+        && epoch === sessionEpochRef.current
+        && accountRef.current?.account_id === accountId
+        && current?.runId === runId
+        && (current.status === 'completion_pending' || current.deliveryStatus === 'pending');
+    };
     const timer = window.setInterval(() => {
       void api.getRun(runId).then(async (latest) => {
         if (!isCurrentPoll()) return;
@@ -421,14 +426,14 @@ export function AccountGame({ onBack }: { onBack(): void }) {
       }).catch(() => undefined);
     }, 5_000);
     return () => { cancelled = true; window.clearInterval(timer); };
-  }, [account?.account_id, api, refreshAccountProgress, snapshot?.runId, snapshot?.status, storage]);
+  }, [account?.account_id, api, refreshAccountProgress, snapshot?.deliveryStatus, snapshot?.runId, snapshot?.status, storage]);
 
   const login = async (dev: boolean) => {
     const epoch = ++sessionEpochRef.current;
     setBusy(true); setError('');
     try {
-      const user = dev ? await api.loginDev(Number(devUserId)) : await loginWithTelegram(api);
-      if (epoch !== sessionEpochRef.current) return;
+      const user = dev ? await api.loginDev(Number(devUserId)) : await loginWithTelegram(api, () => epoch === sessionEpochRef.current);
+      if (epoch !== sessionEpochRef.current || !user) return;
       await loadAccountState(user);
       if (epoch !== sessionEpochRef.current) return;
       setReauthRequired(false);
@@ -448,12 +453,18 @@ export function AccountGame({ onBack }: { onBack(): void }) {
       if (import.meta.env.DEV) {
         try {
           const webApp = await telegramWebAppReady();
+          if (epoch !== sessionEpochRef.current) return;
           user = webApp.initData?.trim() ? await api.login(webApp.initData) : await api.loginDev(Number(devUserId));
         } catch (reason) {
           if (!(reason instanceof TelegramWebAppUnavailableError)) throw reason;
+          if (epoch !== sessionEpochRef.current) return;
           user = await api.loginDev(Number(devUserId));
         }
-      } else user = await loginWithTelegram(api);
+      } else {
+        const telegramUser = await loginWithTelegram(api, () => epoch === sessionEpochRef.current);
+        if (!telegramUser) return;
+        user = telegramUser;
+      }
       if (epoch !== sessionEpochRef.current) return;
       await loadAccountState(user);
       if (epoch !== sessionEpochRef.current) return;
@@ -645,11 +656,11 @@ export function AccountGame({ onBack }: { onBack(): void }) {
     walletSlot={settingsWallet}
   />;
 
-  const statusMessage = snapshot?.status === 'completion_pending' ? messages.accountPendingVerification
-    : snapshot?.status === 'completed' ? messages.accountVerified
-      : snapshot?.status === 'rejected'
-        ? snapshot.verificationStatus === 'verified' ? messages.accountDeliveryRejected : messages.accountGameplayRejected
-        : '';
+  const statusMessage = snapshot?.verificationStatus === 'verified'
+    ? snapshot.deliveryStatus === 'pending' ? messages.accountDeliveryPending
+      : snapshot.deliveryStatus === 'rejected' ? messages.accountDeliveryRejected : messages.accountVerified
+    : snapshot?.status === 'completion_pending' ? messages.accountPendingVerification
+      : snapshot?.status === 'rejected' ? messages.accountGameplayRejected : '';
   const verifiedRun = snapshot && snapshot.verificationStatus === 'verified' ? snapshot.state : null;
 
   return <main className="game-shell" onPointerDown={() => undefined}>
@@ -686,7 +697,7 @@ export function AccountGame({ onBack }: { onBack(): void }) {
             <p className="account-reward-note">{messages.accountRewardsNotSpendable}</p>
           </>}
           {(snapshot?.status === 'rejected' || snapshot?.status === 'completion_pending') && <GameButton variant="control" onClick={() => void checkStatus()} disabled={busy}>{messages.accountStatusRetry}</GameButton>}
-          {!snapshot || snapshot.status === 'completed' || snapshot.status === 'rejected' || snapshot.status === 'abandoned' ? <GameButton variant="primary" onClick={() => void createRun()} disabled={busy}>{messages.accountStart}</GameButton> : null}
+          {!snapshot || snapshot.status === 'completed' || snapshot.status === 'rejected' || snapshot.status === 'abandoned' || snapshot.verificationStatus === 'verified' ? <GameButton variant="primary" onClick={() => void createRun()} disabled={busy}>{messages.accountStart}</GameButton> : null}
           <p className="account-id">{account.telegram_user_id}</p>
         </>}
         {screen === 'takeover' && <>
