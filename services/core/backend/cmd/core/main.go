@@ -61,10 +61,10 @@ func main() {
 		logger.Error("database initialization failed")
 		os.Exit(1)
 	}
-	server := &core.Server{DB: pool, Auth: core.JWTVerifier{Keys: keys}, OperatorToken: operatorToken, OutboxConfigured: platformURL != "" && serviceToken != "", MaxInflight: maxInflight()}
+	server := &core.Server{DB: pool, Logger: logger, Auth: core.JWTVerifier{Keys: keys}, OperatorToken: operatorToken, OutboxConfigured: platformURL != "" && serviceToken != "", MaxInflight: maxInflight()}
 	mux := server.Handler()
 	httpServer := &http.Server{Addr: listenAddress(), Handler: mux, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
-	worker := &core.CompletionWorker{DB: pool, Endpoint: platformURL, ServiceToken: serviceToken, Client: &http.Client{Timeout: 6 * time.Second}}
+	worker := &core.CompletionWorker{DB: pool, Logger: logger, Endpoint: platformURL, ServiceToken: serviceToken, Client: &http.Client{Timeout: 6 * time.Second}}
 	workerCtx, stopWorker := context.WithCancel(context.Background())
 	defer stopWorker()
 	go worker.RunConcurrent(workerCtx, time.Second, outboxWorkers())

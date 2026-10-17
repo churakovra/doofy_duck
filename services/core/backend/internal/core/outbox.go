@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"math/rand"
 	"net/http"
 	"sync"
@@ -16,6 +17,7 @@ import (
 
 type CompletionWorker struct {
 	DB           *pgxpool.Pool
+	Logger       *slog.Logger
 	Client       *http.Client
 	Endpoint     string
 	ServiceToken string
@@ -67,22 +69,59 @@ func (w *CompletionWorker) DispatchOne(ctx context.Context) (bool, error) {
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, w.Endpoint, bytes.NewReader(event.Body))
 	if err != nil {
-		return true, w.retry(ctx, event, err)
+		return true, w.retryWithLog(ctx, event, 0, "request_create_failed", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+w.ServiceToken)
 	response, err := client.Do(req)
 	if err != nil {
-		return true, w.retry(ctx, event, err)
+		return true, w.retryWithLog(ctx, event, 0, "transport_failed", err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode >= 200 && response.StatusCode < 300 {
-		return true, w.finish(ctx, event, true)
+		err = w.finish(ctx, event, true)
+		status, reason := "delivered", "accepted"
+		if err != nil {
+			status, reason = "delivery_state_failed", "delivery_state_update_failed"
+		}
+		w.logDispatch(event, status, response.StatusCode, reason)
+		return true, err
 	}
 	if response.StatusCode == http.StatusConflict || response.StatusCode == http.StatusBadRequest || response.StatusCode == http.StatusUnprocessableEntity {
-		return true, w.finish(ctx, event, false)
+		err = w.finish(ctx, event, false)
+		status, reason := "rejected", "permanent_rejection"
+		if err != nil {
+			status, reason = "delivery_state_failed", "delivery_state_update_failed"
+		}
+		w.logDispatch(event, status, response.StatusCode, reason)
+		return true, err
 	}
-	return true, w.retry(ctx, event, fmt.Errorf("completion endpoint returned %d", response.StatusCode))
+	return true, w.retryWithLog(ctx, event, response.StatusCode, "remote_retryable_status", fmt.Errorf("completion endpoint returned %d", response.StatusCode))
+}
+
+func (w *CompletionWorker) retryWithLog(ctx context.Context, event leasedEvent, httpStatus int, reason string, cause error) error {
+	err := w.retry(ctx, event, cause)
+	status := "pending_retry"
+	if err != nil {
+		status = "retry_state_failed"
+		reason = "retry_state_update_failed"
+	}
+	w.logDispatch(event, status, httpStatus, reason)
+	return err
+}
+
+func (w *CompletionWorker) logDispatch(event leasedEvent, status string, httpStatus int, reason string) {
+	if w.Logger == nil {
+		return
+	}
+	w.Logger.Info("completion_delivery", "event_id", event.EventID, "run_id", event.RunID, "status", status, "http_status", httpStatus, "attempt", event.Attempts+1, "reason", reason)
+}
+
+func (w *CompletionWorker) logWorkerFailure() {
+	if w.Logger == nil {
+		return
+	}
+	w.Logger.Warn("completion_dispatch_failed", "status", "retrying", "reason", "dispatch_failed")
 }
 
 func (w *CompletionWorker) finish(ctx context.Context, e leasedEvent, accepted bool) error {
@@ -151,6 +190,9 @@ func (w *CompletionWorker) RunConcurrent(ctx context.Context, interval time.Dura
 			defer ticker.Stop()
 			for {
 				sent, err := w.DispatchOne(ctx)
+				if err != nil {
+					w.logWorkerFailure()
+				}
 				if err == nil && sent {
 					continue
 				}

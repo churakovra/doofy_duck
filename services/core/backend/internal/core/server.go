@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -24,6 +25,7 @@ import (
 
 type Server struct {
 	DB               *pgxpool.Pool
+	Logger           *slog.Logger
 	Auth             JWTVerifier
 	OperatorToken    string
 	OutboxConfigured bool
@@ -84,7 +86,79 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/v1/runs/{run_id}/abandon", s.user(http.HandlerFunc(s.abandon)))
 	mux.HandleFunc("POST /internal/v1/outages/start", s.operator(s.startOutage))
 	mux.HandleFunc("POST /internal/v1/outages/{id}/recover", s.operator(s.recoverOutage))
-	return securityHeaders(mux)
+	return requestLogging(s.Logger)(securityHeaders(mux))
+}
+
+type outcomeWriter struct {
+	http.ResponseWriter
+	status int
+}
+
+func (w *outcomeWriter) WriteHeader(status int) {
+	if w.status != 0 {
+		return
+	}
+	w.status = status
+	w.ResponseWriter.WriteHeader(status)
+}
+
+func (w *outcomeWriter) Write(body []byte) (int, error) {
+	if w.status == 0 {
+		w.WriteHeader(http.StatusOK)
+	}
+	return w.ResponseWriter.Write(body)
+}
+
+func requestLogging(logger *slog.Logger) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		if logger == nil {
+			return next
+		}
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			requestID := validRequestID(r.Header.Get("X-Request-ID"))
+			if requestID == "" {
+				requestID, _ = randomUUID()
+			}
+			if requestID != "" {
+				w.Header().Set("X-Request-ID", requestID)
+			}
+			started := time.Now()
+			outcome := &outcomeWriter{ResponseWriter: w}
+			next.ServeHTTP(outcome, r)
+			status := outcome.status
+			if status == 0 {
+				status = http.StatusOK
+			}
+			route := r.Pattern
+			if route == "" {
+				route = "unmatched"
+			}
+			logger.Info("http_request", "request_id", requestID, "method", canonicalMethod(r.Method), "route", route, "status", status, "duration_ms", time.Since(started).Milliseconds())
+		})
+	}
+}
+
+func canonicalMethod(method string) string {
+	switch method {
+	case http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions:
+		return method
+	default:
+		return "OTHER"
+	}
+}
+
+func validRequestID(value string) string {
+	if len(value) != 36 || value[8] != '-' || value[13] != '-' || value[18] != '-' || value[23] != '-' || strings.ToLower(value) != value {
+		return ""
+	}
+	compact := strings.ReplaceAll(value, "-", "")
+	if len(compact) != 32 {
+		return ""
+	}
+	if _, err := hex.DecodeString(compact); err != nil {
+		return ""
+	}
+	return value
 }
 
 type claimsKey struct{}
