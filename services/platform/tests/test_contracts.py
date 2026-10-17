@@ -60,3 +60,22 @@ def test_production_rejects_dev_auth_and_local_signing_key(monkeypatch):
     settings = Settings.from_env()
     with pytest.raises(RuntimeError, match="non-development signing key"):
         settings.validate_runtime()
+
+
+def test_settlement_requires_explicit_timezone_aware_activation_timestamp(monkeypatch):
+    from app.settings import Settings
+
+    monkeypatch.setenv("DD_ENV", "test")
+    monkeypatch.setenv("ECONOMY_SETTLEMENT_ENABLED", "true")
+    monkeypatch.delenv("ECONOMY_SETTLEMENT_ACTIVATED_AT", raising=False)
+    with pytest.raises(RuntimeError, match="ACTIVATED_AT is required"):
+        Settings.from_env().validate_settlement_config()
+
+    monkeypatch.setenv("ECONOMY_SETTLEMENT_ACTIVATED_AT", "2026-10-17T12:00:00")
+    with pytest.raises(RuntimeError, match="must include a timezone"):
+        Settings.from_env()
+
+    monkeypatch.setenv("ECONOMY_SETTLEMENT_ACTIVATED_AT", "2026-10-17T12:00:00Z")
+    settings = Settings.from_env()
+    assert settings.economy_settlement_enabled
+    assert settings.economy_settlement_activated_at is not None

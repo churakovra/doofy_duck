@@ -40,9 +40,10 @@ flowchart LR
 | G4 Catalog | Starter grants, stable item IDs, approved skins/backgrounds/assets/descriptions, prices/currencies, sale eligibility, quote lifetime and delisting behavior | Live catalog, grants and purchases |
 | G5 Release | Physical Telegram checks in both languages, pilot access rules, operational acceptance, provider/budget/deployment approval | Hosted rollout |
 
-Recommend one price denomination per offer initially, no conversions, permanent
-cosmetic ownership and explicit preview before purchase. These are proposals
-until approved. Do not silently make all existing test cosmetics owned or paid.
+Use one price denomination per offer and explicit preview before purchase.
+The owner approved permanent ownership and no self-service refunds for the initial
+internal-currency shop. Support corrections use audited adjustments. XTR payment
+refund rules remain a separate PAY decision. Do not silently make all existing test cosmetics owned or paid.
 Account and practice equipment must not overwrite each other's selections.
 
 ## Owner direction received during implementation
@@ -347,3 +348,44 @@ purchase is enabled by this approval.
   are not implemented by this milestone. No existing run facts have been credited.
 - New Star generation requires its separate shared-simulation implementation.
   Browser, real Telegram and hosted acceptance remain separate.
+
+## Settlement contract settled before implementation
+
+Wallet and ledger API amounts use decimal strings to preserve signed-64-bit
+precision in browsers. Reads scope solely to authenticated identity and fail as
+unavailable on database errors rather than showing a fabricated zero balance.
+Current identity tokens remain compatible with Core and Platform authentication.
+
+Completion receipt acknowledgment follows durable inbox acceptance, independently
+of settlement processing. A bounded operator worker commits settlement, ledger
+credit and per-run coin cap usage together. Life indices process in order; a
+future out-of-order life waits for predecessors rather than consuming cap by
+delivery order. Continue itself is not implemented.
+
+Issuance defaults disabled and requires an explicit UTC activation cutoff.
+Historical verified facts are eligible for explicit dry-run/backfill of coins
+only. No backfill executes automatically during migration or startup. Existing
+simulation tuple 1.3.0/1.2.0/dd-v1-stepped-v1 earns only coins under the initial
+policy; its earlier Star generation must not silently fund premium currency.
+The approved new generation tuple will be added explicitly after its separate
+simulation implementation. Unknown identities require action rather than credit.
+
+### Wallet API and settlement milestone
+
+Implemented authenticated decimal-string balances/history and own-completion
+settlement status; migration 0003, pending inbox settlement, bounded processing,
+once-only coin credits with a 30/run cap, explicit historical coin backfill,
+paged dry-run and supported-failure requeue. Legacy Stars remain uncredited.
+Settings default disabled with a required explicit activation cutoff before work.
+
+Real PostgreSQL suite: 39 passed. Native Python formatting/lint, strict mypy and
+six non-database tests passed; its 33 DB skips are separate from the complete
+container execution. Independent review/re-review resolved cap caching, readiness
+starvation, malformed cursors and operator recovery. Corrected fixture identities
+were checked against temporarily restored old ordering/paging to prove intended
+regressions before the final passing run. No actual retained player facts were
+credited; all database tests used dedicated test databases.
+
+Backfill dry-run pages are estimates against current committed state, not one
+cross-page snapshot. Use the returned cursor and re-plan after applying a page;
+do not add page estimates blindly when one run spans page boundaries.

@@ -27,6 +27,43 @@ class AccountResponse(BaseModel):
     created_at: datetime
 
 
+class WalletBalanceItem(BaseModel):
+    currency: Literal["FEATHER", "GAME_STAR"]
+    balance: str
+
+
+class WalletBalancesResponse(BaseModel):
+    balances: list[WalletBalanceItem]
+
+
+class WalletEntryResponse(BaseModel):
+    entry_id: UUID
+    currency: Literal["FEATHER", "GAME_STAR"]
+    operation_id: str
+    delta: str
+    source_kind: str
+    source_reference: str
+    policy_version: str
+    correlation_reference: str | None
+    created_at: datetime
+
+
+class WalletHistoryResponse(BaseModel):
+    entries: list[WalletEntryResponse]
+    next_cursor: str | None
+
+
+class CompletionSettlementResponse(BaseModel):
+    event_id: UUID
+    run_id: UUID
+    life_index: int
+    status: Literal["pending", "committed", "ineligible", "actionable_failure"]
+    reason: str | None
+    policy_version: str | None
+    credited: dict[Literal["FEATHER", "GAME_STAR"], str]
+    completed_at: datetime
+
+
 class Collections(BaseModel):
     model_config = ConfigDict(extra="forbid")
     FEATHER: int = Field(ge=0)

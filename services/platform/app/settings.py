@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from datetime import datetime
 
 
 @dataclass(frozen=True)
@@ -16,6 +17,8 @@ class Settings:
     refresh_cookie_secure: bool
     dev_auth_enabled: bool
     dev_auth_user_id: int
+    economy_settlement_enabled: bool = False
+    economy_settlement_activated_at: datetime | None = None
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -25,6 +28,15 @@ class Settings:
             raise RuntimeError("DEV_AUTH_ENABLED cannot be enabled in production")
         if environment not in {"development", "test", "production"}:
             raise RuntimeError("DD_ENV must be development, test, or production")
+        activated_at_value = os.getenv("ECONOMY_SETTLEMENT_ACTIVATED_AT", "").strip()
+        try:
+            activated_at = (
+                datetime.fromisoformat(activated_at_value.replace("Z", "+00:00")) if activated_at_value else None
+            )
+        except ValueError as error:
+            raise RuntimeError("ECONOMY_SETTLEMENT_ACTIVATED_AT must be an ISO 8601 timestamp") from error
+        if activated_at is not None and (activated_at.tzinfo is None or activated_at.utcoffset() is None):
+            raise RuntimeError("ECONOMY_SETTLEMENT_ACTIVATED_AT must include a timezone")
         return cls(
             environment=environment,
             platform_database_url=os.getenv(
@@ -40,6 +52,8 @@ class Settings:
             refresh_cookie_secure=environment == "production",
             dev_auth_enabled=dev_auth_enabled,
             dev_auth_user_id=int(os.getenv("DEV_AUTH_USER_ID", "100000001")),
+            economy_settlement_enabled=_bool("ECONOMY_SETTLEMENT_ENABLED", False),
+            economy_settlement_activated_at=activated_at,
         )
 
     def validate_runtime(self) -> None:
@@ -55,6 +69,11 @@ class Settings:
             raise RuntimeError("production requires a Telegram bot token and non-development signing key")
         if self.dev_auth_enabled and self.environment != "development":
             raise RuntimeError("DEV_AUTH_ENABLED is development-only")
+        self.validate_settlement_config()
+
+    def validate_settlement_config(self) -> None:
+        if self.economy_settlement_enabled and self.economy_settlement_activated_at is None:
+            raise RuntimeError("ECONOMY_SETTLEMENT_ACTIVATED_AT is required when settlement is enabled")
 
 
 def _bool(name: str, default: bool) -> bool:

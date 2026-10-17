@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import binascii
 import hashlib
 import hmac
 import json
@@ -13,18 +14,31 @@ from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
-from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
-from sqlalchemy import or_, select, text, update
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
+from sqlalchemy import literal, or_, select, text, tuple_, update
 from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app import database
 from app.auth import TelegramIdentity, TelegramInitDataError, verify_telegram_init_data
-from app.economy.models import CompletionEvidence
+from app.economy.models import CompletionEvidence, CompletionSettlement
+from app.economy.settlement import enqueue_settlement
+from app.economy.wallet.models import Wallet, WalletCurrency, WalletLedgerEntry
 from app.platform.models import Account, RefreshSession
 from app.request_logging import configure_json_logger, install_request_logging
-from app.schemas import AccessResponse, AccountResponse, DevAuthRequest, RunLifeCompleted, TelegramAuthRequest
+from app.schemas import (
+    AccessResponse,
+    AccountResponse,
+    CompletionSettlementResponse,
+    DevAuthRequest,
+    RunLifeCompleted,
+    TelegramAuthRequest,
+    WalletBalanceItem,
+    WalletBalancesResponse,
+    WalletEntryResponse,
+    WalletHistoryResponse,
+)
 from app.settings import Settings
 from app.tokens import ACCESS_TTL_SECONDS, AccessTokenError, Ed25519TokenIssuer, TokenClaims, verify_access_token
 
@@ -50,6 +64,31 @@ def _payload_hash(event: RunLifeCompleted) -> tuple[dict[str, Any], str]:
     payload = event.model_dump(mode="json")
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return payload, hashlib.sha256(canonical.encode()).hexdigest()
+
+
+def _encode_wallet_cursor(created_at: datetime, entry_id: uuid.UUID) -> str:
+    payload = json.dumps(
+        {"created_at": created_at.isoformat(), "entry_id": str(entry_id)}, sort_keys=True, separators=(",", ":")
+    ).encode()
+    return base64.urlsafe_b64encode(payload).rstrip(b"=").decode("ascii")
+
+
+def _decode_wallet_cursor(value: str) -> tuple[datetime, uuid.UUID]:
+    if not value or len(value) > 512:
+        raise ValueError("invalid cursor")
+    try:
+        payload = json.loads(base64.b64decode(value + "=" * (-len(value) % 4), altchars=b"-_", validate=True))
+        if not isinstance(payload, dict):
+            raise ValueError("invalid cursor")
+        if not isinstance(payload.get("created_at"), str) or not isinstance(payload.get("entry_id"), str):
+            raise ValueError("invalid cursor")
+        created_at = datetime.fromisoformat(payload["created_at"])
+        entry_id = uuid.UUID(payload["entry_id"])
+    except (KeyError, TypeError, ValueError, UnicodeDecodeError, binascii.Error) as error:
+        raise ValueError("invalid cursor") from error
+    if created_at.tzinfo is None or created_at.utcoffset() is None:
+        raise ValueError("invalid cursor")
+    return created_at, entry_id
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -281,6 +320,153 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             account_id=account.id, telegram_user_id=account.telegram_user_id, created_at=account.created_at
         )
 
+    @app.get("/api/v1/wallets", response_model=WalletBalancesResponse)
+    def own_wallets(
+        claims: TokenClaims = Depends(current_claims), db: Session = Depends(get_economy_db)
+    ) -> WalletBalancesResponse:
+        account_id = uuid.UUID(claims.subject)
+        try:
+            wallets = db.scalars(select(Wallet).where(Wallet.account_id == account_id)).all()
+        except SQLAlchemyError:
+            db.rollback()
+            logger.warning("wallet_read_failed endpoint=balances")
+            raise HTTPException(
+                status_code=503, detail={"code": "wallet_unavailable", "message": "wallet is unavailable"}
+            ) from None
+        balances = {wallet.currency: wallet.balance for wallet in wallets}
+        return WalletBalancesResponse(
+            balances=[
+                WalletBalanceItem(currency=currency.value, balance=str(balances.get(currency.value, 0)))
+                for currency in WalletCurrency
+            ]
+        )
+
+    @app.get("/api/v1/wallets/{currency}/entries", response_model=WalletHistoryResponse)
+    def own_wallet_history(
+        currency: WalletCurrency,
+        limit: Annotated[int, Query(ge=1, le=100)] = 50,
+        cursor: str | None = None,
+        claims: TokenClaims = Depends(current_claims),
+        db: Session = Depends(get_economy_db),
+    ) -> WalletHistoryResponse:
+        account_id = uuid.UUID(claims.subject)
+        statement = select(WalletLedgerEntry).where(
+            WalletLedgerEntry.account_id == account_id,
+            WalletLedgerEntry.currency == currency.value,
+        )
+        if cursor is not None:
+            try:
+                created_at, entry_id = _decode_wallet_cursor(cursor)
+            except ValueError:
+                raise HTTPException(
+                    status_code=400, detail={"code": "invalid_cursor", "message": "cursor is invalid"}
+                ) from None
+            statement = statement.where(
+                tuple_(WalletLedgerEntry.created_at, WalletLedgerEntry.id)
+                < tuple_(literal(created_at), literal(entry_id))
+            )
+        statement = statement.order_by(WalletLedgerEntry.created_at.desc(), WalletLedgerEntry.id.desc()).limit(
+            limit + 1
+        )
+        try:
+            rows = db.scalars(statement).all()
+        except SQLAlchemyError:
+            db.rollback()
+            logger.warning("wallet_read_failed endpoint=history")
+            raise HTTPException(
+                status_code=503, detail={"code": "wallet_unavailable", "message": "wallet is unavailable"}
+            ) from None
+        has_more = len(rows) > limit
+        visible = rows[:limit]
+        entries = [
+            WalletEntryResponse(
+                entry_id=row.id,
+                currency=currency.value,
+                operation_id=row.operation_id,
+                delta=str(row.delta),
+                source_kind=row.source_kind,
+                source_reference=row.source_reference,
+                policy_version=row.policy_version,
+                correlation_reference=row.correlation_reference,
+                created_at=row.created_at,
+            )
+            for row in visible
+        ]
+        next_cursor = _encode_wallet_cursor(visible[-1].created_at, visible[-1].id) if has_more and visible else None
+        return WalletHistoryResponse(entries=entries, next_cursor=next_cursor)
+
+    @app.get(
+        "/api/v1/completions/{run_id}/{life_index}",
+        response_model=CompletionSettlementResponse,
+    )
+    def own_completion_settlement(
+        run_id: uuid.UUID,
+        life_index: int,
+        claims: TokenClaims = Depends(current_claims),
+        db: Session = Depends(get_economy_db),
+    ) -> CompletionSettlementResponse:
+        if life_index < 0:
+            raise HTTPException(status_code=422, detail="invalid life index")
+        account_id = uuid.UUID(claims.subject)
+        try:
+            result = db.execute(
+                select(CompletionEvidence, CompletionSettlement)
+                .outerjoin(CompletionSettlement, CompletionSettlement.event_id == CompletionEvidence.event_id)
+                .where(
+                    CompletionEvidence.run_id == run_id,
+                    CompletionEvidence.life_index == life_index,
+                    CompletionEvidence.payload["account_id"].as_string() == str(account_id),
+                )
+            ).one_or_none()
+        except SQLAlchemyError:
+            db.rollback()
+            logger.warning("completion_status_read_failed")
+            raise HTTPException(
+                status_code=503,
+                detail={"code": "settlement_unavailable", "message": "completion status is unavailable"},
+            ) from None
+        if result is None:
+            raise HTTPException(status_code=404, detail="completion not found")
+        evidence, settlement = result
+        if settlement is None:
+            completed_at = datetime.fromisoformat(str(evidence.payload["completed_at"]).replace("Z", "+00:00"))
+            reason = "settlement_not_queued"
+            cutoff = config.economy_settlement_activated_at
+            if not config.economy_settlement_enabled:
+                reason = "settlement_disabled"
+            elif cutoff is not None and completed_at < cutoff:
+                reason = "historical_backfill_required"
+            return CompletionSettlementResponse(
+                event_id=evidence.event_id,
+                run_id=evidence.run_id,
+                life_index=evidence.life_index,
+                status="pending",
+                reason=reason,
+                policy_version=None,
+                credited={"FEATHER": "0", "GAME_STAR": "0"},
+                completed_at=completed_at,
+            )
+        effective_reason = settlement.reason
+        if settlement.status == "pending":
+            cutoff = config.economy_settlement_activated_at
+            if not config.economy_settlement_enabled:
+                effective_reason = "settlement_disabled"
+            elif cutoff is not None and settlement.completed_at < cutoff:
+                effective_reason = "historical_backfill_required"
+        return CompletionSettlementResponse(
+            event_id=evidence.event_id,
+            run_id=evidence.run_id,
+            life_index=evidence.life_index,
+            status=settlement.status,
+            reason=effective_reason,
+            policy_version=settlement.policy_version,
+            credited={
+                "FEATHER": str(settlement.feathers_credited),
+                "GAME_STAR": str(settlement.stars_credited),
+            },
+            completed_at=settlement.completed_at,
+        )
+
     @app.post("/internal/v1/run-completions", status_code=202)
     def accept_completion(
         event: RunLifeCompleted,
@@ -299,22 +485,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if previous:
             if len(previous) != 1 or previous[0].payload_hash != digest:
                 raise HTTPException(status_code=409, detail="completion evidence conflict")
+            enqueue_settlement(db, previous[0], config)
+            db.commit()
             return {"accepted": True, "event_id": str(previous[0].event_id), "duplicate": True}
-        db.add(
-            CompletionEvidence(
-                event_id=event.event_id,
-                run_id=event.run_id,
-                life_index=event.life_index,
-                payload=payload,
-                payload_hash=digest,
-            )
+        evidence = CompletionEvidence(
+            event_id=event.event_id,
+            run_id=event.run_id,
+            life_index=event.life_index,
+            payload=payload,
+            payload_hash=digest,
         )
+        db.add(evidence)
         try:
+            db.flush()
+            enqueue_settlement(db, evidence, config)
             db.commit()
         except IntegrityError:
             db.rollback()
             concurrent = db.execute(select(CompletionEvidence).where(identity_clause)).scalars().all()
             if len(concurrent) == 1 and concurrent[0].payload_hash == digest:
+                enqueue_settlement(db, concurrent[0], config)
+                db.commit()
                 return {"accepted": True, "event_id": str(concurrent[0].event_id), "duplicate": True}
             raise HTTPException(status_code=409, detail="completion evidence conflict") from None
         return {"accepted": True, "event_id": str(event.event_id), "duplicate": False}

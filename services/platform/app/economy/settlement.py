@@ -1,0 +1,573 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from typing import Any
+from uuid import UUID, uuid4
+
+from sqlalchemy import DateTime, case, cast, func, literal, or_, select, tuple_
+from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.orm import Session
+
+from app.economy.models import CompletionEvidence, CompletionSettlement, RunRewardCap
+from app.economy.wallet.ledger import WalletError, post_entry
+from app.economy.wallet.models import Wallet, WalletCurrency
+from app.settings import Settings
+
+POLICY_VERSION = "verified-pickups-v1"
+COIN_RUN_CAP = 30
+SUPPORTED_SIMULATION_IDENTITY = ("1.3.0", "1.2.0", "dd-v1-stepped-v1")
+TERMINAL_STATUSES = ("committed", "ineligible")
+
+
+@dataclass(frozen=True)
+class BackfillPlan:
+    completion_count: int
+    run_count: int
+    feathers_to_credit: int
+    game_stars_to_credit: int
+    unsupported_count: int
+    waiting_count: int
+    has_more: bool
+    next_cursor: tuple[UUID, int] | None
+
+
+@dataclass(frozen=True)
+class BackfillResult:
+    completions_considered: int
+    feathers_credited: int
+    game_stars_credited: int
+    unsupported_count: int
+    waiting_count: int
+    has_more: bool
+    next_cursor: tuple[UUID, int] | None
+
+
+@dataclass(frozen=True)
+class RetryFailureResult:
+    requeued: int
+    has_more: bool
+    next_cursor: tuple[UUID, int] | None
+
+
+def enqueue_settlement(session: Session, evidence: CompletionEvidence, settings: Settings) -> None:
+    session.execute(
+        insert(CompletionSettlement)
+        .values(
+            id=uuid4(),
+            event_id=evidence.event_id,
+            run_id=evidence.run_id,
+            life_index=evidence.life_index,
+            account_id=UUID(str(evidence.payload["account_id"])),
+            status="pending",
+            reason=_initial_reason(evidence, settings),
+            feathers_credited=0,
+            stars_credited=0,
+            completed_at=_payload_completed_at(evidence.payload),
+        )
+        .on_conflict_do_nothing(index_elements=[CompletionSettlement.run_id, CompletionSettlement.life_index])
+    )
+
+
+def process_settlement_batch(session: Session, *, settings: Settings, limit: int = 100) -> int:
+    """Settle up to limit post-activation facts in the caller's transaction."""
+    settings.validate_settlement_config()
+    if type(limit) is not int or not 1 <= limit <= 500:
+        raise ValueError("limit must be an integer from 1 to 500")
+    cutoff = settings.economy_settlement_activated_at
+    if not settings.economy_settlement_enabled or cutoff is None:
+        return 0
+
+    prior_life = CompletionSettlement.__table__.alias("prior_life")
+    prior_terminal_count = (
+        select(func.count())
+        .select_from(prior_life)
+        .where(
+            prior_life.c.run_id == CompletionSettlement.run_id,
+            prior_life.c.life_index < CompletionSettlement.life_index,
+            prior_life.c.status.in_(TERMINAL_STATUSES),
+        )
+        .correlate(CompletionSettlement)
+        .scalar_subquery()
+    )
+    ready_first = or_(CompletionSettlement.life_index == 0, prior_terminal_count == CompletionSettlement.life_index)
+    statement = (
+        select(CompletionSettlement, CompletionEvidence)
+        .join(CompletionEvidence, CompletionEvidence.event_id == CompletionSettlement.event_id)
+        .where(CompletionSettlement.status == "pending", CompletionSettlement.completed_at >= cutoff)
+        .order_by(case((ready_first, 0), else_=1), CompletionSettlement.run_id, CompletionSettlement.life_index)
+        .limit(limit)
+        .with_for_update(skip_locked=True, of=CompletionSettlement)
+    )
+    rows = [(settlement, evidence) for settlement, evidence in session.execute(statement).all()]
+    _lock_live_batch_resources(session, rows)
+    handled = 0
+    for settlement, evidence in rows:
+        _process_live_settlement(session, settlement, evidence)
+        handled += 1
+    return handled
+
+
+def retry_supported_failures(
+    session: Session,
+    *,
+    settings: Settings,
+    limit: int = 100,
+    after: tuple[UUID, int] | None = None,
+) -> RetryFailureResult:
+    """Requeue one bounded page of post-activation failures supported by this code version."""
+    settings.validate_settlement_config()
+    if type(limit) is not int or not 1 <= limit <= 500:
+        raise ValueError("limit must be an integer from 1 to 500")
+    _validate_backfill_cursor(after)
+    cutoff = settings.economy_settlement_activated_at
+    if not settings.economy_settlement_enabled or cutoff is None:
+        raise ValueError("retrying settlements requires enabled settlement and an activation timestamp")
+    statement = (
+        select(CompletionSettlement)
+        .join(CompletionEvidence, CompletionEvidence.event_id == CompletionSettlement.event_id)
+        .where(
+            CompletionSettlement.status == "actionable_failure",
+            CompletionSettlement.completed_at >= cutoff,
+            CompletionEvidence.payload["simulation_version"].as_string() == SUPPORTED_SIMULATION_IDENTITY[0],
+            CompletionEvidence.payload["generator_version"].as_string() == SUPPORTED_SIMULATION_IDENTITY[1],
+            CompletionEvidence.payload["config_id"].as_string() == SUPPORTED_SIMULATION_IDENTITY[2],
+        )
+        .order_by(CompletionSettlement.run_id, CompletionSettlement.life_index)
+        .limit(limit + 1)
+        .with_for_update(skip_locked=True, of=CompletionSettlement)
+    )
+    if after is not None:
+        statement = statement.where(
+            tuple_(CompletionSettlement.run_id, CompletionSettlement.life_index)
+            > tuple_(literal(after[0]), literal(after[1]))
+        )
+    rows = session.scalars(statement).all()
+    has_more = len(rows) > limit
+    visible = rows[:limit]
+    for settlement in visible:
+        settlement.status = "pending"
+        settlement.reason = "awaiting_settlement"
+        settlement.settled_at = None
+    return RetryFailureResult(
+        requeued=len(visible),
+        has_more=has_more,
+        next_cursor=(visible[-1].run_id, visible[-1].life_index) if has_more and visible else None,
+    )
+
+
+def _process_live_settlement(session: Session, settlement: CompletionSettlement, evidence: CompletionEvidence) -> None:
+    if not _prior_lives_are_settled(session, settlement):
+        settlement.reason = "waiting_for_prior_life"
+        return
+
+    if _simulation_identity(evidence.payload) != SUPPORTED_SIMULATION_IDENTITY:
+        settlement.status = "actionable_failure"
+        settlement.reason = "unsupported_simulation_identity"
+        settlement.settled_at = datetime.now(UTC)
+        return
+
+    cap = _lock_run_cap(session, settlement.run_id, settlement.account_id)
+    collections = evidence.payload["collections"]
+    requested = int(collections[WalletCurrency.FEATHER.value])
+    amount = min(requested, COIN_RUN_CAP - cap.feathers_credited)
+    try:
+        _credit_completion(
+            session,
+            settlement=settlement,
+            currency=WalletCurrency.FEATHER,
+            amount=amount,
+            source_reference=str(settlement.event_id),
+        )
+    except WalletError:
+        settlement.status = "actionable_failure"
+        settlement.reason = "wallet_posting_failed"
+        settlement.settled_at = datetime.now(UTC)
+        return
+
+    cap.feathers_credited += amount
+    cap.updated_at = func.now()
+    settlement.feathers_credited = amount
+    settlement.stars_credited = 0
+    settlement.policy_version = POLICY_VERSION
+    settlement.status = "committed"
+    settlement.reason = "legacy_star_generation" if int(collections[WalletCurrency.GAME_STAR.value]) else None
+    settlement.settled_at = datetime.now(UTC)
+
+
+def _credit_completion(
+    session: Session,
+    *,
+    settlement: CompletionSettlement,
+    currency: WalletCurrency,
+    amount: int,
+    source_reference: str,
+) -> None:
+    if amount <= 0:
+        return
+    post_entry(
+        session,
+        account_id=settlement.account_id,
+        currency=currency,
+        operation_id=f"completion:{settlement.run_id}:{settlement.life_index}:{currency.value}",
+        direction="credit",
+        amount=amount,
+        source_kind="verified_completion",
+        source_reference=source_reference,
+        policy_version=POLICY_VERSION,
+        correlation_reference=f"{settlement.run_id}:{settlement.life_index}",
+    )
+
+
+def _lock_run_cap(session: Session, run_id: UUID, account_id: UUID) -> RunRewardCap:
+    session.execute(
+        insert(RunRewardCap)
+        .values(run_id=run_id, account_id=account_id, feathers_credited=0)
+        .on_conflict_do_nothing(index_elements=[RunRewardCap.run_id])
+    )
+    cap = session.scalar(
+        select(RunRewardCap)
+        .where(RunRewardCap.run_id == run_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if cap is None:
+        raise RuntimeError("run cap row could not be created or loaded")
+    return cap
+
+
+def _lock_live_batch_resources(session: Session, rows: list[tuple[CompletionSettlement, CompletionEvidence]]) -> None:
+    supported = [
+        (settlement, evidence)
+        for settlement, evidence in rows
+        if _simulation_identity(evidence.payload) == SUPPORTED_SIMULATION_IDENTITY
+    ]
+    run_accounts = {settlement.run_id: settlement.account_id for settlement, _evidence in supported}
+    caps = {
+        run_id: _lock_run_cap(session, run_id, account_id)
+        for run_id, account_id in sorted(run_accounts.items(), key=lambda item: item[0].int)
+    }
+    wallets: set[UUID] = set()
+    for settlement, evidence in supported:
+        requested = int(evidence.payload["collections"][WalletCurrency.FEATHER.value])
+        if min(requested, COIN_RUN_CAP - caps[settlement.run_id].feathers_credited) > 0:
+            wallets.add(settlement.account_id)
+    for account_id in sorted(wallets, key=lambda value: value.int):
+        _lock_wallet_row(session, account_id, WalletCurrency.FEATHER)
+
+
+def _lock_wallet_row(session: Session, account_id: UUID, currency: WalletCurrency) -> None:
+    statement = (
+        select(Wallet)
+        .where(Wallet.account_id == account_id, Wallet.currency == currency.value)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if session.scalar(statement) is not None:
+        return
+    session.execute(
+        insert(Wallet)
+        .values(account_id=account_id, currency=currency.value, balance=0)
+        .on_conflict_do_nothing(index_elements=[Wallet.account_id, Wallet.currency])
+    )
+    if session.scalar(statement) is None:
+        raise RuntimeError("wallet row could not be created or locked")
+
+
+def _prior_lives_are_settled(session: Session, settlement: CompletionSettlement) -> bool:
+    if settlement.life_index == 0:
+        return True
+    terminal_count = session.scalar(
+        select(func.count())
+        .select_from(CompletionSettlement)
+        .where(
+            CompletionSettlement.run_id == settlement.run_id,
+            CompletionSettlement.life_index < settlement.life_index,
+            CompletionSettlement.status.in_(TERMINAL_STATUSES),
+        )
+    )
+    return terminal_count == settlement.life_index
+
+
+def plan_historical_backfill(
+    session: Session,
+    *,
+    activated_at: datetime,
+    limit: int = 500,
+    after: tuple[UUID, int] | None = None,
+) -> BackfillPlan:
+    """Plan one bounded page of pre-activation coin-only backfill without writes."""
+    _validate_cutoff(activated_at)
+    if type(limit) is not int or not 1 <= limit <= 5000:
+        raise ValueError("limit must be an integer from 1 to 5000")
+    _validate_backfill_cursor(after)
+    rows = _backfill_rows(session, activated_at=activated_at, limit=limit + 1, after=after)
+    has_more = len(rows) > limit
+    visible = rows[:limit]
+    run_ids = {evidence.run_id for evidence, _status in visible}
+    caps = (
+        {
+            row.run_id: row.feathers_credited
+            for row in session.scalars(select(RunRewardCap).where(RunRewardCap.run_id.in_(run_ids))).all()
+        }
+        if run_ids
+        else {}
+    )
+    done = _terminal_lives(session, run_ids)
+    planned: dict[UUID, int] = {}
+    supported = 0
+    unsupported = 0
+    waiting = 0
+    for evidence, status in visible:
+        if status in TERMINAL_STATUSES:
+            continue
+        if not _prior_indexes_done(evidence.run_id, evidence.life_index, done):
+            waiting += 1
+            continue
+        if _simulation_identity(evidence.payload) != SUPPORTED_SIMULATION_IDENTITY:
+            unsupported += 1
+            continue
+        supported += 1
+        cap_used = caps.get(evidence.run_id, 0) + planned.get(evidence.run_id, 0)
+        requested = int(evidence.payload["collections"][WalletCurrency.FEATHER.value])
+        planned[evidence.run_id] = planned.get(evidence.run_id, 0) + min(requested, COIN_RUN_CAP - cap_used)
+        done.setdefault(evidence.run_id, set()).add(evidence.life_index)
+    return BackfillPlan(
+        completion_count=supported,
+        run_count=len({evidence.run_id for evidence, status in visible if status not in TERMINAL_STATUSES}),
+        feathers_to_credit=sum(planned.values()),
+        game_stars_to_credit=0,
+        unsupported_count=unsupported,
+        waiting_count=waiting,
+        has_more=has_more,
+        next_cursor=(visible[-1][0].run_id, visible[-1][0].life_index) if has_more and visible else None,
+    )
+
+
+def execute_historical_backfill(
+    session: Session,
+    *,
+    settings: Settings,
+    limit: int = 500,
+    execute: bool = False,
+    after: tuple[UUID, int] | None = None,
+) -> BackfillResult:
+    settings.validate_settlement_config()
+    if not execute:
+        raise ValueError("historical backfill requires the explicit execute flag")
+    if settings.environment == "production":
+        raise ValueError("historical backfill execution is disabled in production")
+    cutoff = settings.economy_settlement_activated_at
+    if not settings.economy_settlement_enabled or cutoff is None:
+        raise ValueError("historical backfill requires enabled settlement and an activation timestamp")
+    if type(limit) is not int or not 1 <= limit <= 500:
+        raise ValueError("limit must be an integer from 1 to 500")
+
+    _validate_backfill_cursor(after)
+    rows = _backfill_rows(session, activated_at=cutoff, limit=limit + 1, after=after)
+    has_more = len(rows) > limit
+    visible = rows[:limit]
+    _lock_backfill_batch_resources(session, visible)
+    run_ids = {evidence.run_id for evidence, _status in visible}
+    done = _terminal_lives(session, run_ids)
+    credits = 0
+    unsupported = 0
+    waiting = 0
+    considered = 0
+    for evidence, status in visible:
+        if status in TERMINAL_STATUSES:
+            continue
+        considered += 1
+        settlement = _lock_or_create_settlement(session, evidence)
+        if settlement.status in TERMINAL_STATUSES:
+            done.setdefault(evidence.run_id, set()).add(evidence.life_index)
+            continue
+        if not _prior_indexes_done(evidence.run_id, evidence.life_index, done):
+            settlement.reason = "waiting_for_prior_life"
+            waiting += 1
+            continue
+        if _simulation_identity(evidence.payload) != SUPPORTED_SIMULATION_IDENTITY:
+            settlement.status = "actionable_failure"
+            settlement.reason = "unsupported_simulation_identity"
+            settlement.settled_at = datetime.now(UTC)
+            unsupported += 1
+            continue
+        cap = _lock_run_cap(session, evidence.run_id, settlement.account_id)
+        requested = int(evidence.payload["collections"][WalletCurrency.FEATHER.value])
+        amount = min(requested, COIN_RUN_CAP - cap.feathers_credited)
+        try:
+            _credit_completion(
+                session,
+                settlement=settlement,
+                currency=WalletCurrency.FEATHER,
+                amount=amount,
+                source_reference=str(evidence.event_id),
+            )
+        except WalletError:
+            settlement.status = "actionable_failure"
+            settlement.reason = "wallet_posting_failed"
+            settlement.settled_at = datetime.now(UTC)
+            unsupported += 1
+            continue
+        cap.feathers_credited += amount
+        cap.updated_at = func.now()
+        settlement.status = "committed"
+        settlement.reason = (
+            "historical_backfill_coins_only"
+            if int(evidence.payload["collections"][WalletCurrency.GAME_STAR.value])
+            else "historical_backfill"
+        )
+        settlement.policy_version = POLICY_VERSION
+        settlement.feathers_credited = amount
+        settlement.stars_credited = 0
+        settlement.settled_at = datetime.now(UTC)
+        done.setdefault(evidence.run_id, set()).add(evidence.life_index)
+        credits += amount
+    return BackfillResult(
+        considered,
+        credits,
+        0,
+        unsupported,
+        waiting,
+        has_more,
+        (visible[-1][0].run_id, visible[-1][0].life_index) if has_more and visible else None,
+    )
+
+
+def _lock_or_create_settlement(session: Session, evidence: CompletionEvidence) -> CompletionSettlement:
+    session.execute(
+        insert(CompletionSettlement)
+        .values(
+            id=uuid4(),
+            event_id=evidence.event_id,
+            run_id=evidence.run_id,
+            life_index=evidence.life_index,
+            account_id=UUID(str(evidence.payload["account_id"])),
+            status="pending",
+            reason="historical_backfill_required",
+            completed_at=_payload_completed_at(evidence.payload),
+        )
+        .on_conflict_do_nothing(index_elements=[CompletionSettlement.run_id, CompletionSettlement.life_index])
+    )
+    settlement = session.scalar(
+        select(CompletionSettlement)
+        .where(CompletionSettlement.run_id == evidence.run_id, CompletionSettlement.life_index == evidence.life_index)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if settlement is None:
+        raise RuntimeError("completion settlement could not be created or loaded")
+    return settlement
+
+
+def _backfill_rows(
+    session: Session,
+    *,
+    activated_at: datetime,
+    limit: int,
+    after: tuple[UUID, int] | None = None,
+) -> list[tuple[CompletionEvidence, str | None]]:
+    completed_at = func.coalesce(
+        CompletionSettlement.completed_at,
+        cast(CompletionEvidence.payload["completed_at"].as_string(), DateTime(timezone=True)),
+    )
+    statement = (
+        select(CompletionEvidence, CompletionSettlement.status)
+        .outerjoin(CompletionSettlement, CompletionSettlement.event_id == CompletionEvidence.event_id)
+        .where(
+            completed_at < activated_at,
+            (CompletionSettlement.id.is_(None)) | (CompletionSettlement.status == "pending"),
+        )
+        .order_by(CompletionEvidence.run_id, CompletionEvidence.life_index)
+        .limit(limit)
+    )
+    if after is not None:
+        statement = statement.where(
+            tuple_(CompletionEvidence.run_id, CompletionEvidence.life_index)
+            > tuple_(literal(after[0]), literal(after[1]))
+        )
+    return [(evidence, status) for evidence, status in session.execute(statement).all()]
+
+
+def _lock_backfill_batch_resources(
+    session: Session,
+    rows: list[tuple[CompletionEvidence, str | None]],
+) -> None:
+    eligible = [
+        evidence
+        for evidence, status in rows
+        if status not in TERMINAL_STATUSES and _simulation_identity(evidence.payload) == SUPPORTED_SIMULATION_IDENTITY
+    ]
+    run_accounts = {evidence.run_id: UUID(str(evidence.payload["account_id"])) for evidence in eligible}
+    caps = {
+        run_id: _lock_run_cap(session, run_id, account_id)
+        for run_id, account_id in sorted(run_accounts.items(), key=lambda item: item[0].int)
+    }
+    wallets: set[UUID] = set()
+    for evidence in eligible:
+        account_id = UUID(str(evidence.payload["account_id"]))
+        requested = int(evidence.payload["collections"][WalletCurrency.FEATHER.value])
+        if min(requested, COIN_RUN_CAP - caps[evidence.run_id].feathers_credited) > 0:
+            wallets.add(account_id)
+    for account_id in sorted(wallets, key=lambda value: value.int):
+        _lock_wallet_row(session, account_id, WalletCurrency.FEATHER)
+
+
+def _validate_backfill_cursor(after: tuple[UUID, int] | None) -> None:
+    if after is None:
+        return
+    if (
+        not isinstance(after, tuple)
+        or len(after) != 2
+        or not isinstance(after[0], UUID)
+        or type(after[1]) is not int
+        or after[1] < 0
+    ):
+        raise ValueError("backfill cursor must be a (run_id, nonnegative life_index) tuple")
+
+
+def _terminal_lives(session: Session, run_ids: set[UUID]) -> dict[UUID, set[int]]:
+    if not run_ids:
+        return {}
+    rows = session.execute(
+        select(CompletionSettlement.run_id, CompletionSettlement.life_index).where(
+            CompletionSettlement.run_id.in_(run_ids), CompletionSettlement.status.in_(TERMINAL_STATUSES)
+        )
+    ).all()
+    done: dict[UUID, set[int]] = {}
+    for run_id, life_index in rows:
+        done.setdefault(run_id, set()).add(life_index)
+    return done
+
+
+def _prior_indexes_done(run_id: UUID, life_index: int, done: dict[UUID, set[int]]) -> bool:
+    return len({index for index in done.get(run_id, set()) if index < life_index}) == life_index
+
+
+def _simulation_identity(payload: dict[str, Any]) -> tuple[str, str, str]:
+    return payload["simulation_version"], payload["generator_version"], payload["config_id"]
+
+
+def _initial_reason(evidence: CompletionEvidence, settings: Settings) -> str:
+    if not settings.economy_settlement_enabled:
+        return "settlement_disabled"
+    cutoff = settings.economy_settlement_activated_at
+    if cutoff is None or _payload_completed_at(evidence.payload) < cutoff:
+        return "historical_backfill_required"
+    return "awaiting_settlement"
+
+
+def _validate_cutoff(activated_at: datetime) -> None:
+    if activated_at.tzinfo is None or activated_at.utcoffset() is None:
+        raise ValueError("activation timestamp must include a timezone")
+
+
+def _payload_completed_at(payload: dict[str, Any]) -> datetime:
+    value = payload["completed_at"]
+    if isinstance(value, datetime):
+        completed_at = value
+    else:
+        completed_at = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    if completed_at.tzinfo is None or completed_at.utcoffset() is None:
+        raise ValueError("completion timestamp must include a timezone")
+    return completed_at.astimezone(UTC)
