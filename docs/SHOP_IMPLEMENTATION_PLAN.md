@@ -2,8 +2,8 @@
 
 Planning date: October 17, 2026. This breaks development-plan item 6 into
 reviewable milestones, including its unfinished WALLET prerequisite. It approves
-no earning rates, prices, launch assets, spending, or deployment. No SHOP code is
-implemented by this document.
+no earning rates, prices, launch assets, spending, or deployment. This document records the planning contract; current code delivery and verification
+are tracked in the [implementation record](SHOP_IMPLEMENTATION_RESULTS.md).
 
 ## Scope and architecture
 

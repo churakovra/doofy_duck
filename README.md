@@ -8,8 +8,8 @@ gameplay foundation, not that commercial release.
 A locally playable endless pipe game: tap to flap, pass pipes for points, collect occasional coins/in-game Stars pickups into a local in-game wallet, pause, die, and restart. React/PixiJS presents a pure TypeScript simulation; a native Go package checks the same full-state/event fixtures.
 
 This is a development foundation, **not a commercial release**. An optional local
-Python/Go/PostgreSQL stack adds Telegram accounts and server-verified runs. Account
-currency issuance, purchases, paid continue, gifts and leaderboards remain disabled.
+Python/Go/PostgreSQL stack adds Telegram accounts and server-verified runs. Account wallet settlement and cosmetic purchases are implemented behind default-off
+flags. Paid continue, XTR funding, gifts and leaderboards remain unimplemented.
 Art is placeholder work. Hosted capacity and real Telegram acceptance remain open;
 see the [backend implementation record](docs/BACKEND_FOUNDATION.md).
 
@@ -20,6 +20,7 @@ see the [backend implementation record](docs/BACKEND_FOUNDATION.md).
 - [Code map](docs/ARCHITECTURE.md): runtime flow, file ownership, and checks by task.
 - [Foundation](docs/FOUNDATION.md): extension points for rules, cosmetics, and event consumers.
 - [Documentation map](docs/README.md): current rules, product vision, future architecture, and supporting research.
+- [SHOP implementation](docs/SHOP_IMPLEMENTATION_RESULTS.md): delivered wallet/inventory/purchase code and verification limits.
 - [Backend verification](docs/BACKEND_FOUNDATION.md): ACCOUNT/RUN checks, capacity measurements and external acceptance gates.
 - [Challenge verification](docs/CHALLENGE_RESULTS.md): October 17 challenge checks and bounded physics evidence.
 

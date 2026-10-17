@@ -3,7 +3,9 @@
 ACCOUNT and RUN were approved on October 17, 2026, before SHOP. Local implementation
 is present; the sustained local capacity test passed. Outage recovery and external
 acceptance remain under verification.
-This record distinguishes requirements from executed verification.
+This record distinguishes requirements from executed verification. The later
+[SHOP implementation record](SHOP_IMPLEMENTATION_RESULTS.md) describes the gated
+wallet/shop extension; foundation test results below do not validate that extension.
 
 ## Approved behavior
 

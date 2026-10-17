@@ -7,7 +7,10 @@ only the milestone that depends on them.
 Read this with the [development plan](DEVELOPMENT_PLAN.md), [current simulation rules](ARCADE_SIMULATION.md), [foundation
 boundaries](FOUNDATION.md), [service architecture](ADR-001-MICROSERVICES.md), and [currency/broker
 proposal](ADR-003-CURRENCY-AND-BROKER.md). The local practice game and optional account/run backend are implemented separately;
-account issuance, the ledger, commerce and continue remain disabled. Hosted acceptance
+Wallet, inventory and internal-currency shop code are present with issuance and
+shop mutations default-off; XTR payments and continue remain unimplemented. See
+[SHOP implementation](SHOP_IMPLEMENTATION_RESULTS.md) for approved earning/catalog
+decisions and current verification limits. Hosted acceptance
 and real Telegram evidence are recorded separately in [backend foundation](BACKEND_FOUNDATION.md). The
 current challenge contract is defined in the linked simulation rules.
 
@@ -168,13 +171,17 @@ currencies. Economy owns catalog, wallet, inventory, order, payment, and refund 
 coins (`FEATHER` storage/event ID), in-game Stars (`GAME_STAR` ID), and Telegram Stars (`XTR`). Internal Stars are not a
 Telegram wallet balance and do not promise cash-out or 1:1 conversion.
 
+The initial internal-currency earning rules, catalog, eligibility and permanent
+ownership policy are now approved in the [SHOP decision record](SHOP_IMPLEMENTATION_PLAN.md#owner-direction-received-during-implementation).
+The broader payment/refund choices below remain open where PAY is not implemented.
+
 Initial catalog shape:
 
 | Product class | Fulfillment | Price denomination | Status |
 | --- | --- | --- | --- |
-| Earned wallet credit | Ledger entry from verified completion facts under pinned policy | Coins and/or in-game Stars | Policy open |
-| Cosmetic skin | Owned entitlement; equip by stable item ID | Coins, in-game Stars, or XTR after approval | Products/prices open |
-| Cosmetic background | Owned entitlement; equip by stable item ID | Coins, in-game Stars, or XTR after approval | Products/prices open |
+| Earned wallet credit | Ledger entry from verified completion facts under pinned policy | Coins and/or in-game Stars | Initial earned policy approved; activation/acceptance open |
+| Cosmetic skin | Owned entitlement; equip by stable item ID | Coins, in-game Stars, or XTR after approval | Initial internal-currency catalog approved; XTR offers open |
+| Cosmetic background | Owned entitlement; equip by stable item ID | Coins, in-game Stars, or XTR after approval | Initial internal-currency catalog approved; XTR offers open |
 | One continue | Run-scoped resume authorization, consumed at most once | In-game Stars per vision | Price open |
 | XTR purchase | Specific wallet package or cosmetic entitlement | XTR only | Product/price/fulfillment open |
 
@@ -194,8 +201,10 @@ Cosmetics cannot change simulation hitboxes, physics, route, score, or reward el
   must retain provenance so policy can be applied without migrating invented assumptions. Define spend ordering and refund
   treatment before purchases are enabled.
 - Each policy version defines eligible event types, per-life/per-run/account
-  issuance caps, rounding, expiry (if any), and the behavior for suspended or ineligible accounts. No fixed earning rate,
-  conversion, or reward budget is assumed.
+  issuance caps, rounding, expiry (if any), and the behavior for suspended or ineligible accounts.
+  The initial earned policy uses verified pickup credit 1:1, coins capped at 30/run,
+  and collected Stars without a seven-Star cap under the approved new simulation.
+  Purchased funding and broader reward budgets remain separate PAY/release work.
 - Cosmetic/internal-currency purchase debits and entitlement grant occur in one
   Economy database transaction with idempotency key and business uniqueness. Concurrent requests cannot overspend or grant
   twice.

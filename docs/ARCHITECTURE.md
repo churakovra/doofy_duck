@@ -1,8 +1,9 @@
 # Code map
 
 The repository contains a standalone local practice game and an optional account-backed
-Python/Go/PostgreSQL stack. Account currency issuance, purchases, paid continue and
-hosted deployment remain outside the delivered foundation. The root [README](../README.md)
+Python/Go/PostgreSQL stack. Wallet settlement and internal-currency cosmetic shop
+modules are implemented behind default-off flags. Paid continue, XTR payments and
+hosted deployment remain outside the delivered code. The root [README](../README.md)
 owns commands; [backend evidence](BACKEND_FOUNDATION.md) distinguishes executed checks
 from hosted and real Telegram acceptance.
 
@@ -33,8 +34,9 @@ Browser → one-origin gateway → Python Platform: identity/session/account
 ```
 
 Python owns separate Platform/Economy modules and databases; Core owns its database.
-There are no cross-service SQL reads. Completion receipts store verified facts without
-issuing currency. See [approved ownership](ADR-001-MICROSERVICES.md) and the versioned
+There are no cross-service SQL reads. Completion receipts durably store verified
+facts; the optional settlement worker credits the Economy ledger under a pinned
+policy. Shop debit, entitlement and purchase result share one Economy transaction. See [approved ownership](ADR-001-MICROSERVICES.md) and the versioned
 [account](../contracts/http/account-auth-v1.md)/[run](../contracts/http/core-run-v1.md) contracts.
 
 ## Source ownership
@@ -44,6 +46,7 @@ issuing currency. See [approved ownership](ADR-001-MICROSERVICES.md) and the ver
 | [apps/web/src/main.tsx](../apps/web/src/main.tsx) | React mount and error boundary |
 | `apps/web/src/AccountGame.tsx`, `account-api.ts`, `account-trace.ts` | Account-mode lifecycle, in-memory access credentials, exact input transport and validated IndexedDB recovery |
 | `services/platform/app`, `services/platform/migrations` | Telegram auth, signed tokens, rotating refresh sessions, account lookup and idempotent completion inbox |
+| `services/platform/app/economy` | Wallet ledger, gated completion settlement, catalog, inventory, revisioned equipment, atomic purchases and operator worker/audit commands |
 | `services/core/backend` | Go HTTP authorization, run ownership, replay/checkpoints, writer fencing, outage windows, outbox and load harness |
 | `deploy` | Compose, gateway routing, isolated development credentials and cross-service smoke |
 | [Game.tsx](../apps/web/src/Game.tsx), [GameButton.tsx](../apps/web/src/GameButton.tsx), [GameSettings.tsx](../apps/web/src/GameSettings.tsx) | UI composition, shared button variants/input isolation, and the always-available settings menu |

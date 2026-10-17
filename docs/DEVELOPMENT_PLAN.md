@@ -39,9 +39,9 @@ required by the root instructions.
 | 1 / GAME — done locally | Stepped challenge families and recovery sections make repeated flights varied and fair | SPEC: difficulty | [Implementation and checks](CHALLENGE_RESULTS.md); bounded physics evidence passed; owner tuning/device acceptance remains open |
 | 2 / ACCOUNT — implemented locally; Telegram acceptance open | Launch inside Telegram and access the player's own account | Identity contracts, service/tooling decisions | Platform identity and rotating sessions, Core authorization and real-database checks; real Telegram launch remains required |
 | 3 / RUN — implemented locally; capacity acceptance in progress | Save server-verified free-run progress and best score | ACCOUNT; lifecycle spec | Go checkpoint replay, persisted results/best, writer fencing, offline recovery and durable completion delivery; see dated backend evidence |
-| 4 / WALLET | Keep verified coins and in-game Stars across devices | RUN; approved issuance policy and durable delivery | Ledger credit from verified facts; duplicate/out-of-order delivery and outage recovery; pending credit visible |
+| 4 / WALLET — code implemented; activation and final DB acceptance open | Keep verified coins and in-game Stars across devices | RUN; approved issuance policy and durable delivery | Ledger credit from verified facts; duplicate/out-of-order delivery and outage recovery; pending credit visible |
 | 5 / ART — functional locally; launch art open | Choose a duck skin and background through a usable preview flow | Local test content implemented; approved visual direction/assets remain a release gate | Stable catalog IDs, independent preview/apply, local equipment saving and image fallback; approved launch assets still required |
-| 6 / SHOP | Buy specific cosmetics at visible prices and equip owned items | WALLET, ART, approved prices | Atomic debit/grant, ownership enforcement, concurrent/repeated request checks and cross-device persistence |
+| 6 / SHOP — code implemented; acceptance open | Buy specific cosmetics at visible prices and equip owned items | WALLET, ART, approved prices | Atomic debit/grant, ownership enforcement, concurrent/repeated request checks and cross-device persistence |
 | 7 / CONTINUE | Spend in-game Stars to continue once with the score preserved | WALLET; specified lifecycle, price and safe resume | TS/Go parity; no second continue, duplicate charge or duplicate earnings; debit/resume reconciliation |
 | 8 / PAY | Complete actual Telegram Stars purchases and receive the purchased entitlement | ACCOUNT; catalog, order and fulfillment rules | Validated payment ingress, idempotent fulfillment, cancellation/status/refund reconciliation and controlled end-to-end acceptance |
 | 9 / RELEASE | Reliably play and buy in the public Telegram MVP | GAME through PAY; launch policy | Real-device bilingual acceptance, performance evidence, support, monitoring, backup/restore and failure drills |
@@ -296,6 +296,9 @@ Forged score/position/currency claims are rejected. Account state survives reloa
 and another device. Input verification alone is not human-play detection.
 
 ### 6. Connect the shop and equipment to Economy
+
+Code delivery is recorded in [SHOP implementation results](SHOP_IMPLEMENTATION_RESULTS.md).
+Flags remain off by default; final database, browser and hosted acceptance remain open.
 
 See the [SHOP implementation backlog](SHOP_IMPLEMENTATION_PLAN.md) for prerequisite
 decisions, WALLET tasks, catalog/inventory, purchase transactions, UI and acceptance.
