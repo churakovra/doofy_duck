@@ -1,4 +1,5 @@
 import type { RunState } from '@doofy-duck/game-sim';
+import type { ShopCatalog, ShopQuote, ShopItemType } from './account-shop';
 
 export type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
@@ -54,7 +55,7 @@ type AccountApiOptions = {
 };
 
 export class AccountApiError extends Error {
-  constructor(readonly status: number, readonly code: string, message = code, readonly retryAfterMs?: number) {
+  constructor(readonly status: number, readonly code: string, message = code, readonly retryAfterMs?: number, readonly current?: unknown) {
     super(message);
     this.name = 'AccountApiError';
   }
@@ -86,7 +87,8 @@ async function withAuthCookieLock<T>(operation: () => Promise<T>, requireBrowser
 
 function errorFrom(response: Response, body: unknown): AccountApiError {
   const record = body && typeof body === 'object' ? body as Record<string, unknown> : {};
-  const detail = record.error && typeof record.error === 'object' ? record.error as Record<string, unknown> : record;
+  const detailValue = record.detail ?? record.error;
+  const detail = detailValue && typeof detailValue === 'object' ? detailValue as Record<string, unknown> : record;
   const code = typeof detail.code === 'string' ? detail.code : typeof record.error === 'string' ? record.error : `http_${response.status}`;
   const message = typeof detail.message === 'string' ? detail.message : code;
   const retryAfter = response.headers.get('Retry-After');
@@ -97,7 +99,7 @@ function errorFrom(response: Response, body: unknown): AccountApiError {
     const parsed = Number.isFinite(seconds) ? seconds * 1000 : Number.isFinite(until) ? until - Date.now() : NaN;
     if (Number.isFinite(parsed) && parsed >= 0) retryAfterMs = Math.min(parsed, 300_000);
   }
-  return new AccountApiError(response.status, code, message, retryAfterMs);
+  return new AccountApiError(response.status, code, message, retryAfterMs, detail.current);
 }
 
 function csrfCookie(): string | undefined {
@@ -199,6 +201,60 @@ export class AccountApi {
       throw new AccountApiError(502, 'account_progress_invalid');
     }
     return { bestScore: value.bestScore! };
+  }
+
+  async shopCatalog(): Promise<ShopCatalog> {
+    return await this.authorized('/api/v1/shop/catalog') as ShopCatalog;
+  }
+
+  async shopInventory(cursor?: string, limit = 100): Promise<{ items: readonly unknown[]; next_cursor: string | null }> {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new AccountApiError(400, 'shop_page_limit_invalid');
+    const query = new URLSearchParams({ limit: String(limit) });
+    if (cursor) query.set('cursor', cursor);
+    return await this.authorized(`/api/v1/shop/inventory?${query}`) as { items: readonly unknown[]; next_cursor: string | null };
+  }
+
+  async shopEquipment(): Promise<{ equipment: readonly { item_type: ShopItemType; item_id: string; revision: number }[] }> {
+    return await this.authorized('/api/v1/shop/equipment') as { equipment: readonly { item_type: ShopItemType; item_id: string; revision: number }[] };
+  }
+
+  async setShopEquipment(itemType: ShopItemType, itemId: string, expectedRevision: number): Promise<{ item_type: ShopItemType; item_id: string; revision: number }> {
+    return await this.authorized(`/api/v1/shop/equipment/${itemType}`, {
+      method: 'PUT', body: JSON.stringify({ item_id: itemId, expected_revision: expectedRevision }),
+    }) as { item_type: ShopItemType; item_id: string; revision: number };
+  }
+
+  async shopQuote(itemType: ShopItemType, itemId: string): Promise<ShopQuote> {
+    return await this.authorized('/api/v1/shop/quotes', {
+      method: 'POST', body: JSON.stringify({ item_type: itemType, item_id: itemId }),
+    }) as ShopQuote;
+  }
+
+  async shopPurchase(quoteId: string, idempotencyKey: string): Promise<unknown> {
+    return await this.authorized('/api/v1/shop/purchases', {
+      method: 'POST', body: JSON.stringify({ quote_id: quoteId }),
+      headers: { 'Idempotency-Key': idempotencyKey },
+    });
+  }
+
+  async shopPurchaseLookup(idempotencyKey: string): Promise<unknown> {
+    const query = new URLSearchParams({ idempotency_key: idempotencyKey });
+    return await this.authorized(`/api/v1/shop/purchases/lookup?${query}`);
+  }
+
+  async shopPurchases(cursor?: string, limit = 50): Promise<unknown> {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new AccountApiError(400, 'shop_page_limit_invalid');
+    const query = new URLSearchParams({ limit: String(limit) });
+    if (cursor) query.set('cursor', cursor);
+    return await this.authorized(`/api/v1/shop/purchases?${query}`);
+  }
+
+  async walletBalances(): Promise<unknown> {
+    return await this.authorized('/api/v1/wallets');
+  }
+
+  async completion(runId: string, lifeIndex: number): Promise<unknown> {
+    return await this.authorized(`/api/v1/completions/${encodeURIComponent(runId)}/${lifeIndex}`);
   }
 
   async getRun(runId: string): Promise<AccountRunSnapshot> {

@@ -54,6 +54,39 @@ describe('account API authentication', () => {
     expect(JSON.stringify(api)).not.toContain('secret');
   });
 
+  it('sends shop reads and purchases through the authenticated request path', async () => {
+    const fetcher = vi.fn<FetchLike>()
+      .mockResolvedValueOnce(response({ access_token: 'secret', token_type: 'Bearer', expires_in: 600 }))
+      .mockResolvedValueOnce(response({ account_id: 'a', telegram_user_id: 7, created_at: 'now' }))
+      .mockResolvedValueOnce(response({ catalog_version: 'cosmetics-v1', enabled: true, items: [] }))
+      .mockResolvedValueOnce(response({ purchase: { purchase_id: 'p', status: 'committed' }, current_balance: '42' }));
+    const api = new AccountApi({ fetcher });
+    await api.login('init');
+
+    await api.shopCatalog();
+    await api.shopPurchase('quote-id', 'purchase-key');
+
+    expect(fetcher).toHaveBeenNthCalledWith(3, '/api/v1/shop/catalog', expect.objectContaining({ credentials: 'include' }));
+    const purchase = fetcher.mock.calls[3];
+    expect(purchase?.[0]).toBe('/api/v1/shop/purchases');
+    expect(purchase?.[1]).toMatchObject({ method: 'POST', body: JSON.stringify({ quote_id: 'quote-id' }) });
+    expect(new Headers(purchase?.[1]?.headers).get('Authorization')).toBe('Bearer secret');
+    expect(new Headers(purchase?.[1]?.headers).get('Idempotency-Key')).toBe('purchase-key');
+  });
+
+  it('parses FastAPI detail errors and keeps the current equipment revision', async () => {
+    const fetcher = vi.fn<FetchLike>()
+      .mockResolvedValueOnce(response({ access_token: 'secret', token_type: 'Bearer', expires_in: 600 }))
+      .mockResolvedValueOnce(response({ account_id: 'a', telegram_user_id: 7, created_at: 'now' }))
+      .mockResolvedValueOnce(response({ detail: { code: 'stale_equipment', message: 'equipment changed', current: { item_type: 'skin', item_id: 'rose', revision: 2 } } }, 409));
+    const api = new AccountApi({ fetcher });
+    await api.login('init');
+
+    await expect(api.setShopEquipment('skin', 'mint', 1)).rejects.toMatchObject({
+      status: 409, code: 'stale_equipment', current: { item_type: 'skin', item_id: 'rose', revision: 2 },
+    });
+  });
+
   it('refreshes an expired bearer once using the readable CSRF cookie and retries', async () => {
     installSerializedWebLocks();
     Object.defineProperty(document, 'cookie', { configurable: true, value: 'dd_csrf=csrf-token' });

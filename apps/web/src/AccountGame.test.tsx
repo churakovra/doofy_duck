@@ -6,10 +6,14 @@ import { createRun, createRunDescriptor } from '@doofy-duck/game-sim';
 import { AccountGame } from './AccountGame';
 import { TelegramWebAppUnavailableError } from './telegram-web-app';
 import { LocaleProvider } from './locale';
+import { DEFAULT_APPEARANCE } from './appearance';
+import { messages as messagesEn } from './messages.en';
 
 const harness = vi.hoisted(() => ({
   restore: vi.fn(), loadTelegramWebApp: vi.fn(), currentRun: vi.fn(), latestRun: vi.fn(), createRun: vi.fn(), getRun: vi.fn(), submitCheckpoint: vi.fn(),
   takeover: vi.fn(), abandon: vi.fn(), login: vi.fn(), loginDev: vi.fn(), logout: vi.fn(), progress: vi.fn(),
+  shopEquipment: vi.fn(), completion: vi.fn(),
+  gameAppearance: null as unknown,
   traceRecords: new Map<string, unknown>(), save: vi.fn(), runPhase: 'READY', runOptions: null as null | { onTick(state: unknown, inputs: readonly unknown[]): void },
 }));
 
@@ -32,6 +36,8 @@ vi.mock('./account-api', () => ({
     loginDev = harness.loginDev;
     logout = harness.logout;
     progress = harness.progress;
+    shopEquipment = harness.shopEquipment;
+    completion = harness.completion;
   },
   AccountApiError: class AccountApiError extends Error {
     constructor(readonly status = 500, readonly code = 'unknown') { super(code); }
@@ -54,7 +60,7 @@ vi.mock('./account-trace', async () => {
   };
 });
 
-vi.mock('./GameCanvas', () => ({ GameCanvas: () => <canvas /> }));
+vi.mock('./GameCanvas', () => ({ GameCanvas: (props: { appearance: unknown }) => { harness.gameAppearance = props.appearance; return <canvas />; } }));
 vi.mock('./GameSettings', () => ({ GameSettings: () => null }));
 vi.mock('./GameWardrobe', () => ({ GameWardrobe: () => null }));
 vi.mock('./useGameAudio', () => ({ useGameAudio: () => ({
@@ -89,6 +95,8 @@ beforeEach(async () => {
   harness.restore.mockResolvedValue(account);
   harness.loadTelegramWebApp.mockResolvedValue({ initData: '', ready: vi.fn() });
   harness.progress.mockResolvedValue({ bestScore: 0 });
+  harness.shopEquipment.mockResolvedValue({ equipment: [{ item_type: 'skin', item_id: 'classic', revision: 1 }, { item_type: 'background', item_id: 'meadow', revision: 1 }] });
+  harness.completion.mockResolvedValue({ status: 'pending', reason: 'settlement_disabled', credited: { FEATHER: '0', GAME_STAR: '0' } });
   harness.currentRun.mockResolvedValue(undefined);
   harness.latestRun.mockResolvedValue(undefined);
   harness.createRun.mockResolvedValue(runSnapshot());
@@ -105,6 +113,34 @@ afterEach(() => {
 });
 
 describe('account run transport', () => {
+  it('uses default account equipment after logout when the next account equipment read fails', async () => {
+    const nextAccount = { account_id: 'account-b', telegram_user_id: 8, created_at: 'later' };
+    await act(async () => { root.unmount(); });
+    harness.gameAppearance = null;
+    harness.restore.mockResolvedValue(account);
+    harness.shopEquipment.mockReset()
+      .mockResolvedValueOnce({ equipment: [{ item_type: 'skin', item_id: 'royal', revision: 1 }, { item_type: 'background', item_id: 'meadow', revision: 1 }] })
+      .mockRejectedValueOnce(new Error('shop unavailable'));
+    root = createRoot(host);
+    await act(async () => { root.render(<LocaleProvider><AccountGame onBack={vi.fn()} /></LocaleProvider>); });
+    await vi.waitFor(() => expect(host.textContent).toContain('7'));
+    expect(harness.shopEquipment).toHaveBeenCalledTimes(1);
+
+    await act(async () => { host.querySelector<HTMLButtonElement>('.account-mode-button')?.click(); });
+    await vi.waitFor(() => expect(host.querySelector('.account-dev-label input')).not.toBeNull());
+    harness.loginDev.mockResolvedValueOnce(nextAccount);
+    const input = host.querySelector<HTMLInputElement>('.account-dev-label input')!;
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+    setter.call(input, '8'); input.dispatchEvent(new Event('input', { bubbles: true }));
+    await act(async () => { host.querySelector<HTMLButtonElement>('.account-panel .primary-button')?.click(); });
+    await vi.waitFor(() => expect(host.textContent).toContain('8'));
+    harness.createRun.mockResolvedValueOnce(runSnapshot({ accountId: nextAccount.account_id, runId: 'default-flight' }));
+    await act(async () => { host.querySelector<HTMLButtonElement>('.account-panel .primary-button')?.click(); });
+    await vi.waitFor(() => expect(harness.traceRecords.has(`${nextAccount.account_id}:default-flight`)).toBe(true));
+
+    expect((harness.gameAppearance as { duck: unknown }).duck).toEqual(DEFAULT_APPEARANCE.duck);
+  });
+
   it('shows a verified delivery-pending result and allows the next flight', async () => {
     harness.latestRun.mockResolvedValue(runSnapshot({ status: 'completed', verificationStatus: 'verified', deliveryStatus: 'pending' }));
     await act(async () => {
@@ -302,16 +338,22 @@ describe('account run transport', () => {
     const state = { ...initialState, score: 23, totals: { FEATHER: 4, GAME_STAR: 2 } };
     harness.currentRun.mockResolvedValue(undefined);
     harness.latestRun.mockResolvedValue(runSnapshot({ state, status: 'completed', verificationStatus: 'verified', deliveryStatus: 'delivered' }));
+    harness.completion.mockResolvedValueOnce({ status: 'committed', reason: 'credited', credited: { FEATHER: '40', GAME_STAR: '5' } });
     await act(async () => {
       root.render(<LocaleProvider><AccountGame key="restored-result" onBack={vi.fn()} /></LocaleProvider>);
     });
 
     expect(harness.currentRun.mock.invocationCallOrder[0]).toBeLessThan(harness.latestRun.mock.invocationCallOrder[0]!);
     expect(host.querySelector('.result-score')?.textContent).toContain('23');
-    expect(host.textContent).toContain('4');
-    expect(host.textContent).toContain('2');
+    expect(host.querySelector('.earnings-summary')?.textContent).toContain('4');
+    expect(host.querySelector('.earnings-summary')?.textContent).toContain('2');
+    await vi.waitFor(() => expect(host.querySelector('.account-settlement')?.textContent).toContain('40'));
+    expect(host.querySelector('.account-settlement')?.textContent).toContain('5');
+    expect(host.textContent).toContain('можно тратить только после проверки и зачисления на баланс аккаунта');
+    expect(messagesEn.accountDescription).toContain('verification and account credit');
+    expect(messagesEn.accountRewardsNotSpendable).toBe('Only credited account-wallet balances can be spent.');
     expect(host.textContent).toContain('РЕКОРД');
-    expect(host.textContent).toContain('их нельзя потратить');
+    expect(host.textContent).toContain('зачисленные на баланс аккаунта');
     expect(host.textContent).toContain('Начать полёт с аккаунтом');
   });
 

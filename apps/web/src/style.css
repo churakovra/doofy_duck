@@ -299,6 +299,35 @@ button { font: inherit; }
 .settings-wallet-values strong { display: block; margin-top: 3px; color: var(--ink); font-size: 16px; }
 .settings-wallet-status, .settings-wallet-note { margin: 0; color: #43584a; font-size: 13px; line-height: 1.4; }
 .settings-wallet-status.not-saved { color: #874334; font-weight: 650; }
+.account-shop-trigger { min-height: 44px; padding-inline: 12px; white-space: nowrap; }
+.account-shop-backdrop { z-index: 9; }
+.account-shop-dialog { display: flex; width: min(560px, 100%); max-height: 100%; flex-direction: column; gap: 10px; overflow: auto; overscroll-behavior: contain; }
+.account-shop-dialog .settings-dialog-header { flex: 0 0 auto; margin: 0; }
+.account-shop-wallet { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+.account-shop-wallet h3, .account-shop-wallet small { grid-column: 1 / -1; margin: 0; }
+.account-shop-wallet h3 { color: var(--ink); font-size: 15px; }
+.account-shop-wallet p { display: flex; min-width: 0; flex-direction: column; gap: 3px; margin: 0; padding: 8px; border-radius: 10px; color: #43584a; background: #f5f3eb; font-size: 12px; }
+.account-shop-wallet strong { overflow-wrap: anywhere; color: var(--ink); font-size: 15px; }
+.account-shop-wallet small, .account-shop-recovery-note { color: #43584a; font-size: 12px; line-height: 1.35; }
+.account-shop-recovery-note { margin: 0; }
+.account-shop-dialog .wardrobe-preview-art { height: 140px; }
+.account-shop-selected { display: flex; justify-content: space-between; gap: 8px; margin: -5px 0 0; }
+.account-shop-selected span { color: #667267; font-size: 12px; }
+.account-shop-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.account-shop-tabs button { min-height: 42px; border: 1px solid var(--line); border-radius: 10px; color: var(--ink); background: var(--paper); font: inherit; font-weight: 650; cursor: pointer; }
+.account-shop-tabs button[aria-selected="true"] { border-color: var(--green); color: var(--green-dark); background: var(--green-pale); }
+.account-shop-items { display: grid; grid-template-columns: repeat(auto-fit, minmax(112px, 1fr)); gap: 7px; max-height: 126px; overflow-y: auto; overscroll-behavior: contain; }
+.account-shop-item { display: flex; min-height: 58px; flex-direction: column; justify-content: center; gap: 3px; padding: 7px; border: 1px solid var(--line); border-radius: 10px; color: var(--ink); background: var(--paper); text-align: left; cursor: pointer; }
+.account-shop-item.selected { border-color: var(--green); background: var(--green-pale); box-shadow: inset 0 0 0 1px var(--green); }
+.account-shop-item-title { font-size: 13px; font-weight: 700; }
+.account-shop-item-price { color: #59695f; font-size: 11px; }
+.account-shop-actions { display: flex; justify-content: flex-end; }
+.account-shop-actions .game-button { min-height: 44px; }
+.account-shop-confirmation, .account-shop-pending { display: grid; gap: 7px; padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: #f5f3eb; }
+.account-shop-confirmation p, .account-shop-pending p { margin: 0; font-size: 13px; line-height: 1.4; }
+.account-shop-confirmation button { min-height: 42px; }
+.account-settlement { display: grid; gap: 4px; margin: 8px 0; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: #f5f3eb; }
+.account-settlement p { margin: 0; font-size: 13px; line-height: 1.4; }
 
 @container game-frame (max-width: 520px) {
   .hud { grid-template-columns: minmax(28px, 1fr) minmax(0, 1fr) minmax(0, 1fr) calc(var(--control-size) * 2 + 6px); }
@@ -320,6 +349,9 @@ button { font: inherit; }
   .wardrobe-dialog { gap: 7px; padding: 14px; }
   .wardrobe-preview-art { height: 112px; }
   .wardrobe-option { min-height: 60px; }
+  .account-shop-dialog { gap: 6px; padding: 14px; }
+  .account-shop-dialog .wardrobe-preview-art { height: 96px; }
+  .account-shop-items { max-height: 94px; }
 }
 @media (max-height: 420px) {
   .wardrobe-dialog { gap: 5px; padding: 10px; }
@@ -329,6 +361,9 @@ button { font: inherit; }
   .wardrobe-option-list { padding-block: 0 3px; }
   .wardrobe-option { min-height: 48px; }
   .wardrobe-actions .control-button, .wardrobe-actions .primary-button { min-height: 44px; }
+  .account-shop-dialog { gap: 4px; padding: 10px; }
+  .account-shop-dialog .wardrobe-preview-art { height: 64px; }
+  .account-shop-items { max-height: 78px; }
 }
 @media (max-height: 420px) {
   .wardrobe-trigger { width: 44px; height: 44px; min-width: 44px; min-height: 44px; }
