@@ -8,6 +8,7 @@ import { LocaleProvider } from './locale';
 
 const state = vi.hoisted(() => ({ phase: 'READY' }));
 vi.mock('./GameCanvas', () => ({ GameCanvas: () => <canvas aria-label="game" /> }));
+vi.mock('./GameWardrobePreview', () => ({ GameWardrobePreview: () => <div data-testid="wardrobe-preview" /> }));
 vi.mock('./useGameRun', () => ({ useGameRun: () => ({
   phase: state.phase, score: 14, rendererReady: true, runtimeError: '',
   getState: () => ({ phase: state.phase, tick: 0 }), getFeedback: () => null,
@@ -49,7 +50,6 @@ describe('game HUD layout', () => {
     const medium = stylesheet.match(/@container game-frame \(max-width: 520px\) \{([^]*?)\n\}/)?.[1] ?? '';
     const compact = stylesheet.match(/@container game-frame \(max-width: 360px\) \{([^]*?)\n\}/)?.[1] ?? '';
     const veryNarrow = stylesheet.match(/@container game-frame \(max-width: 240px\) \{([^]*?)\n\}/)?.[1] ?? '';
-    const shortHeight = stylesheet.match(/@media \(max-height: 420px\) \{([^]*?)\n\}/)?.[1] ?? '';
     const baseHud = cssRule('.hud');
     expect(baseHud).toContain('minmax(140px, 1fr) minmax(140px, 1fr)');
     expect(cssRule('.wallet-strip, .score-group')).toMatch(/width:\s*100%/);
@@ -58,18 +58,20 @@ describe('game HUD layout', () => {
     expect(cssRule('.wallet-strip, .score-group')).toMatch(/align-self:\s*stretch/);
     expect(cssRule('.hud', medium)).toContain('minmax(0, 1fr) minmax(0, 1fr)');
     expect(cssRule('.wallet-strip, .score-group', medium)).toMatch(/min-width:\s*0/);
-    expect(cssRule('.hud', compact)).toContain('28px minmax(0, 1fr) minmax(0, 1fr) 48px');
-    expect(cssRule('.hud', veryNarrow)).toContain('24px minmax(0, 1fr) minmax(0, 1fr) 44px');
-    expect(cssRule('.wallet-strip, .score-group', shortHeight)).toMatch(/min-height:\s*44px/);
+    expect(cssRule('.hud', compact)).toContain('28px minmax(0, 1fr) minmax(0, 1fr) 94px');
+    expect(cssRule('.hud', veryNarrow)).toContain('24px minmax(0, 1fr) minmax(0, 1fr) 90px');
+    expect(stylesheet).toMatch(/@media \(max-height: 420px\) \{[^]*?\.wallet-strip, \.score-group \{ min-height: 44px; \}/);
   });
 
-  it('groups currency and score panels after the brand and before the menu', () => {
+  it('groups currency and score panels after the brand and before the menu controls', () => {
     const hud = host.querySelector('.hud')!;
     const children = [...hud.children];
     expect(children[0]?.className).toBe('brand');
     expect(children[1]?.className).toBe('wallet-strip');
     expect(children[2]?.className).toBe('score-group');
-    expect(children[3]?.className).toContain('menu-trigger');
+    expect(children[3]?.className).toBe('hud-actions');
+    expect(children[3]?.querySelector('.menu-trigger')).not.toBeNull();
+    expect(children[3]?.querySelector('.wardrobe-trigger')).not.toBeNull();
     expect(hud.querySelectorAll('.wallet-total')).toHaveLength(2);
     const balances = [...hud.querySelectorAll<HTMLElement>('.wallet-total')];
     expect(balances.map((balance) => [...balance.children].map((child) => child.tagName))).toEqual([
@@ -93,6 +95,7 @@ describe('game HUD layout', () => {
     expect(host.querySelector('.wallet-strip')).not.toBeNull();
     expect(host.querySelector('.score-group')).not.toBeNull();
     expect(host.querySelector('.menu-trigger')).not.toBeNull();
+    expect(host.querySelector('.wardrobe-trigger')).toBeNull();
     expect(host.querySelectorAll('output')).toHaveLength(1);
   });
 });

@@ -1,18 +1,27 @@
-import { useRef } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { GameButton } from './GameButton';
 import { GameCanvas } from './GameCanvas';
 import { GameSettings } from './GameSettings';
+import { GameWardrobe } from './GameWardrobe';
 import { formatCount, formatCountUnit, formatNumber, useLocale } from './locale';
 import { useGameAudio } from './useGameAudio';
 import { useGameProgress } from './useGameProgress';
 import { useGameRun } from './useGameRun';
+import { createWardrobeSession, readBrowserWardrobeStorage, resolveEquipmentAppearance, resolveEquipmentAssets, type Equipment } from './wardrobe';
 
 export function Game() {
   const frameRef = useRef<HTMLDivElement>(null);
   const { locale, messages, setLocale } = useLocale();
+  const [wardrobe] = useState(() => createWardrobeSession(readBrowserWardrobeStorage()));
+  const [equipment, setEquipment] = useState<Equipment>(wardrobe.equipped);
+  const [wardrobeWarning, setWardrobeWarning] = useState(wardrobe.warning);
+  const [activeModal, setActiveModal] = useState<'settings' | 'wardrobe' | null>(null);
+  const appearance = useMemo(() => resolveEquipmentAppearance(equipment), [equipment]);
+  const imageAssets = useMemo(() => resolveEquipmentAssets(equipment), [equipment]);
   const progress = useGameProgress();
   const audio = useGameAudio();
-  const run = useGameRun(progress.canPlay, {
+  const canPlay = useCallback(() => progress.canPlay() && activeModal === null, [activeModal, progress.canPlay]);
+  const run = useGameRun(canPlay, {
     onFlapUnlock: audio.unlockFromGesture,
     onFlap: audio.flap,
     onPickup: audio.pickup,
@@ -39,7 +48,7 @@ export function Game() {
     <div className="game-viewport">
       <div className={`game-frame ${run.phase.toLowerCase()}`} ref={frameRef}>
       <div className="stage" aria-label={messages.gameFieldLabel}>
-        <GameCanvas getState={run.getState} onReady={run.acceptRenderer} getFeedback={run.getFeedback} />
+        <GameCanvas getState={run.getState} onReady={run.acceptRenderer} getFeedback={run.getFeedback} appearance={appearance} imageAssets={imageAssets} />
       </div>
       <header className="hud" aria-live="polite">
         <div className="brand"><span className="brand-mark">{messages.brandMark}</span><span>{messages.brandNameFirstLine}<br />{messages.brandNameSecondLine}</span></div>
@@ -54,7 +63,11 @@ export function Game() {
         {run.phase === 'RUNNING' && <output className="running-score" aria-label={`${messages.scoreLabel}: ${formatNumber(locale, run.score)}`}>
           {formatNumber(locale, run.score)}
         </output>}
+        <div className="hud-actions">
         <GameSettings
+          open={activeModal === 'settings'}
+          onOpenChange={(open) => setActiveModal(open ? 'settings' : null)}
+          disabled={activeModal === 'wardrobe'}
           locale={locale}
           setLocale={setLocale}
           messages={messages}
@@ -66,6 +79,22 @@ export function Game() {
           walletBlocked={busy}
           portalContainer={frameRef}
         />
+        {run.phase !== 'RUNNING' && <GameWardrobe
+          locale={locale}
+          messages={messages}
+          equipped={equipment}
+          warning={wardrobeWarning}
+          open={activeModal === 'wardrobe'}
+          onOpenChange={(open) => setActiveModal(open ? 'wardrobe' : null)}
+          portalContainer={frameRef}
+          onApply={(next) => {
+            wardrobe.apply(next);
+            setEquipment(wardrobe.equipped);
+            setWardrobeWarning(wardrobe.warning);
+          }}
+          onDismiss={() => setActiveModal((current) => current === 'wardrobe' ? null : current)}
+        />}
+        </div>
       </header>
       <footer className="wallet-status-strip">
         <p className={`wallet-storage ${progress.walletPersistent ? '' : 'not-saved'}`}>{walletStatus}</p>
@@ -82,6 +111,7 @@ export function Game() {
           {run.phase === 'PAUSED' && <><p className="eyebrow">{messages.pauseEyebrow}</p><h1>{messages.pausedHeading}</h1><p className="instruction">{messages.pausedInstruction}</p><GameButton variant="primary" onClick={start} disabled={!run.rendererReady || busy}>{messages.continueButton} <span>{messages.forwardGlyph}</span></GameButton></>}
           {run.phase === 'DEAD' && <><p className="eyebrow">{messages.completedFlightEyebrow}</p><h1>{messages.completedHeading}</h1><p className="result-score">{formatNumber(locale, run.score)} <span>{formatCountUnit(locale, 'score', run.score)}</span></p><p className="instruction">{messages.bestScorePrefix}{formatCount(locale, 'score', progress.best)}</p><p className="earnings-summary"><span>{messages.earningsSummaryLabel}</span><strong>{formatCount(locale, 'coin', progress.lastGain?.FEATHER ?? 0)}</strong><strong>{formatCount(locale, 'gameStar', progress.lastGain?.GAME_STAR ?? 0)}</strong></p><p className="wallet-disclaimer">{messages.walletDisclaimer}</p><GameButton variant="primary" onClick={restart} disabled={!run.rendererReady || busy || Boolean(run.runtimeError)}>{messages.playAgainButton} <span>{messages.reloadGlyph}</span></GameButton></>}
           {!run.rendererReady && !run.runtimeError && <p className="loading-copy">{messages.loadingScene}</p>}
+          {wardrobeWarning && <p className="wardrobe-warning" role="status">{messages.wardrobeStorageWarning}</p>}
         </>}
         </div>
       </section>}

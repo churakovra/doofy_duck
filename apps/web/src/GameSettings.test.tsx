@@ -6,16 +6,17 @@ import { Game } from './Game';
 import { LocaleProvider } from './locale';
 import './style.css';
 
-const state = vi.hoisted(() => ({ phase: 'READY', pause: vi.fn(), toggle: vi.fn(), field: vi.fn(), preferences: { sound: true, music: false } }));
+const state = vi.hoisted(() => ({ phase: 'READY', pause: vi.fn(), start: vi.fn(), canRun: undefined as (() => boolean) | undefined, toggle: vi.fn(), field: vi.fn(), preferences: { sound: true, music: false } }));
 vi.mock('./GameCanvas', () => ({ GameCanvas: () => <canvas aria-label="game" /> }));
-vi.mock('./useGameRun', () => ({ useGameRun: () => ({
+vi.mock('./GameWardrobePreview', () => ({ GameWardrobePreview: () => <div className="wardrobe-preview-art" /> }));
+vi.mock('./useGameRun', () => ({ useGameRun: (canRun: () => boolean) => { state.canRun = canRun; return ({
   phase: state.phase, score: 0, rendererReady: true, runtimeError: '',
   getState: () => ({ phase: state.phase, tick: 0 }), getFeedback: () => null,
-  acceptRenderer: vi.fn(), start: vi.fn(), restart: vi.fn(), pause: state.pause,
+  acceptRenderer: vi.fn(), start: state.start, restart: vi.fn(), pause: state.pause,
   onFieldPointerDown: state.field, onFieldPointerUp: vi.fn(),
-}) }));
+}); } }));
 vi.mock('./useGameProgress', () => ({ useGameProgress: () => ({
-  canPlay: true, walletSessionStatus: 'ready', set: vi.fn(), refreshBest: vi.fn(), settleRun: vi.fn(),
+  canPlay: () => true, walletSessionStatus: 'ready', set: vi.fn(), refreshBest: vi.fn(), settleRun: vi.fn(),
   best: 0, wallet: { FEATHER: 0, GAME_STAR: 0 }, walletPersistent: true,
 }) }));
 vi.mock('./useGameAudio', () => ({ useGameAudio: () => ({
@@ -35,11 +36,12 @@ function openMenu() { click(menuTrigger()!); }
 
 beforeEach(() => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  localStorage.clear();
   state.phase = 'READY'; state.preferences = { sound: true, music: false };
-  state.pause.mockClear(); state.toggle.mockClear(); state.field.mockClear();
+  state.pause.mockClear(); state.start.mockClear(); state.canRun = undefined; state.toggle.mockClear(); state.field.mockClear();
   host = document.createElement('div'); document.body.append(host); root = createRoot(host);
 });
-afterEach(() => { act(() => root.unmount()); host.remove(); vi.unstubAllGlobals(); });
+afterEach(() => { act(() => root.unmount()); host.remove(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe('game settings menu', () => {
   it.each(['READY', 'PAUSED', 'DEAD'])('keeps a named menu trigger visible in %s', (phase) => {
@@ -51,6 +53,47 @@ describe('game settings menu', () => {
     expect(host.querySelector('[role="dialog"]')).toBeNull();
     expect(host.querySelector('.locale-controls')).toBeNull();
     expect(host.querySelector('.audio-controls')).toBeNull();
+  });
+
+  it.each(['READY', 'PAUSED', 'DEAD'])('shows a wardrobe trigger beside settings in %s', (phase) => {
+    state.phase = phase; render();
+    expect(host.querySelector<HTMLButtonElement>('[aria-label="Гардероб"]')).not.toBeNull();
+    expect(host.querySelector('.hud-actions')?.children).toHaveLength(2);
+  });
+
+  it('hides wardrobe during flight and keeps settings and wardrobe mutually exclusive', () => {
+    state.phase = 'RUNNING'; render();
+    expect(host.querySelector('[aria-label="Гардероб"]')).toBeNull();
+    expect(state.canRun?.()).toBe(true);
+    state.phase = 'PAUSED'; render();
+    click(host.querySelector('[aria-label="Гардероб"]')!);
+    expect(host.querySelector('[aria-label="Меню"]')?.hasAttribute('disabled')).toBe(true);
+    expect(host.querySelector('[role="dialog"]')?.getAttribute('aria-labelledby')).toBe('wardrobe-heading');
+    expect(state.canRun?.()).toBe(false);
+    expect(state.pause).not.toHaveBeenCalled();
+    expect(state.start).not.toHaveBeenCalled();
+  });
+
+  it.each(['READY', 'PAUSED', 'DEAD'])('does not permit run input while a modal is open in %s', (phase) => {
+    state.phase = phase; render();
+    expect(state.canRun?.()).toBe(true);
+    click(host.querySelector('[aria-label="Гардероб"]')!);
+    expect(state.canRun?.()).toBe(false);
+    expect(state.pause).not.toHaveBeenCalled();
+    expect(state.start).not.toHaveBeenCalled();
+  });
+
+  it('shows a localized session-only warning after Apply when storage writes fail', () => {
+    state.phase = 'READY'; render();
+    const nativeSetItem = Storage.prototype.setItem;
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (this: Storage, key, value) {
+      if (key === 'doofy-duck:wardrobe:v1') throw new Error('blocked');
+      return nativeSetItem.call(this, key, value);
+    });
+    click(host.querySelector('[aria-label="Гардероб"]')!);
+    click([...host.querySelectorAll('button')].find((button) => button.textContent === 'Применить')!);
+    expect(host.querySelector('[role="dialog"]')).toBeNull();
+    expect(host.querySelector('.screen-panel [role="status"]')?.textContent).toContain('Не удалось сохранить выбор');
   });
 
   it('marks the flight phase and renders a plain score without a pause control', () => {

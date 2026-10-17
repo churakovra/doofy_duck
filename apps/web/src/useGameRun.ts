@@ -129,6 +129,11 @@ export function useGameRun(canPlay: () => boolean, callbacks: RunCallbacks, opti
     const clock = new FixedStepClock(() => {
       if (!rendererReadyRef.current) return;
       const current = runRef.current;
+      if (current.phase === 'READY' && !canPlayRef.current()) {
+        clearQueuedInputs();
+        inputRef.current.reset();
+        return;
+      }
       if (current.phase !== 'RUNNING' && queuedRef.current.length === 0) return;
       const batch = queuedRef.current.splice(0, 1);
       try {

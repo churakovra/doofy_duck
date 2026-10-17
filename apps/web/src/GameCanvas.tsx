@@ -5,6 +5,9 @@ import { createFxPool, duckPose, flapEnvelope, pushFx, type Fx } from './feel';
 import { useLocale } from './locale';
 import type { RuntimeErrorKey } from './messages.ru';
 import { DEFAULT_APPEARANCE, type GameAppearance } from './appearance';
+import { createWardrobeAssetController } from './wardrobe-assets';
+import type { WardrobeAssetPaths } from './wardrobe';
+import { createWardrobeImageLayer } from './wardrobe-image-layer';
 import { HEIGHT, WIDTH, makeBackground, makeDuck, makeParallax, paintBackground, paintDuck, paintEffects, paintWorld, px } from './scene';
 const FX_POOL = createFxPool(20);
 
@@ -22,20 +25,23 @@ type Props = {
   onReady: (error?: RuntimeErrorKey) => void;
   getFeedback?: () => Feedback;
   appearance?: GameAppearance;
+  imageAssets?: WardrobeAssetPaths | undefined;
 };
 type Scene = { app: Application; world: Graphics; duck: Container; wing: Graphics; effects: Graphics; parallax: Container };
-export function GameCanvas({ getState, onReady, getFeedback, appearance = DEFAULT_APPEARANCE }: Props) {
+export function GameCanvas({ getState, onReady, getFeedback, appearance = DEFAULT_APPEARANCE, imageAssets }: Props) {
   const { messages } = useLocale();
   const hostRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<Scene | null>(null);
   const getStateRef = useRef(getState);
   const feedbackRef = useRef(getFeedback);
   const appearanceRef = useRef(appearance);
+  const imageAssetsRef = useRef(imageAssets);
   const canvasLabelRef = useRef(messages.gameCanvasLabel);
   const frameRef = useRef(0);
   getStateRef.current = getState;
   feedbackRef.current = getFeedback;
   appearanceRef.current = appearance;
+  imageAssetsRef.current = imageAssets;
   canvasLabelRef.current = messages.gameCanvasLabel;
 
   useEffect(() => {
@@ -56,6 +62,8 @@ export function GameCanvas({ getState, onReady, getFeedback, appearance = DEFAUL
     let lastPhase: RunState['phase'] | undefined;
     let flapStarted = -10;
     let effects: readonly Fx[] = [];
+    let imageLayer: ReturnType<typeof createWardrobeImageLayer> | undefined;
+    const assetController = createWardrobeAssetController();
     let fxSerial = 0;
     let previousCollectibles = new Map<string, { x: number; y: number }>();
     const host = hostRef.current;
@@ -63,7 +71,7 @@ export function GameCanvas({ getState, onReady, getFeedback, appearance = DEFAUL
 
     const destroyApp = () => {
       if (!app?.renderer) return;
-      app.destroy(true, { children: true });
+      app.destroy({ removeView: true, releaseGlobalResources: false }, { children: true, texture: false, textureSource: false });
       app = undefined;
     };
 
@@ -83,9 +91,19 @@ export function GameCanvas({ getState, onReady, getFeedback, appearance = DEFAUL
         const background = makeBackground(initialAppearance);
         const parallax = makeParallax();
         app.stage.addChild(background, parallax, world, duckParts.duck, effectsGraphic);
+        imageLayer = createWardrobeImageLayer({ duck: duckParts.duck, background, bodyFallback: duckParts.body, wingFallback: duckParts.wing });
         const scene: Scene = { app, world, duck: duckParts.duck, wing: duckParts.wing, effects: effectsGraphic, parallax };
         sceneRef.current = scene;
         let previousAppearance = initialAppearance;
+        let previousAssets = imageAssetsRef.current;
+        const applyTextures = (textures: import('./wardrobe-assets').WardrobeTextures) => {
+          if (disposed || !sceneRef.current || sceneRef.current.app !== app) return;
+          try {
+            imageLayer?.setTextures(textures);
+            app?.renderer.render(app.stage);
+          } catch (error) { failRender(error); }
+        };
+        void assetController.load(previousAssets, applyTextures);
         let renderFailed = false;
         const failRender = (reason?: unknown) => {
           if (disposed || renderFailed) return;
@@ -107,6 +125,7 @@ export function GameCanvas({ getState, onReady, getFeedback, appearance = DEFAUL
             const state = getStateRef.current();
             const currentAppearance = appearanceRef.current;
             const appearanceChanged = currentAppearance !== previousAppearance;
+            const assetsChanged = imageAssetsRef.current !== previousAssets;
             const feedback = feedbackRef.current?.();
             const dt = lastTime === 0 ? 0 : Math.min((time - lastTime) / 1000, 0.05);
             lastTime = time;
@@ -167,11 +186,17 @@ export function GameCanvas({ getState, onReady, getFeedback, appearance = DEFAUL
               paintDuck(duckParts.body, duckParts.wing, currentAppearance);
               paintBackground(background, currentAppearance);
             }
+            if (assetsChanged) {
+              previousAssets = imageAssetsRef.current;
+              imageLayer?.setTextures({});
+              void assetController.load(previousAssets, applyTextures);
+            }
             const pose = duckPose(state.duck.vy, flapEnvelope(cosmeticTime - flapStarted, prefersReducedMotion), prefersReducedMotion);
             duckParts.duck.position.set(px(state.duck.x), px(state.duck.y));
             duckParts.duck.rotation = pose.rotation;
             duckParts.duck.scale.set(pose.scaleX, pose.scaleY);
             duckParts.wing.rotation = prefersReducedMotion ? 0 : 0.25 - flapEnvelope(cosmeticTime - flapStarted, false) * 1.7 + Math.sin(cosmeticTime * 18) * (state.phase === 'RUNNING' ? 0.12 : 0);
+            imageLayer?.setWingRotation(duckParts.wing.rotation);
             parallax.x = prefersReducedMotion ? 0 : (-(state.tick * 0.16) % WIDTH + WIDTH) % WIDTH;
             paintEffects(effectsGraphic, effects, cosmeticTime, prefersReducedMotion);
             app.renderer.render(app.stage);
@@ -194,6 +219,8 @@ export function GameCanvas({ getState, onReady, getFeedback, appearance = DEFAUL
       disposed = true;
       cancelAnimationFrame(frameRef.current);
       resizeObserver?.disconnect();
+      assetController.dispose();
+      imageLayer?.dispose();
       if (sceneRef.current?.app === app) sceneRef.current = null;
       host.replaceChildren();
       void serializeRendererLifecycle(destroyApp);

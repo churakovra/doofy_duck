@@ -18,9 +18,10 @@ const callbacks = {
   onPhaseChange: vi.fn(), onRunEnded: vi.fn(),
 };
 let changeLocale: ReturnType<typeof useLocale>['setLocale'];
+let modalOpen = false;
 function Harness() {
   changeLocale = useLocale().setLocale;
-  run = useGameRun(() => true, callbacks, options);
+  run = useGameRun(() => !modalOpen, callbacks, options);
   return <select aria-label="Language"><option value="ru">Русский</option><option value="en">English</option></select>;
 }
 function frame(elapsed: number) {
@@ -40,6 +41,7 @@ beforeEach(() => {
   now = 0;
   frames = new Map();
   options = {};
+  modalOpen = false;
   vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
     frames.set(++frameId, callback);
     return frameId;
@@ -82,6 +84,19 @@ describe('run clock integration', () => {
     frame(1_000);
     expect(run.phase).toBe('RUNNING');
     expect(run.getState().nextInputSequence).toBe(1);
+  });
+
+  it('discards a queued READY flap if a modal opens before the next animation frame', () => {
+    act(() => window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space' })));
+    expect(run.phase).toBe('READY');
+    modalOpen = true;
+    frame(17);
+    expect(run.phase).toBe('READY');
+    expect(run.getState().nextInputSequence).toBe(0);
+    expect(callbacks.onFlap).toHaveBeenCalledTimes(1);
+    modalOpen = false;
+    frame(17);
+    expect(run.phase).toBe('READY');
   });
 
   it.each(['Space', 'ArrowUp'])('leaves a focused native language select usable for %s', (code) => {

@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_CONFIG, createRun, createRunDescriptor } from '@doofy-duck/game-sim';
 
-const pixi = vi.hoisted(() => ({ render: vi.fn(), destroy: vi.fn(), init: vi.fn(), fill: vi.fn() }));
+const pixi = vi.hoisted(() => ({ render: vi.fn(), destroy: vi.fn(), init: vi.fn(), fill: vi.fn(), load: vi.fn(async (path: string) => ({ path })) }));
 vi.mock('pixi.js', () => {
   class Container {
     x = 0;
@@ -12,8 +12,10 @@ vi.mock('pixi.js', () => {
     scale = { set: vi.fn() };
     rotation = 0;
     addChild = vi.fn();
+    addChildAt = vi.fn();
   }
   class Graphics extends Container {
+    visible = true;
     clear = vi.fn(() => this);
     rect = vi.fn(() => this);
     roundRect = vi.fn(() => this);
@@ -33,7 +35,13 @@ vi.mock('pixi.js', () => {
     init = vi.fn(async (...args: unknown[]) => { pixi.init(...args); return undefined; });
     destroy = pixi.destroy;
   }
-  return { Application, Container, Graphics };
+  class Sprite extends Container {
+    anchor = { set: vi.fn() };
+    width = 0; height = 0; destroyed = false; texture: unknown;
+    constructor(texture: unknown) { super(); this.texture = texture; }
+    destroy = vi.fn(() => { this.destroyed = true; });
+  }
+  return { Application, Container, Graphics, Sprite, Assets: { load: pixi.load } };
 });
 
 import { GameCanvas } from './GameCanvas';
@@ -63,6 +71,7 @@ beforeEach(() => {
   pixi.destroy.mockReset();
   pixi.init.mockReset();
   pixi.fill.mockReset();
+  pixi.load.mockClear();
   rafId = 0;
   frameCallbacks.length = 0;
   host = document.createElement('div');
@@ -106,6 +115,7 @@ describe('GameCanvas renderer startup', () => {
     expect(onReady).toHaveBeenCalledWith(expect.any(String));
     expect(onReady).not.toHaveBeenCalledWith();
     expect(pixi.destroy).toHaveBeenCalledTimes(1);
+    expect(pixi.destroy).toHaveBeenCalledWith({ removeView: true, releaseGlobalResources: false }, { children: true, texture: false, textureSource: false });
   });
 
   it('signals readiness once after a successful initial render', async () => {
@@ -146,6 +156,17 @@ describe('GameCanvas renderer startup', () => {
     expect(pixi.destroy).not.toHaveBeenCalled();
     expect(pixi.fill).toHaveBeenCalledWith(0x404001);
     expect(pixi.fill).toHaveBeenCalledWith(0x505001);
+    expect(JSON.stringify(runningState)).toBe(stateBefore);
+  });
+
+  it('loads optional image-backed appearance without restarting Pixi or mutating simulation state', async () => {
+    const onReady = vi.fn();
+    const stateBefore = JSON.stringify(runningState);
+    act(() => root.render(<GameCanvas getState={() => runningState} onReady={onReady} imageAssets={{ body: '/test-assets/duck-body.svg' }} />));
+    await settleLifecycle();
+    expect(pixi.init).toHaveBeenCalledTimes(1);
+    expect(pixi.load).toHaveBeenCalledWith('/test-assets/duck-body.svg');
+    expect(pixi.destroy).not.toHaveBeenCalled();
     expect(JSON.stringify(runningState)).toBe(stateBefore);
   });
 });

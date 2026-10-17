@@ -15,6 +15,9 @@ type Props = {
   walletBlocked: boolean;
   toggle(kind: 'sound' | 'music'): void;
   portalContainer: RefObject<HTMLElement | null>;
+  open?: boolean;
+  onOpenChange?(open: boolean): void;
+  disabled?: boolean;
 };
 
 type LanguageDropdownProps = {
@@ -141,8 +144,10 @@ function LanguageDropdown({ locale, setLocale, messages, dialogRef }: LanguageDr
   </div>;
 }
 
-export function GameSettings({ locale, setLocale, messages, preferences, toggle, wallet, walletPersistent, walletStatus, walletBlocked, portalContainer }: Props) {
-  const [open, setOpen] = useState(false);
+export function GameSettings({ locale, setLocale, messages, preferences, toggle, wallet, walletPersistent, walletStatus, walletBlocked, portalContainer, open: controlledOpen, onOpenChange, disabled = false }: Props) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen ?? internalOpen;
+  const setOpen = (next: boolean) => { setInternalOpen(next); onOpenChange?.(next); };
   const triggerRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLElement>(null);
 
@@ -199,6 +204,7 @@ export function GameSettings({ locale, setLocale, messages, preferences, toggle,
       aria-label={messages.menuLabel}
       aria-haspopup="dialog"
       aria-expanded={open}
+      disabled={disabled}
       onClick={() => open ? close() : openMenu()}
     >
       <span aria-hidden="true">☰</span>
