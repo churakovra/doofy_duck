@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_CONFIG, createRunDescriptor, createRun, step, makeInput, configIdFor, canonicalJSON } from '../src/index.js';
+import { DEFAULT_CONFIG, LEGACY_DEFAULT_CONFIG, createRunDescriptor, createRun, step, makeInput, configIdFor, canonicalJSON } from '../src/index.js';
 const descriptor = (seed = 1, config = DEFAULT_CONFIG) => createRunDescriptor({ runId: 'stabilization', seed }, config);
 
 describe('parent stabilization regressions', () => {
@@ -10,7 +10,7 @@ describe('parent stabilization regressions', () => {
     expect(() => canonicalJSON({ value: undefined })).toThrow();
   });
   it('selects authored world patterns using the seed instead of a fixed catalog cycle', () => {
-    const legacy = { ...DEFAULT_CONFIG, challenges: null };
+    const legacy = { ...LEGACY_DEFAULT_CONFIG, challenges: null };
     const layouts = new Set(Array.from({ length: 16 }, (_, seed) =>
       createRun(descriptor(seed, legacy), legacy).pipes.map(p => p.gapCenter).join(',')));
     expect(layouts.size).toBeGreaterThan(1);
@@ -32,7 +32,7 @@ describe('parent stabilization regressions', () => {
     expect(() => step({ ...state, tick: Number.MAX_SAFE_INTEGER }, [])).toThrow(/counter|tick|limit/i);
   });
   it('generates bounded, seeded reachable gap layouts over multiple world fills', () => {
-    const config = { ...DEFAULT_CONFIG, challenges: null, pipes: { ...DEFAULT_CONFIG.pipes, spacing: 225000, horizon: 2_500_000 } };
+    const config = { ...LEGACY_DEFAULT_CONFIG, challenges: null, pipes: { ...LEGACY_DEFAULT_CONFIG.pipes, spacing: 225000, horizon: 2_500_000 } };
     const ids = new Set<number>();
     for (let seed = 0; seed < 24; seed++) {
       const custom = createRun(descriptor(seed, config), config);
@@ -49,7 +49,7 @@ describe('parent stabilization regressions', () => {
     expect(ids.size).toBeGreaterThan(8);
   });
   it('treats no eligible collectible types as NONE even with zero configured NONE weight', () => {
-    const config = { ...DEFAULT_CONFIG, spawnNoneWeight: 0, collectibles: [{ ...DEFAULT_CONFIG.collectibles[1]!, minPipeIndex: 100 }] };
+    const config = { ...LEGACY_DEFAULT_CONFIG, spawnNoneWeight: 0, collectibles: [{ ...LEGACY_DEFAULT_CONFIG.collectibles[1]!, minPipeIndex: 100 }] };
     const state = createRun(descriptor(1, config), config);
     const result = step(state, [makeInput(0, 'FLAP')]);
     expect(result.state.collectibles).toEqual([]);

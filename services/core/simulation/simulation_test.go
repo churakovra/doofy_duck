@@ -7,7 +7,7 @@ import (
 )
 
 func TestCurrentContractIdentity(t *testing.T) {
-	if SimulationVersion != "1.3.0" || GeneratorVersion != "1.2.0" || DefaultConfigID != "dd-v1-stepped-v1" {
+	if SimulationVersion != "1.4.0" || GeneratorVersion != "1.3.0" || DefaultConfigID != "dd-v1-star-interval-v1" {
 		t.Fatalf("unexpected contract identity: %s/%s/%s", SimulationVersion, GeneratorVersion, DefaultConfigID)
 	}
 	config := DefaultConfiguration()
@@ -17,6 +17,10 @@ func TestCurrentContractIdentity(t *testing.T) {
 	}
 	if id != DefaultConfigID {
 		t.Fatalf("default config ID = %q, want %q", id, DefaultConfigID)
+	}
+	legacyID, err := ConfigIDFor(LegacyDefaultConfiguration())
+	if err != nil || legacyID != LegacyDefaultConfigID {
+		t.Fatalf("legacy default config ID = %q, err=%v", legacyID, err)
 	}
 }
 

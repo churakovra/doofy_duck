@@ -73,7 +73,12 @@ type Config struct {
 	Limits          Limits        `json:"limits"`
 	Collectibles    []Definition  `json:"collectibles"`
 	SpawnNoneWeight int64         `json:"spawnNoneWeight"`
+	StarSchedule    *StarSchedule `json:"starSchedule,omitempty"`
 	Challenges      *ChallengeSet `json:"challenges"`
+}
+type StarSchedule struct {
+	MinIntervalPipes int64 `json:"minIntervalPipes"`
+	MaxIntervalPipes int64 `json:"maxIntervalPipes"`
 }
 type ChallengeFamily struct {
 	ID         string  `json:"id"`
@@ -131,6 +136,8 @@ type State struct {
 	NextInputSequence   int64            `json:"nextInputSequence"`
 	LastCollectiblePipe int64            `json:"lastCollectiblePipe"`
 	NextSpawnPipeIndex  int64            `json:"nextSpawnPipeIndex"`
+	NextStarPipeIndex   int64            `json:"nextStarPipeIndex,omitempty"`
+	StarScheduleOrdinal *int64           `json:"starScheduleOrdinal,omitempty"`
 	InputHistory        []Input          `json:"inputHistory"`
 	FinalizationCount   int64            `json:"finalizationCount"`
 }
@@ -167,7 +174,8 @@ type Pattern struct {
 }
 
 var canonicalCatalog = []Pattern{{"center", []int64{280000, 280000, 280000, 280000}}, {"rise-fall", []int64{260000, 280000, 300000, 280000}}, {"fall-rise", []int64{300000, 280000, 260000, 280000}}}
-var canonicalDefaultConfig = Config{FlightConfig{320, -5600, 8500, 100000, 12000, 10000}, PipeConfig{Speed: 3000, MaxSpeed: 4800, RampTicks: 2700, SpeedEveryPipes: 10, SpeedStepPercent: 10, GapMinCenter: 160000, GapMaxCenter: 400000, MaxGapDelta: 85000, Spacing: 300000, Width: 52000, GapHeight: 156000, SafeLeadIn: 420000, Horizon: 960000, FloorY: 561000, CeilingY: 0}, Limits{8, 2}, []Definition{{"FEATHER", 1, 34, 1, 1, 1, 7000, "feather-v1"}, {"GAME_STAR", 1, 8, 4, 3, 1, 7000, "game-star-v1"}}, 58, defaultChallengeSet()}
+var canonicalLegacyDefaultConfig = Config{FlightConfig{320, -5600, 8500, 100000, 12000, 10000}, PipeConfig{Speed: 3000, MaxSpeed: 4800, RampTicks: 2700, SpeedEveryPipes: 10, SpeedStepPercent: 10, GapMinCenter: 160000, GapMaxCenter: 400000, MaxGapDelta: 85000, Spacing: 300000, Width: 52000, GapHeight: 156000, SafeLeadIn: 420000, Horizon: 960000, FloorY: 561000, CeilingY: 0}, Limits{8, 2}, []Definition{{"FEATHER", 1, 34, 1, 1, 1, 7000, "feather-v1"}, {"GAME_STAR", 1, 8, 4, 3, 1, 7000, "game-star-v1"}}, 58, nil, defaultChallengeSet()}
+var canonicalDefaultConfig = Config{FlightConfig{320, -5600, 8500, 100000, 12000, 10000}, PipeConfig{Speed: 3000, MaxSpeed: 4800, RampTicks: 2700, SpeedEveryPipes: 10, SpeedStepPercent: 10, GapMinCenter: 160000, GapMaxCenter: 400000, MaxGapDelta: 85000, Spacing: 300000, Width: 52000, GapHeight: 156000, SafeLeadIn: 420000, Horizon: 960000, FloorY: 561000, CeilingY: 0}, Limits{8, 3}, []Definition{{"FEATHER", 1, 34, 1, 1, 1, 7000, "feather-v1"}, {"GAME_STAR", 1, 0, 4, 3, 1, 7000, "game-star-v1"}}, 66, &StarSchedule{8, 16}, defaultChallengeSet()}
 
 func defaultChallengeSet() *ChallengeSet {
 	return &ChallengeSet{4, "intro-steady", []string{"cruise-steady", "cruise-rise", "cruise-dip", "cruise-offset"}, []string{"pressure-rise", "pressure-dip", "pressure-offset"}, "recovery-steady", []ChallengeFamily{
@@ -193,13 +201,17 @@ func PatternCatalog() []Pattern {
 }
 
 // DefaultConfiguration returns an independent copy of the default rules.
-func DefaultConfiguration() Config { return cloneConfig(canonicalDefaultConfig) }
+func DefaultConfiguration() Config       { return cloneConfig(canonicalDefaultConfig) }
+func LegacyDefaultConfiguration() Config { return cloneConfig(canonicalLegacyDefaultConfig) }
 
 const MaxCounter int64 = 9007199254740990
 const maxSafeInteger int64 = 9007199254740991
-const SimulationVersion = "1.3.0"
-const GeneratorVersion = "1.2.0"
-const DefaultConfigID = "dd-v1-stepped-v1"
+const SimulationVersion = "1.4.0"
+const GeneratorVersion = "1.3.0"
+const DefaultConfigID = "dd-v1-star-interval-v1"
+const LegacySimulationVersion = "1.3.0"
+const LegacyGeneratorVersion = "1.2.0"
+const LegacyDefaultConfigID = "dd-v1-stepped-v1"
 
 func Step(input State, frames []Input) (Result, error) {
 	input = cloneState(input)
@@ -209,6 +221,16 @@ func Step(input State, frames []Input) (Result, error) {
 	for _, v := range []int64{input.Tick, input.Score, input.NextInputSequence, input.NextPipeIndex, input.NextSpawnPipeIndex} {
 		if _, e := inc(v, 1); e != nil {
 			return Result{}, e
+		}
+	}
+	if input.Config.StarSchedule != nil {
+		if _, e := inc(input.NextStarPipeIndex, 1); e != nil {
+			return Result{}, e
+		}
+		if input.StarScheduleOrdinal != nil {
+			if _, e := inc(*input.StarScheduleOrdinal, 1); e != nil {
+				return Result{}, e
+			}
 		}
 	}
 	if len(frames) > 64 {
@@ -309,6 +331,8 @@ func Step(input State, frames []Input) (Result, error) {
 	s = gen.State
 	spawned := map[string]bool{}
 	nextSpawn := s.NextSpawnPipeIndex
+	nextStar := s.NextStarPipeIndex
+	starOrdinal := s.StarScheduleOrdinal
 	rng := s.RNGState
 	for _, p := range s.Pipes {
 		if p.Index < nextSpawn {
@@ -328,13 +352,13 @@ func Step(input State, frames []Input) (Result, error) {
 		}
 		sample := Mix32(rng)
 		rng += 0x9e3779b9
-		if weight == 0 {
-			continue
+		roll := int64(0)
+		if weight > 0 {
+			roll = int64(sample) % weight
 		}
-		roll := int64(sample) % weight
 		cum := s.Config.SpawnNoneWeight
 		var chosen *Definition
-		if roll >= s.Config.SpawnNoneWeight {
+		if weight > 0 && roll >= s.Config.SpawnNoneWeight {
 			for i := range defs {
 				cum += defs[i].Weight
 				if defs[i].Weight > 0 && roll < cum {
@@ -343,7 +367,59 @@ func Step(input State, frames []Input) (Result, error) {
 				}
 			}
 		}
-		if chosen != nil && int64(len(s.Collectibles)) < s.Config.Limits.MaxActiveCollectibles {
+		scheduledStar := s.Config.StarSchedule != nil && p.Index == nextStar
+		if scheduledStar {
+			activeStars := 0
+			for _, collectible := range s.Collectibles {
+				if collectible.TypeID == "GAME_STAR" {
+					activeStars++
+				}
+			}
+			if activeStars > 0 || int64(len(s.Collectibles)) >= s.Config.Limits.MaxActiveCollectibles {
+				return Result{}, fmt.Errorf("scheduled Star capacity invariant violated")
+			}
+			id := fmt.Sprintf("star-%d", p.Index)
+			spawned[id] = true
+			schedule := s.Config.StarSchedule
+			var starDefinition *Definition
+			for i := range s.Config.Collectibles {
+				if s.Config.Collectibles[i].TypeID == "GAME_STAR" {
+					starDefinition = &s.Config.Collectibles[i]
+					break
+				}
+			}
+			if starDefinition == nil {
+				return Result{}, fmt.Errorf("scheduled Star definition missing")
+			}
+			s.Collectibles = append(s.Collectibles, Collectible{id, "GAME_STAR", p.X, bonusY(s.Config, uint32(s.Descriptor.Seed), p, starDefinition.Radius), 1, starDefinition.Radius, false})
+			ordinal := int64(1)
+			if starOrdinal != nil {
+				ordinal, e = inc(*starOrdinal, 1)
+				if e != nil {
+					return Result{}, e
+				}
+			}
+			gap := starInterval(uint32(s.Descriptor.Seed), ordinal, schedule.MinIntervalPipes, schedule.MaxIntervalPipes)
+			nextStar, e = inc(nextStar, gap)
+			if e != nil {
+				return Result{}, e
+			}
+			starOrdinal = &ordinal
+		}
+		regularCount := int64(len(s.Collectibles))
+		if s.Config.StarSchedule != nil {
+			regularCount = 0
+			for _, collectible := range s.Collectibles {
+				if collectible.TypeID != "GAME_STAR" {
+					regularCount++
+				}
+			}
+		}
+		reservedSlots := int64(0)
+		if s.Config.StarSchedule != nil {
+			reservedSlots = 1
+		}
+		if chosen != nil && !scheduledStar && regularCount < s.Config.Limits.MaxActiveCollectibles-reservedSlots {
 			id := fmt.Sprintf("collectible-%d", p.Index)
 			spawned[id] = true
 			s.Collectibles = append(s.Collectibles, Collectible{id, chosen.TypeID, p.X, bonusY(s.Config, uint32(s.Descriptor.Seed), p, chosen.Radius), chosen.Amount, chosen.Radius, false})
@@ -352,6 +428,10 @@ func Step(input State, frames []Input) (Result, error) {
 	}
 	s.RNGState = rng
 	s.NextSpawnPipeIndex = nextSpawn
+	if s.Config.StarSchedule != nil {
+		s.NextStarPipeIndex = nextStar
+		s.StarScheduleOrdinal = starOrdinal
+	}
 	keptC := []Collectible{}
 	for _, c := range s.Collectibles {
 		if !spawned[c.ID] {

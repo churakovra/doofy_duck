@@ -32,8 +32,7 @@ export class Feather extends CollectibleType {
 }
 export class GameStar extends CollectibleType {
   constructor(
-    readonly definition: CollectibleDefinition = DEFAULT_CONFIG
-      .collectibles[1]!,
+    readonly definition: CollectibleDefinition = DEFAULT_CONFIG.collectibles[1]!,
   ) {
     super();
   }

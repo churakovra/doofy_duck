@@ -18,7 +18,12 @@ func validateDescriptor(d Descriptor) error {
 	if d.Seed < 0 || d.Seed > 4294967295 {
 		return fmt.Errorf("invalid seed")
 	}
-	if strings.TrimSpace(d.RunID) == "" || d.SimulationVersion != SimulationVersion || d.GeneratorVersion != GeneratorVersion || d.ConfigID == "" {
+	currentRules := d.SimulationVersion == SimulationVersion && d.GeneratorVersion == GeneratorVersion
+	legacyRules := d.SimulationVersion == LegacySimulationVersion && d.GeneratorVersion == LegacyGeneratorVersion
+	customConfig := strings.HasPrefix(d.ConfigID, "dd-v1-config:") && len(d.ConfigID) > len("dd-v1-config:")
+	if strings.TrimSpace(d.RunID) == "" || !(currentRules || legacyRules) ||
+		!(d.ConfigID == DefaultConfigID || d.ConfigID == LegacyDefaultConfigID || customConfig) ||
+		(d.ConfigID == DefaultConfigID && !currentRules) || (d.ConfigID == LegacyDefaultConfigID && !legacyRules) {
 		return fmt.Errorf("invalid descriptor")
 	}
 	return nil
@@ -32,6 +37,10 @@ func inc(v, n int64) (int64, error) {
 }
 func cloneConfig(c Config) Config {
 	c.Collectibles = append([]Definition{}, c.Collectibles...)
+	if c.StarSchedule != nil {
+		schedule := *c.StarSchedule
+		c.StarSchedule = &schedule
+	}
 	if c.Challenges != nil {
 		challenge := *c.Challenges
 		challenge.CruiseFamilyIDs = append([]string{}, c.Challenges.CruiseFamilyIDs...)
@@ -53,6 +62,10 @@ func cloneTotals(totals map[string]int64) map[string]int64 {
 }
 func cloneState(s State) State {
 	s.Config = cloneConfig(s.Config)
+	if s.StarScheduleOrdinal != nil {
+		ordinal := *s.StarScheduleOrdinal
+		s.StarScheduleOrdinal = &ordinal
+	}
 	s.Pipes = append([]Pipe{}, s.Pipes...)
 	for i := range s.Pipes {
 		if s.Pipes[i].ChallengeStep != nil {
@@ -107,6 +120,20 @@ func ValidateConfig(c Config) error {
 	}
 	if c.Limits.MaxActivePipes < 2 || c.Limits.MaxActiveCollectibles < 0 || c.SpawnNoneWeight < 0 {
 		return fmt.Errorf("config limits")
+	}
+	if schedule := c.StarSchedule; schedule != nil {
+		starDefinition := -1
+		for i := range c.Collectibles {
+			if c.Collectibles[i].TypeID == "GAME_STAR" {
+				starDefinition = i
+				break
+			}
+		}
+		if schedule.MinIntervalPipes < 8 || schedule.MaxIntervalPipes < schedule.MinIntervalPipes || schedule.MaxIntervalPipes > 16 ||
+			starDefinition < 0 || c.Collectibles[starDefinition].Weight != 0 || c.Limits.MaxActiveCollectibles < 3 ||
+			p.Spacing > maxSafeInteger/schedule.MinIntervalPipes || p.Spacing*schedule.MinIntervalPipes <= p.Horizon+c.Collectibles[starDefinition].Radius+p.MaxSpeed {
+			return fmt.Errorf("invalid scheduled Star capacity or interval geometry")
+		}
 	}
 	seen := map[string]bool{}
 	total := c.SpawnNoneWeight

@@ -3,7 +3,7 @@ package simulation
 import "testing"
 
 func TestSeededGapWalkContinuesAfterPruning(t *testing.T) {
-	config := DefaultConfiguration()
+	config := LegacyDefaultConfiguration()
 	config.Challenges = nil
 	config.Pipes.Spacing = 225000
 	config.Pipes.Horizon = 2_500_000
@@ -11,7 +11,7 @@ func TestSeededGapWalkContinuesAfterPruning(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	state, err := CreateRun(Descriptor{"gap-walk", 142, SimulationVersion, GeneratorVersion, id}, config)
+	state, err := CreateRun(Descriptor{"gap-walk", 142, LegacySimulationVersion, LegacyGeneratorVersion, id}, config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,14 +32,14 @@ func TestSeededGapWalkContinuesAfterPruning(t *testing.T) {
 }
 
 func TestSeededFeatherTapWitness(t *testing.T) {
-	config := DefaultConfiguration()
+	config := LegacyDefaultConfiguration()
 	config.Challenges = nil
 	config.Pipes.Spacing, config.Pipes.MaxSpeed = 225000, 5800
 	id, err := ConfigIDFor(config)
 	if err != nil {
 		t.Fatal(err)
 	}
-	state, err := CreateRun(Descriptor{"feather-witness", 0, SimulationVersion, GeneratorVersion, id}, config)
+	state, err := CreateRun(Descriptor{"feather-witness", 0, LegacySimulationVersion, LegacyGeneratorVersion, id}, config)
 	if err != nil {
 		t.Fatal(err)
 	}

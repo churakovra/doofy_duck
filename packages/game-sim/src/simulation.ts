@@ -1,37 +1,42 @@
 import { configIdFor } from "./canonical.js";
 import { bonusY, generateNext, worldSpeedAt } from "./generation.js";
 import { deepFreeze, incrementCounter } from "./internal.js";
-import { DEFAULT_CONFIG, validateConfig, validateDescriptor } from "./config.js";
-import { mix32, SIMULATION_VERSION, GENERATOR_VERSION, type Collectible, type GameConfig, type InputFrame, type Phase, type RunDescriptor, type RunDescriptorIdentity, type RunState, type StepResult, type GameEvent } from "./types.js";
+import { DEFAULT_CONFIG, LEGACY_DEFAULT_CONFIG, validateConfig, validateDescriptor } from "./config.js";
+import { mix32, SIMULATION_VERSION, GENERATOR_VERSION, LEGACY_DEFAULT_CONFIG_ID, LEGACY_SIMULATION_VERSION, LEGACY_GENERATOR_VERSION, type Collectible, type GameConfig, type InputFrame, type Phase, type RunDescriptor, type RunDescriptorIdentity, type RunState, type StepResult, type GameEvent } from "./types.js";
 
 export function createRunDescriptor(
   identity: RunDescriptorIdentity,
   config: GameConfig = DEFAULT_CONFIG,
 ): RunDescriptor {
+  const configId = configIdFor(config);
+  const legacy = configId === LEGACY_DEFAULT_CONFIG_ID;
   return {
     ...identity,
-    simulationVersion: SIMULATION_VERSION,
-    generatorVersion: GENERATOR_VERSION,
-    configId: configIdFor(config),
+    simulationVersion: legacy ? LEGACY_SIMULATION_VERSION : SIMULATION_VERSION,
+    generatorVersion: legacy ? LEGACY_GENERATOR_VERSION : GENERATOR_VERSION,
+    configId,
   };
 }
 
 export function createRun(
   descriptor: RunDescriptor,
-  config: GameConfig = DEFAULT_CONFIG,
+  config?: GameConfig,
 ): RunState {
   validateDescriptor(descriptor);
-  validateConfig(config);
-  if (descriptor.configId !== configIdFor(config))
+  const resolvedConfig = config ?? (descriptor.configId === LEGACY_DEFAULT_CONFIG_ID ? LEGACY_DEFAULT_CONFIG : DEFAULT_CONFIG);
+  validateConfig(resolvedConfig);
+  if (descriptor.configId !== configIdFor(resolvedConfig))
     throw Error("configId does not identify supplied config");
-  const ownedConfig = cloneConfig(config);
+  const ownedConfig = cloneConfig(resolvedConfig);
+  const starSchedule = ownedConfig.starSchedule;
+  const starInterval = starSchedule ? seededStarInterval(descriptor.seed, 0, starSchedule.minIntervalPipes, starSchedule.maxIntervalPipes) : undefined;
   const s: RunState = {
     descriptor: deepFreeze({ ...descriptor }),
     config: deepFreeze(ownedConfig),
     phase: "READY",
     tick: 0,
     duck: {
-      x: config.flight.duckX,
+      x: ownedConfig.flight.duckX,
       y: Math.floor((ownedConfig.pipes.floorY + ownedConfig.pipes.ceilingY) / 2),
       vy: 0,
     },
@@ -45,14 +50,16 @@ export function createRun(
     nextInputSequence: 0,
     lastCollectiblePipe: -1000000,
     nextSpawnPipeIndex: 0,
+    ...(starInterval === undefined ? {} : { nextStarPipeIndex: starInterval, starScheduleOrdinal: 0 }),
     inputHistory: [],
     finalizationCount: 0,
   };
   return generateNext(s).state;
 }
 function cloneConfig(config: GameConfig): GameConfig {
+  const { starSchedule, ...base } = config;
   return {
-    ...config,
+    ...base,
     flight: { ...config.flight },
     pipes: { ...config.pipes },
     limits: { ...config.limits },
@@ -63,7 +70,12 @@ function cloneConfig(config: GameConfig): GameConfig {
       pressureFamilyIds: [...config.challenges.pressureFamilyIds],
       families: config.challenges.families.map(family => ({ ...family, gapCenters: [...family.gapCenters] })),
     },
+    ...(starSchedule == null ? {} : { starSchedule: { ...starSchedule } }),
   };
+}
+function seededStarInterval(seed: number, ordinal: number, minimum: number, maximum: number): number {
+  const sample = mix32((seed ^ Math.imul(ordinal + 1, 0x27d4eb2d)) >>> 0);
+  return minimum + sample % (maximum - minimum + 1);
 }
 export function step(
   input: RunState,
@@ -72,6 +84,8 @@ export function step(
   if (input.phase === "DEAD" || input.phase === "PAUSED")
     return { state: input, events: [] };
   for (const counter of [input.tick, input.score, input.nextInputSequence, input.nextPipeIndex, input.nextSpawnPipeIndex]) incrementCounter(counter);
+  if (input.nextStarPipeIndex !== undefined) incrementCounter(input.nextStarPipeIndex);
+  if (input.starScheduleOrdinal !== undefined) incrementCounter(input.starScheduleOrdinal);
   if (!Array.isArray(frames) || frames.length > 64) throw Error("input batch limit exceeded");
   let expected = input.nextInputSequence;
   for (const f of frames) {
@@ -167,6 +181,8 @@ export function step(
   if (phase === "RUNNING") {
     next = generateNext(next).state;
     let nextSpawnPipeIndex = next.nextSpawnPipeIndex;
+    let nextStarPipeIndex = next.nextStarPipeIndex;
+    let starScheduleOrdinal = next.starScheduleOrdinal;
     let rngState = next.rngState;
     const spawnedThisTick = new Set<string>();
     for (const pipe of next.pipes) {
@@ -186,14 +202,42 @@ export function step(
         throw Error("spawn table weight must have a nonnegative safe-integer total");
       const sample = mix32(rngState);
       rngState = (rngState + 0x9e3779b9) >>> 0;
-      if (totalWeight === 0) continue; // No eligible type: consume the opportunity as NONE.
-      const roll = sample % totalWeight;
+      const roll = totalWeight === 0 ? 0 : sample % totalWeight;
       let cumulative = next.config.spawnNoneWeight;
-      const chosen = roll < next.config.spawnNoneWeight ? undefined : definitions.find((definition) => {
+      const chosen = totalWeight === 0 || roll < next.config.spawnNoneWeight ? undefined : definitions.find((definition) => {
         cumulative += definition.weight;
         return definition.weight > 0 && roll < cumulative;
       });
-      if (chosen && next.collectibles.length < next.config.limits.maxActiveCollectibles) {
+      const scheduledStar = next.config.starSchedule != null && pipe.index === nextStarPipeIndex;
+      if (scheduledStar) {
+        const activeStars = next.collectibles.filter(collectible => collectible.typeId === "GAME_STAR").length;
+        if (activeStars > 0 || next.collectibles.length >= next.config.limits.maxActiveCollectibles)
+          throw Error("scheduled Star capacity invariant violated");
+        const schedule = next.config.starSchedule!;
+        const definition = next.config.collectibles.find(item => item.typeId === "GAME_STAR")!;
+        const collectibleId = `star-${pipe.index}`;
+        spawnedThisTick.add(collectibleId);
+        next = {
+          ...next,
+          collectibles: [...next.collectibles, {
+            id: collectibleId,
+            typeId: "GAME_STAR",
+            x: pipe.x,
+            y: bonusY(next.config, input.descriptor.seed, pipe, definition.radius),
+            amount: 1,
+            radius: definition.radius,
+            collected: false,
+          }],
+        };
+        const ordinal = incrementCounter(starScheduleOrdinal ?? 0);
+        const gap = seededStarInterval(input.descriptor.seed, ordinal, schedule.minIntervalPipes, schedule.maxIntervalPipes);
+        nextStarPipeIndex = incrementCounter(nextStarPipeIndex ?? pipe.index, gap);
+        starScheduleOrdinal = ordinal;
+      }
+      const regularCount = next.config.starSchedule == null
+        ? next.collectibles.length
+        : next.collectibles.filter(collectible => collectible.typeId !== "GAME_STAR").length;
+      if (chosen && !scheduledStar && regularCount < next.config.limits.maxActiveCollectibles - (next.config.starSchedule == null ? 0 : 1)) {
         const collectibleId = `collectible-${pipe.index}`;
         spawnedThisTick.add(collectibleId);
         next = {
@@ -214,7 +258,13 @@ export function step(
         };
       }
     }
-    next = { ...next, rngState, nextSpawnPipeIndex };
+    next = {
+      ...next,
+      rngState,
+      nextSpawnPipeIndex,
+      ...(nextStarPipeIndex === undefined ? {} : { nextStarPipeIndex }),
+      ...(starScheduleOrdinal === undefined ? {} : { starScheduleOrdinal }),
+    };
     const kept: Collectible[] = [];
     for (const c of next.collectibles) {
       const moved = spawnedThisTick.has(c.id) ? c : { ...c, x: c.x - speed },

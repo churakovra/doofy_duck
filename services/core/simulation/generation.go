@@ -2,9 +2,22 @@ package simulation
 
 import "fmt"
 
-func CreateRun(d Descriptor, c Config) (State, error) {
+func CreateRun(d Descriptor, configurations ...Config) (State, error) {
 	if e := validateDescriptor(d); e != nil {
 		return State{}, e
+	}
+	if len(configurations) > 1 {
+		return State{}, fmt.Errorf("at most one config is accepted")
+	}
+	var c Config
+	if len(configurations) == 1 {
+		c = configurations[0]
+	} else if d.ConfigID == DefaultConfigID {
+		c = DefaultConfiguration()
+	} else if d.ConfigID == LegacyDefaultConfigID {
+		c = LegacyDefaultConfiguration()
+	} else {
+		return State{}, fmt.Errorf("custom config is required")
 	}
 	if e := ValidateConfig(c); e != nil {
 		return State{}, e
@@ -14,8 +27,17 @@ func CreateRun(d Descriptor, c Config) (State, error) {
 		return State{}, fmt.Errorf("configId mismatch")
 	}
 	s := State{Descriptor: d, Config: cloneConfig(c), Phase: Ready, Duck: Duck{X: c.Flight.DuckX, Y: floorHalf(c.Pipes.FloorY + c.Pipes.CeilingY)}, Pipes: []Pipe{}, Collectibles: []Collectible{}, Totals: map[string]int64{}, RNGState: uint32(d.Seed), LastGapCenter: floorHalf(c.Pipes.GapMinCenter + c.Pipes.GapMaxCenter), LastCollectiblePipe: -1000000, InputHistory: []Input{}}
+	if c.StarSchedule != nil {
+		s.NextStarPipeIndex = starInterval(uint32(d.Seed), 0, c.StarSchedule.MinIntervalPipes, c.StarSchedule.MaxIntervalPipes)
+		ordinal := int64(0)
+		s.StarScheduleOrdinal = &ordinal
+	}
 	r, e := GenerateNext(s)
 	return r.State, e
+}
+func starInterval(seed uint32, ordinal, minimum, maximum int64) int64 {
+	sample := Mix32(seed ^ uint32(ordinal+1)*uint32(0x27d4eb2d))
+	return minimum + int64(sample)%(maximum-minimum+1)
 }
 func GenerateNext(s State) (Result, error) {
 	s = cloneState(s)

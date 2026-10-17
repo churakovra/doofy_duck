@@ -77,7 +77,10 @@ func TestDefaultReplayWorkloadIsDeterministicAndActive(t *testing.T) {
 	if first.final.Score != 2 {
 		t.Fatalf("replay score = %d, want 2", first.final.Score)
 	}
-	const wantFingerprint = "96f22c92c4f3aa301d09d19169c70f98dc95fa938506841289482e1706c78289"
+	if first.final.Config.StarSchedule == nil || first.final.NextStarPipeIndex < 8 || first.final.NextStarPipeIndex > 16 {
+		t.Fatalf("default replay missing the seeded Star cursor: config=%+v next=%d", first.final.Config.StarSchedule, first.final.NextStarPipeIndex)
+	}
+	const wantFingerprint = "9f7c76b68b3fee81c5a99d514b77ec25aed7aed86593ce8e3282c1951f3f6295"
 	if first.fingerprint != wantFingerprint || second.fingerprint != wantFingerprint {
 		t.Fatalf("replay fingerprint first=%q second=%q want=%q", first.fingerprint, second.fingerprint, wantFingerprint)
 	}
