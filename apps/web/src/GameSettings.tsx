@@ -1,5 +1,5 @@
 import { createPortal } from 'react-dom';
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from 'react';
 import { GameButton } from './GameButton';
 import { formatNumber, type Locale } from './locale';
 import type { MessageCatalog } from './messages.ru';
@@ -18,6 +18,8 @@ type Props = {
   open?: boolean;
   onOpenChange?(open: boolean): void;
   disabled?: boolean;
+  walletSlot?: ReactNode;
+  walletHeading?: string;
 };
 
 type LanguageDropdownProps = {
@@ -144,7 +146,7 @@ function LanguageDropdown({ locale, setLocale, messages, dialogRef }: LanguageDr
   </div>;
 }
 
-export function GameSettings({ locale, setLocale, messages, preferences, toggle, wallet, walletPersistent, walletStatus, walletBlocked, portalContainer, open: controlledOpen, onOpenChange, disabled = false }: Props) {
+export function GameSettings({ locale, setLocale, messages, preferences, toggle, wallet, walletPersistent, walletStatus, walletBlocked, portalContainer, open: controlledOpen, onOpenChange, disabled = false, walletSlot, walletHeading }: Props) {
   const [internalOpen, setInternalOpen] = useState(false);
   const open = controlledOpen ?? internalOpen;
   const setOpen = (next: boolean) => { setInternalOpen(next); onOpenChange?.(next); };
@@ -238,13 +240,15 @@ export function GameSettings({ locale, setLocale, messages, preferences, toggle,
           >{messages.musicLabel}</GameButton>
         </div>
         <section className="settings-wallet" aria-labelledby="settings-wallet-heading">
-          <h3 id="settings-wallet-heading">{messages.walletLabel}</h3>
+          <h3 id="settings-wallet-heading">{walletHeading ?? messages.walletLabel}</h3>
+          {walletSlot ?? <>
           <div className="settings-wallet-values">
             <p>{messages.feathersTotalLabel}<strong>{formatNumber(locale, wallet.FEATHER)}</strong></p>
             <p>{messages.gameStarsTotalLabel}<strong>{formatNumber(locale, wallet.GAME_STAR)}</strong></p>
           </div>
           <p className={`settings-wallet-status ${walletPersistent ? '' : 'not-saved'}`} role={walletBlocked ? 'status' : undefined}>{walletStatus}</p>
           <p className="settings-wallet-note">{messages.walletLocalUnitsNote}</p>
+          </>}
         </section>
       </section>
     </div>, portalContainer.current)}

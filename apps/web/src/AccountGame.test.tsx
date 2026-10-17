@@ -1,0 +1,318 @@
+// @vitest-environment jsdom
+import { act } from 'react';
+import { createRoot } from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createRun, createRunDescriptor } from '@doofy-duck/game-sim';
+import { AccountGame } from './AccountGame';
+import { LocaleProvider } from './locale';
+
+const harness = vi.hoisted(() => ({
+  restore: vi.fn(), currentRun: vi.fn(), latestRun: vi.fn(), createRun: vi.fn(), getRun: vi.fn(), submitCheckpoint: vi.fn(),
+  takeover: vi.fn(), abandon: vi.fn(), login: vi.fn(), loginDev: vi.fn(), logout: vi.fn(), progress: vi.fn(),
+  traceRecords: new Map<string, unknown>(), save: vi.fn(), runOptions: null as null | { onTick(state: unknown, inputs: readonly unknown[]): void },
+}));
+
+vi.mock('./account-api', () => ({
+  AccountApi: class {
+    restore = harness.restore;
+    currentRun = harness.currentRun;
+    latestRun = harness.latestRun;
+    createRun = harness.createRun;
+    getRun = harness.getRun;
+    submitCheckpoint = harness.submitCheckpoint;
+    takeover = harness.takeover;
+    abandon = harness.abandon;
+    login = harness.login;
+    loginDev = harness.loginDev;
+    logout = harness.logout;
+    progress = harness.progress;
+  },
+  AccountApiError: class AccountApiError extends Error {
+    constructor(readonly status = 500, readonly code = 'unknown') { super(code); }
+  },
+}));
+
+vi.mock('./account-trace', async () => {
+  const actual = await vi.importActual<typeof import('./account-trace')>('./account-trace');
+  return {
+    ...actual,
+    createAccountTraceStorage: () => ({
+      persistent: true,
+      load: async (accountId: string, runId: string) => harness.traceRecords.get(`${accountId}:${runId}`),
+      save: harness.save.mockImplementation(async (trace: { accountId: string; runId: string }) => {
+        harness.traceRecords.set(`${trace.accountId}:${trace.runId}`, trace);
+      }),
+      remove: async (accountId: string, runId: string) => { harness.traceRecords.delete(`${accountId}:${runId}`); },
+      clearAccount: async () => { harness.traceRecords.clear(); },
+    }),
+  };
+});
+
+vi.mock('./GameCanvas', () => ({ GameCanvas: () => <canvas /> }));
+vi.mock('./GameSettings', () => ({ GameSettings: () => null }));
+vi.mock('./GameWardrobe', () => ({ GameWardrobe: () => null }));
+vi.mock('./useGameAudio', () => ({ useGameAudio: () => ({
+  unlockFromGesture: vi.fn(), flap: vi.fn(), pickup: vi.fn(), setPhase: vi.fn(),
+  preferences: { sound: true, music: true }, toggle: vi.fn(),
+}) }));
+vi.mock('./useGameRun', () => ({ useGameRun: (_canPlay: unknown, _callbacks: unknown, options: typeof harness.runOptions) => {
+  harness.runOptions = options;
+  return {
+    phase: 'READY', score: 0, runtimeError: '', rendererReady: true, flightCapReached: false,
+    getState: () => ({ phase: 'RUNNING', tick: 1, totals: {} }), getFeedback: () => ({}),
+    acceptRenderer: vi.fn(), start: vi.fn(), pause: vi.fn(), restart: vi.fn(),
+    onFieldPointerDown: vi.fn(), onFieldPointerUp: vi.fn(),
+  };
+} }));
+
+const account = { account_id: 'account-a', telegram_user_id: 7, created_at: 'now' };
+const initialState = createRun(createRunDescriptor({ runId: '00000000-0000-4000-8000-000000000007', seed: 7 }));
+const runSnapshot = (changes: Record<string, unknown> = {}) => ({
+  runId: initialState.descriptor.runId, accountId: account.account_id, lifeIndex: 1,
+  seed: 7, simulationVersion: initialState.descriptor.simulationVersion,
+  generatorVersion: initialState.descriptor.generatorVersion, configId: initialState.descriptor.configId,
+  state: initialState, status: 'active', verificationStatus: 'in_progress', deliveryStatus: 'not_ready', checkpointSequence: -1, writerGeneration: 1,
+  activeTicks: 0, activeTickLimit: 216_000, submissionDeadline: '2099-01-01T00:00:00Z', writerToken: 'writer', ...changes,
+});
+let root: ReturnType<typeof createRoot>;
+let host: HTMLDivElement;
+
+beforeEach(async () => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  harness.traceRecords.clear(); harness.runOptions = null;
+  harness.restore.mockResolvedValue(account);
+  harness.progress.mockResolvedValue({ bestScore: 0 });
+  harness.currentRun.mockResolvedValue(undefined);
+  harness.latestRun.mockResolvedValue(undefined);
+  harness.createRun.mockResolvedValue(runSnapshot());
+  harness.submitCheckpoint.mockReset();
+  harness.getRun.mockResolvedValue(runSnapshot());
+  harness.save.mockClear();
+  host = document.createElement('div'); document.body.append(host); root = createRoot(host);
+  await act(async () => { root.render(<LocaleProvider><AccountGame onBack={vi.fn()} /></LocaleProvider>); });
+});
+
+afterEach(() => {
+  act(() => root.unmount()); host.remove(); vi.unstubAllGlobals(); vi.clearAllMocks();
+  vi.useRealTimers();
+});
+
+describe('account run transport', () => {
+  it('restores the last verified result when a signed-in account has no current run', async () => {
+    const state = { ...initialState, score: 23, totals: { FEATHER: 4, GAME_STAR: 2 } };
+    harness.currentRun.mockResolvedValue(undefined);
+    harness.latestRun.mockResolvedValue(runSnapshot({ state, status: 'completed', verificationStatus: 'verified', deliveryStatus: 'delivered' }));
+    await act(async () => {
+      root.render(<LocaleProvider><AccountGame key="restored-result" onBack={vi.fn()} /></LocaleProvider>);
+    });
+
+    expect(harness.currentRun.mock.invocationCallOrder[0]).toBeLessThan(harness.latestRun.mock.invocationCallOrder[0]!);
+    expect(host.querySelector('.result-score')?.textContent).toContain('23');
+    expect(host.textContent).toContain('4');
+    expect(host.textContent).toContain('2');
+    expect(host.textContent).toContain('РЕКОРД');
+    expect(host.textContent).toContain('их нельзя потратить');
+    expect(host.textContent).toContain('Начать полёт с аккаунтом');
+  });
+
+  it('does not apply a latest result after the account changes while it is loading', async () => {
+    const otherAccount = { account_id: 'account-b', telegram_user_id: 8, created_at: 'later' };
+    const logout = () => [...host.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.includes('Выйти'))!;
+    const enterDevId = (id: string) => {
+      const input = host.querySelector<HTMLInputElement>('.account-dev-label input')!;
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+      setter.call(input, id);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+    let resolveOldLatest!: (value: ReturnType<typeof runSnapshot>) => void;
+    await act(async () => { logout().click(); });
+    await vi.waitFor(() => expect(host.querySelector('.account-dev-label input')).toBeTruthy());
+    harness.latestRun.mockImplementationOnce(() => new Promise((resolve) => { resolveOldLatest = resolve; }));
+    await act(async () => {
+      root.render(<LocaleProvider><AccountGame key="restore-pending-result" onBack={vi.fn()} /></LocaleProvider>);
+    });
+    await vi.waitFor(() => expect(harness.latestRun).toHaveBeenCalled());
+
+    await act(async () => { logout().click(); });
+    await vi.waitFor(() => expect(host.querySelector('.account-dev-label input')).toBeTruthy());
+    harness.loginDev.mockResolvedValue(otherAccount);
+    harness.latestRun.mockResolvedValue(undefined);
+    await act(async () => { enterDevId('8'); host.querySelector<HTMLButtonElement>('.account-panel .primary-button')?.click(); });
+    await vi.waitFor(() => expect(host.textContent).toContain('8'));
+    await act(async () => {
+      resolveOldLatest(runSnapshot({ state: { ...initialState, score: 99 }, status: 'completed', verificationStatus: 'verified' }));
+    });
+
+    expect(host.querySelector('.result-score')).toBeNull();
+    expect(host.textContent).not.toContain('99');
+    expect(host.textContent).toContain('8');
+  });
+
+  it('shows the account best score from the server across new runs', async () => {
+    localStorage.setItem('doofy-duck:best:v1', JSON.stringify({ version: 1, best: 99999 }));
+    const logoutButton = [...host.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.includes('Выйти'))!;
+    await act(async () => { logoutButton.click(); });
+    harness.progress.mockResolvedValue({ bestScore: 987 });
+    harness.loginDev.mockResolvedValue(account);
+    harness.currentRun.mockResolvedValue(undefined);
+    await act(async () => {
+      const input = host.querySelector<HTMLInputElement>('.account-dev-label input')!;
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+      setter.call(input, '7');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      host.querySelector<HTMLButtonElement>('.account-panel .primary-button')?.click();
+    });
+    await vi.waitFor(() => expect(harness.progress).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(host.textContent).toContain('987'));
+    expect(host.textContent).toContain('РЕКОРД');
+
+    await act(async () => { host.querySelector<HTMLButtonElement>('.account-panel .primary-button')?.click(); });
+    await vi.waitFor(() => expect(host.textContent).toContain('987'));
+    expect(host.textContent).toContain('РЕКОРД');
+  });
+
+  it('reconciles an expired submission to a definitive rejection and enables a new flight', async () => {
+    vi.stubGlobal('confirm', () => true);
+    await act(async () => { host.querySelector<HTMLButtonElement>('.account-panel .primary-button')?.click(); });
+    harness.submitCheckpoint.mockRejectedValueOnce({ status: 410, code: 'submission_expired' });
+    harness.getRun.mockResolvedValueOnce(runSnapshot({ status: 'rejected', verificationStatus: 'rejected', deliveryStatus: 'not_ready' }));
+
+    await act(async () => {
+      harness.runOptions!.onTick({ phase: 'DEAD', tick: 1 } as never, []);
+      await vi.waitFor(() => expect(harness.submitCheckpoint).toHaveBeenCalled());
+      await vi.waitFor(() => expect(harness.getRun).toHaveBeenCalled());
+    });
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+
+    expect(host.textContent).toContain('Сервер не смог подтвердить');
+    const startButton = [...host.querySelectorAll<HTMLButtonElement>('.account-panel button')]
+      .find((button) => button.textContent?.includes('Начать полёт'));
+    expect(startButton).toBeTruthy();
+    await act(async () => { startButton?.click(); });
+    expect(harness.createRun).toHaveBeenCalledTimes(2);
+  });
+
+  it('merges an ACK with ticks recorded while the checkpoint request was pending', async () => {
+    let finishRequest!: (snapshot: ReturnType<typeof runSnapshot>) => void;
+    harness.submitCheckpoint.mockImplementationOnce(() => new Promise((resolve) => { finishRequest = resolve; }));
+    await act(async () => { host.querySelector<HTMLButtonElement>('.account-panel .primary-button')?.click(); });
+    const onTick = harness.runOptions!.onTick;
+    for (let tick = 1; tick <= 120; tick++) act(() => onTick({ phase: 'RUNNING', tick } as never, []));
+    await act(async () => { await vi.waitFor(() => expect(harness.submitCheckpoint).toHaveBeenCalledTimes(1)); });
+    for (let tick = 121; tick <= 127; tick++) act(() => onTick({ phase: 'RUNNING', tick } as never, []));
+    await act(async () => { finishRequest(runSnapshot({ checkpointSequence: 0, activeTicks: 120 })); });
+    await vi.waitFor(() => {
+      const trace = harness.traceRecords.get(`${account.account_id}:${initialState.descriptor.runId}`) as { activeTicks: number; unsentTicks: unknown[]; pending: unknown[] };
+      expect(trace).toMatchObject({ activeTicks: 127, pending: [] });
+      expect(trace.unsentTicks).toHaveLength(7);
+    });
+  });
+
+  it('flushes the final partial checkpoint when the active tick cap is reached', async () => {
+    harness.submitCheckpoint.mockResolvedValue(runSnapshot({ checkpointSequence: 0, activeTicks: 216_000, status: 'completion_pending', verificationStatus: 'verified', deliveryStatus: 'pending' }));
+    await act(async () => { host.querySelector<HTMLButtonElement>('.account-panel .primary-button')?.click(); });
+    act(() => harness.runOptions!.onTick({ phase: 'RUNNING', tick: 216_000 } as never, []));
+    await act(async () => { await vi.waitFor(() => expect(harness.submitCheckpoint).toHaveBeenCalledTimes(1)); });
+    expect(harness.submitCheckpoint.mock.calls[0]?.[1]).toMatchObject({ checkpointSequence: 0, ticks: [[]] });
+  });
+
+  it('keeps recording the active flight while checkpoint transport is unavailable', async () => {
+    harness.submitCheckpoint.mockRejectedValueOnce({ status: 503, code: 'temporarily_unavailable' });
+    await act(async () => { host.querySelector<HTMLButtonElement>('.account-panel .primary-button')?.click(); });
+    for (let tick = 1; tick <= 120; tick++) act(() => harness.runOptions!.onTick({ phase: 'RUNNING', tick } as never, []));
+    await act(async () => { await vi.waitFor(() => expect(harness.submitCheckpoint).toHaveBeenCalledTimes(1)); });
+    for (let tick = 121; tick <= 127; tick++) act(() => harness.runOptions!.onTick({ phase: 'RUNNING', tick } as never, []));
+    await act(async () => {
+      await vi.waitFor(() => {
+        const trace = harness.traceRecords.get(`${account.account_id}:${initialState.descriptor.runId}`) as { activeTicks: number; unsentTicks: unknown[]; pending: unknown[] };
+        expect(trace).toMatchObject({ activeTicks: 127 });
+        expect(trace.pending).toHaveLength(1);
+        expect(trace.unsentTicks).toHaveLength(7);
+      });
+    });
+    expect(host.textContent).toContain('недоступен');
+  });
+
+  it('preserves a valid saved tail during explicit takeover when Web Locks are unavailable', async () => {
+    vi.stubGlobal('confirm', () => true);
+    const saved = {
+      accountId: account.account_id, runId: initialState.descriptor.runId, writerGeneration: 1, writerToken: 'old-writer',
+      nextCheckpointSequence: 0, activeTicks: 1, unsentTicks: [[{ sequence: 0, action: 'FLAP' as const }]], pending: [],
+    };
+    harness.traceRecords.set(`${account.account_id}:${initialState.descriptor.runId}`, saved);
+    harness.currentRun.mockResolvedValue(runSnapshot({ writerToken: undefined }));
+    harness.takeover.mockResolvedValue(runSnapshot({ writerGeneration: 2, writerToken: 'new-writer' }));
+    harness.submitCheckpoint.mockResolvedValue(runSnapshot({ checkpointSequence: 0, activeTicks: 1, writerGeneration: 2 }));
+    await act(async () => {
+      root.render(<LocaleProvider><AccountGame key="restored-account-flight" onBack={vi.fn()} /></LocaleProvider>);
+    });
+    await vi.waitFor(() => expect(host.textContent).toContain('явное подтверждение'));
+
+    await act(async () => { host.querySelector<HTMLButtonElement>('.account-panel .primary-button')?.click(); });
+
+    expect(harness.submitCheckpoint).toHaveBeenCalledWith(initialState.descriptor.runId, expect.objectContaining({
+      checkpointSequence: 0, writerGeneration: 2, writerToken: 'new-writer', ticks: [[{ sequence: 0, action: 'FLAP' }]],
+    }));
+  });
+
+  it('ignores a completion poll that resolves after logout and a different account starts a run', async () => {
+    vi.useFakeTimers();
+    const nextAccount = { account_id: 'account-b', telegram_user_id: 8, created_at: 'later' };
+    harness.currentRun.mockResolvedValue(runSnapshot({ status: 'completion_pending', verificationStatus: 'verified', deliveryStatus: 'pending' }));
+    let finishPoll!: (snapshot: ReturnType<typeof runSnapshot>) => void;
+    harness.getRun.mockImplementationOnce(() => new Promise((resolve) => { finishPoll = resolve; }));
+    await act(async () => {
+      root.render(<LocaleProvider><AccountGame key="completion-pending-flight" onBack={vi.fn()} /></LocaleProvider>);
+    });
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+    expect(harness.getRun).toHaveBeenCalledTimes(1);
+
+    const logoutButton = [...host.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.includes('Выйти'))!;
+    await act(async () => { logoutButton.click(); });
+    harness.loginDev.mockResolvedValue(nextAccount);
+    harness.currentRun.mockResolvedValue(undefined);
+    await act(async () => {
+      const input = host.querySelector<HTMLInputElement>('.account-dev-label input')!;
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+      setter.call(input, '8');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      host.querySelector<HTMLButtonElement>('.account-panel .primary-button')?.click();
+    });
+    harness.createRun.mockResolvedValue(runSnapshot({ runId: 'run-b', accountId: nextAccount.account_id, writerToken: 'writer-b' }));
+    await act(async () => { host.querySelector<HTMLButtonElement>('.account-panel .primary-button')?.click(); });
+    await vi.waitFor(() => expect(harness.traceRecords.has(`${nextAccount.account_id}:run-b`)).toBe(true));
+
+    await act(async () => { finishPoll(runSnapshot({ status: 'completed', verificationStatus: 'verified', deliveryStatus: 'delivered' })); });
+
+    expect(harness.traceRecords.has(`${nextAccount.account_id}:run-b`)).toBe(true);
+  });
+
+  it('ignores an older completion poll after a new run starts for the same account', async () => {
+    vi.useFakeTimers();
+    const runA = runSnapshot({ status: 'completion_pending', verificationStatus: 'verified', deliveryStatus: 'pending' });
+    const completedA = runSnapshot({ status: 'completed', verificationStatus: 'verified', deliveryStatus: 'delivered' });
+    harness.currentRun.mockResolvedValue(runA);
+    let finishOlderPoll!: (snapshot: ReturnType<typeof runSnapshot>) => void;
+    harness.getRun.mockReset();
+    harness.getRun.mockImplementationOnce(() => new Promise((resolve) => { finishOlderPoll = resolve; }));
+    harness.getRun.mockResolvedValueOnce(completedA);
+    await act(async () => {
+      root.render(<LocaleProvider><AccountGame key="same-account-completion-poll" onBack={vi.fn()} /></LocaleProvider>);
+    });
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+    expect(host.textContent).toContain('Начать полёт с аккаунтом');
+
+    harness.createRun.mockResolvedValueOnce(runSnapshot({ runId: 'run-b', writerToken: 'writer-b' }));
+    await act(async () => { host.querySelector<HTMLButtonElement>('.account-panel .primary-button')?.click(); });
+    await vi.waitFor(() => expect(harness.traceRecords.has(`${account.account_id}:run-b`)).toBe(true));
+    expect(host.textContent).toContain('Начать полёт');
+
+    await act(async () => { finishOlderPoll(completedA); });
+
+    expect(harness.traceRecords.has(`${account.account_id}:run-b`)).toBe(true);
+    expect(host.textContent).toContain('Начать полёт');
+    expect(host.textContent).not.toContain('Начать полёт с аккаунтом');
+  });
+});

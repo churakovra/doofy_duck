@@ -13,6 +13,12 @@ export default defineConfig({
     globals: true,
     restoreMocks: true,
   },
-  server: { host: '127.0.0.1', port: 4173, strictPort: true },
+  server: {
+    host: '127.0.0.1', port: 4173, strictPort: true,
+    proxy: {
+      '/api': 'http://127.0.0.1:8080',
+      '/.well-known': 'http://127.0.0.1:8080',
+    },
+  },
   build: { outDir: '../../dist/web', emptyOutDir: true },
 });

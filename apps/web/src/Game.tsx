@@ -3,13 +3,14 @@ import { GameButton } from './GameButton';
 import { GameCanvas } from './GameCanvas';
 import { GameSettings } from './GameSettings';
 import { GameWardrobe } from './GameWardrobe';
+import { AccountGame } from './AccountGame';
 import { formatCount, formatCountUnit, formatNumber, useLocale } from './locale';
 import { useGameAudio } from './useGameAudio';
 import { useGameProgress } from './useGameProgress';
 import { useGameRun } from './useGameRun';
 import { createWardrobeSession, readBrowserWardrobeStorage, resolveEquipmentAppearance, resolveEquipmentAssets, type Equipment } from './wardrobe';
 
-export function Game() {
+function PracticeGame({ onAccountMode }: { onAccountMode(): void }) {
   const frameRef = useRef<HTMLDivElement>(null);
   const { locale, messages, setLocale } = useLocale();
   const [wardrobe] = useState(() => createWardrobeSession(readBrowserWardrobeStorage()));
@@ -107,7 +108,7 @@ export function Game() {
           <p role="alert" className="error-copy">{messages[run.runtimeError]}</p>
           <GameButton variant="primary" onClick={() => window.location.reload()}>{messages.reloadPageButton} <span>{messages.reloadGlyph}</span></GameButton>
         </> : <>
-          {run.phase === 'READY' && <><p className="eyebrow">{messages.smallFlightEyebrow}</p><h1>{messages.greeting}<br />{' '}{messages.traveler}</h1><p className="instruction">{messages.readyInstructionFirstLine}<br />{messages.readyInstructionSecondLine}</p><GameButton variant="primary" onClick={start} disabled={!run.rendererReady || busy}>{messages.startFlightButton} <span>{messages.forwardGlyph}</span></GameButton>{busy && <p className="wallet-access-error" role="status">{walletStatus}</p>}<p className="keyboard-hint">{messages.keyboardHint} <kbd>{messages.spaceKey}</kbd></p></>}
+          {run.phase === 'READY' && <><p className="eyebrow">{messages.smallFlightEyebrow}</p><h1>{messages.greeting}<br />{' '}{messages.traveler}</h1><p className="instruction">{messages.readyInstructionFirstLine}<br />{messages.readyInstructionSecondLine}</p><GameButton variant="primary" onClick={start} disabled={!run.rendererReady || busy}>{messages.startFlightButton} <span>{messages.forwardGlyph}</span></GameButton><GameButton variant="control" className="account-mode-button" onClick={onAccountMode}>{messages.accountModeLabel}</GameButton>{busy && <p className="wallet-access-error" role="status">{walletStatus}</p>}<p className="keyboard-hint">{messages.keyboardHint} <kbd>{messages.spaceKey}</kbd></p></>}
           {run.phase === 'PAUSED' && <><p className="eyebrow">{messages.pauseEyebrow}</p><h1>{messages.pausedHeading}</h1><p className="instruction">{messages.pausedInstruction}</p><GameButton variant="primary" onClick={start} disabled={!run.rendererReady || busy}>{messages.continueButton} <span>{messages.forwardGlyph}</span></GameButton></>}
           {run.phase === 'DEAD' && <><p className="eyebrow">{messages.completedFlightEyebrow}</p><h1>{messages.completedHeading}</h1><p className="result-score">{formatNumber(locale, run.score)} <span>{formatCountUnit(locale, 'score', run.score)}</span></p><p className="instruction">{messages.bestScorePrefix}{formatCount(locale, 'score', progress.best)}</p><p className="earnings-summary"><span>{messages.earningsSummaryLabel}</span><strong>{formatCount(locale, 'coin', progress.lastGain?.FEATHER ?? 0)}</strong><strong>{formatCount(locale, 'gameStar', progress.lastGain?.GAME_STAR ?? 0)}</strong></p><p className="wallet-disclaimer">{messages.walletDisclaimer}</p><GameButton variant="primary" onClick={restart} disabled={!run.rendererReady || busy || Boolean(run.runtimeError)}>{messages.playAgainButton} <span>{messages.reloadGlyph}</span></GameButton></>}
           {!run.rendererReady && !run.runtimeError && <p className="loading-copy">{messages.loadingScene}</p>}
@@ -118,4 +119,13 @@ export function Game() {
       </div>
     </div>
   </main>;
+}
+
+export function Game() {
+  const [accountMode, setAccountMode] = useState(() => Boolean(
+    (window as Window & { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp?.initData,
+  ));
+  return accountMode
+    ? <AccountGame onBack={() => setAccountMode(false)} />
+    : <PracticeGame onAccountMode={() => setAccountMode(true)} />;
 }

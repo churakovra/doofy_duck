@@ -12,7 +12,7 @@ let now: number;
 let frames: Map<number, FrameRequestCallback>;
 let root: ReturnType<typeof createRoot>;
 let host: HTMLDivElement;
-let options: { config?: GameConfig; createIdentity?: () => RunDescriptorIdentity; onEvents?: (events: readonly GameEvent[]) => void } = {};
+let options: { config?: GameConfig; createIdentity?: () => RunDescriptorIdentity; onEvents?: (events: readonly GameEvent[]) => void; onTick?: (state: unknown, ticks: readonly { sequence: number; action: 'FLAP' }[]) => void; activeTickLimit?: number } = {};
 const callbacks = {
   onFlapUnlock: vi.fn(), onFlap: vi.fn(), onPickup: vi.fn(),
   onPhaseChange: vi.fn(), onRunEnded: vi.fn(),
@@ -74,6 +74,60 @@ describe('run clock integration', () => {
     expect(run.getState().tick).toBe(before.tick + 1);
     expect(run.getState().descriptor).toEqual(before.descriptor);
     expect(run.getState().nextInputSequence).toBe(before.nextInputSequence);
+  });
+
+  it('records each applied simulation tick with its actual input batch, including empty ticks', () => {
+    const onTick = vi.fn();
+    options = { onTick };
+    act(() => root.render(<LocaleProvider><Harness /></LocaleProvider>));
+    act(() => run.start());
+    frame(17);
+    frame(17);
+
+    expect(onTick).toHaveBeenCalledTimes(2);
+    expect(onTick.mock.calls.map(([, ticks]) => ticks)).toEqual([[{ sequence: 0, action: 'FLAP' }], []]);
+  });
+
+  it('stops the account simulation when its authoritative recorder fails', () => {
+    options = { onTick: () => { throw new Error('trace write failed'); } };
+    act(() => root.render(<LocaleProvider><Harness /></LocaleProvider>));
+    act(() => run.start());
+    frame(17);
+
+    expect(run.getState().phase).toBe('READY');
+    expect(run.runtimeError).toBe('simulationStoppedError');
+    expect(run.rendererReady).toBe(false);
+  });
+
+  it('freezes account flight advancement at its active tick limit', () => {
+    const onTick = vi.fn();
+    options = { onTick, activeTickLimit: 2 };
+    act(() => root.render(<LocaleProvider><Harness /></LocaleProvider>));
+    act(() => run.start());
+    frame(17);
+    frame(17);
+    frame(17);
+
+    expect(run.phase).toBe('PAUSED');
+    expect(run.getState().tick).toBe(2);
+    expect(onTick).toHaveBeenCalledTimes(2);
+    expect(run.flightCapReached).toBe(true);
+  });
+
+  it('discards flaps queued behind the tick that reaches the account cap', () => {
+    const onTick = vi.fn();
+    options = { onTick, activeTickLimit: 2 };
+    act(() => root.render(<LocaleProvider><Harness /></LocaleProvider>));
+    act(() => { run.start(); run.flap(); run.flap(); });
+    frame(17);
+    frame(50);
+
+    expect(run.getState().tick).toBe(2);
+    expect(onTick).toHaveBeenCalledTimes(2);
+    expect(onTick.mock.calls.map(([, inputs]) => inputs)).toEqual([
+      [{ sequence: 0, action: 'FLAP' }],
+      [{ sequence: 1, action: 'FLAP' }],
+    ]);
   });
 
   it('starts from a complete Space key press before the next animation frame', () => {

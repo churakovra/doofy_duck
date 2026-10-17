@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type React from 'react';
 import {
   createRun, createRunDescriptor, DEFAULT_CONFIG, makeInput, pauseRun, restartRun, resumeRun, step,
-  type GameConfig, type GameEvent, type RunDescriptorIdentity, type RunState,
+  type GameConfig, type GameEvent, type InputFrame, type RunDescriptorIdentity, type RunState,
 } from '@doofy-duck/game-sim';
 import { FixedStepClock } from './clock';
 import { createInputController } from './input';
@@ -20,6 +20,9 @@ type GameRunOptions = {
   config?: GameConfig;
   createIdentity?: () => RunDescriptorIdentity;
   onEvents?: (events: readonly GameEvent[]) => void;
+  initialState?: RunState;
+  activeTickLimit?: number;
+  onTick?: (state: RunState, inputs: readonly InputFrame[]) => void;
 };
 
 function createIdentity(): RunDescriptorIdentity {
@@ -41,12 +44,13 @@ function freshRun(config?: GameConfig, identity = createIdentity()) {
 export function useGameRun(canPlay: () => boolean, callbacks: RunCallbacks, options: GameRunOptions = {}) {
   const optionsRef = useRef(options);
   optionsRef.current = options;
-  const [initial] = useState(() => freshRun(options.config, options.createIdentity?.() ?? createIdentity()));
+  const [initial] = useState(() => options.initialState ?? freshRun(options.config, options.createIdentity?.() ?? createIdentity()));
   const runRef = useRef(initial);
   const queuedRef = useRef<ReturnType<typeof makeInput>[]>([]);
-  const sequenceRef = useRef(0);
+  const sequenceRef = useRef(initial.nextInputSequence);
   const [phase, setPhase] = useState(initial.phase);
-  const [score, setScore] = useState(0);
+  const [score, setScore] = useState(initial.score);
+  const [flightCapReached, setFlightCapReached] = useState(false);
   const [runtimeError, setRuntimeError] = useState<RuntimeErrorKey | ''>('');
   const [rendererReady, setRendererReady] = useState(false);
   const rendererReadyRef = useRef(false);
@@ -138,7 +142,18 @@ export function useGameRun(canPlay: () => boolean, callbacks: RunCallbacks, opti
       const batch = queuedRef.current.splice(0, 1);
       try {
         const result = step(current, batch);
-        updateFromResult(result.state, result.events);
+        optionsRef.current.onTick?.(result.state, batch);
+        const limit = optionsRef.current.activeTickLimit;
+        const reachedLimit = result.state.phase === 'RUNNING'
+          && limit !== undefined && result.state.tick >= limit;
+        updateFromResult(reachedLimit ? pauseRun(result.state) : result.state, result.events);
+        if (reachedLimit) {
+          setFlightCapReached(true);
+          clearQueuedInputs();
+          inputRef.current.reset();
+          clock.resume();
+          resetClockOriginRef.current = true;
+        }
         if (result.state.phase === 'DEAD') {
           clearQueuedInputs();
           inputRef.current.reset();
@@ -230,6 +245,7 @@ export function useGameRun(canPlay: () => boolean, callbacks: RunCallbacks, opti
     clearQueuedInputs();
     setPhase(next.phase);
     setScore(0);
+    setFlightCapReached(false);
     callbacksRef.current.onPhaseChange(next.phase);
   }, [canPlay, clearQueuedInputs]);
 
@@ -241,7 +257,7 @@ export function useGameRun(canPlay: () => boolean, callbacks: RunCallbacks, opti
   const unlockForStart = useCallback(() => callbacksRef.current.onFlapUnlock(), []);
 
   return {
-    phase, score, runtimeError, rendererReady,
+    phase, score, runtimeError, rendererReady, flightCapReached,
     getState, getFeedback, acceptRenderer, flap, start, pause, restart,
     onFieldPointerDown, onFieldPointerUp, unlockForStart,
   };
