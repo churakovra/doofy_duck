@@ -15,6 +15,8 @@ import (
 	"strings"
 	"time"
 
+	"doofyduck/core/migrations"
+
 	store "doofyduck/core/db"
 	sim "doofyduck/simulation"
 	"github.com/jackc/pgx/v5"
@@ -250,8 +252,9 @@ func (s *Server) now() time.Time {
 func (s *Server) ready(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
-	var migrated bool
-	if s.DB == nil || s.DB.Ping(ctx) != nil || !s.OutboxConfigured || s.DB.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM core_schema_migrations WHERE version >= 1)`).Scan(&migrated) != nil || !migrated {
+	versions, err := migrations.RequiredVersions()
+	var applied int
+	if s.DB == nil || s.DB.Ping(ctx) != nil || !s.OutboxConfigured || err != nil || s.DB.QueryRow(ctx, `SELECT count(DISTINCT version) FROM core_schema_migrations WHERE version = ANY($1)`, versions).Scan(&applied) != nil || applied != len(versions) {
 		writeJSON(w, 503, map[string]string{"status": "not_ready"})
 		return
 	}
@@ -490,6 +493,7 @@ func (s *Server) expireIfDue(ctx context.Context, tx pgx.Tx, run *row) error {
 			return err
 		}
 		run.Status = "rejected"
+		run.VerificationStatus = "rejected"
 	}
 	return nil
 }

@@ -174,6 +174,38 @@ func TestPostgresRunCheckpointsAreOwnedIdempotentAndFenced(t *testing.T) {
 	}
 }
 
+func TestReadyRequiresEveryEmbeddedMigration(t *testing.T) {
+	pool := testPool(t)
+	server := httptest.NewServer((&Server{DB: pool, OutboxConfigured: true}).Handler())
+	defer server.Close()
+	if _, err := pool.Exec(context.Background(), `DELETE FROM core_schema_migrations WHERE version=4`); err != nil {
+		t.Fatal(err)
+	}
+	requestReady := func() int {
+		resp, err := server.Client().Get(server.URL + "/readyz")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		return resp.StatusCode
+	}
+	if status := requestReady(); status != http.StatusServiceUnavailable {
+		t.Fatalf("incomplete migration set readiness status=%d", status)
+	}
+	if _, err := pool.Exec(context.Background(), `INSERT INTO core_schema_migrations(version,name) VALUES(4,'004_verified_completion_delivery_lifecycle.sql')`); err != nil {
+		t.Fatal(err)
+	}
+	if status := requestReady(); status != http.StatusOK {
+		t.Fatalf("fully migrated readiness status=%d", status)
+	}
+	if _, err := pool.Exec(context.Background(), `DELETE FROM core_schema_migrations WHERE version=4`); err != nil {
+		t.Fatal(err)
+	}
+	if status := requestReady(); status != http.StatusServiceUnavailable {
+		t.Fatalf("missing current migration readiness status=%d", status)
+	}
+}
+
 func request(t *testing.T, client *http.Client, method, url, token string, body any) *http.Response {
 	t.Helper()
 	var encoded []byte
@@ -492,6 +524,15 @@ func TestPostgresCompletionOutboxRetriesAndOutageGrace(t *testing.T) {
 		t.Fatalf("outage grace snapshot status=%d deadline=%s expected=%s", resp.StatusCode, recovered.SubmissionDeadline, clock.Add(time.Hour))
 	}
 	clock = clock.Add(time.Hour + time.Second)
+	for i := 0; i < 2; i++ {
+		resp = request(t, app.Client(), http.MethodGet, app.URL+"/api/v1/runs/"+third.RunID, auth(), nil)
+		var expired Snapshot
+		_ = json.NewDecoder(resp.Body).Decode(&expired)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK || expired.Status != "rejected" || expired.VerificationStatus != "rejected" {
+			t.Fatalf("direct expired run read %d status=%d verification=%s", i, resp.StatusCode, expired.VerificationStatus)
+		}
+	}
 	resp = request(t, app.Client(), http.MethodGet, app.URL+"/api/v1/runs/current", auth(), nil)
 	resp.Body.Close()
 	if resp.StatusCode != 404 {

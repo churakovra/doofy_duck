@@ -22,6 +22,18 @@ compatibility with the previous supported HTTP/event contract during rollout. St
 new run issuance if schema, signing configuration or durable storage is unavailable.
 A successful readiness response is not a guarantee against a later outage.
 
+Core readiness requires every migration embedded in the running binary, including
+the delivery-lifecycle migration. A database containing only an earlier migration
+must remain unready until the release migration job completes.
+
+Platform API connections and the settlement CLI share PostgreSQL defaults of five
+seconds for connection establishment, five seconds for lock acquisition and
+30 seconds for each statement. Explicit database-URL timeout options are retained,
+including stricter limits; existing `search_path` options are preserved. These
+limits bound individual database operations, not a complete settlement batch or
+request. Tune overrides against measured work rather than disabling timeouts to
+hide contention.
+
 ## Monitoring and incident response
 
 Alert on failed readiness, elevated checkpoint errors/latency, exhausted database

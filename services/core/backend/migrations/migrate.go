@@ -21,6 +21,24 @@ func Apply(ctx context.Context, db *pgxpool.Pool) error {
 	return ApplyThrough(ctx, db, 0)
 }
 
+// RequiredVersions returns the versions embedded in this binary's migration set.
+func RequiredVersions() ([]int, error) {
+	entries, err := fs.Glob(files, "*.sql")
+	if err != nil {
+		return nil, err
+	}
+	sort.Strings(entries)
+	versions := make([]int, 0, len(entries))
+	for _, name := range entries {
+		version, parseErr := strconv.Atoi(strings.SplitN(filepath.Base(name), "_", 2)[0])
+		if parseErr != nil {
+			return nil, fmt.Errorf("invalid migration filename %s", name)
+		}
+		versions = append(versions, version)
+	}
+	return versions, nil
+}
+
 // ApplyThrough applies migrations through the requested version; zero applies all.
 func ApplyThrough(ctx context.Context, db *pgxpool.Pool, through int) error {
 	tx, err := db.BeginTx(ctx, pgx.TxOptions{})
