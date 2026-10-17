@@ -41,6 +41,13 @@ func starInterval(seed uint32, ordinal, minimum, maximum int64) int64 {
 }
 func GenerateNext(s State) (Result, error) {
 	s = cloneState(s)
+	return generateNextOwned(s)
+}
+
+// generateNextOwned advances generation on a state whose slices, maps, and
+// configuration are already owned by the caller. Public callers must use
+// GenerateNext so their input remains isolated from the returned state.
+func generateNextOwned(s State) (Result, error) {
 	pipes := append([]Pipe{}, s.Pipes...)
 	rng, index := s.RNGState, s.NextPipeIndex
 	previousGap := s.LastGapCenter

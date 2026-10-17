@@ -31,3 +31,23 @@ exact command above was run with `GOCACHE=/private/tmp/doofy-refactor-go-cache`.
 The three samples show run-to-run variation on this host; they are a local
 baseline, not a capacity guarantee or a cross-machine comparison. Re-run on the
 target hardware when comparing changes.
+
+## Copy reduction — October 18, 2026
+
+The current 1.4.0 simulation was measured before and after removing the second
+deep state/configuration copy inside `Step`. Public `GenerateNext` still copies
+its input; only the internal call from the already-owned step state skips it.
+Rules, fixture expectations and public mutation isolation remain unchanged.
+
+On Apple M4, darwin/arm64, using the same workloads with
+`-benchtime=500ms -count=3`, the allocation costs changed as follows:
+
+| Workload | Before | After |
+| --- | --- | --- |
+| Step, with or without flap | 8,960 B / 64 allocations | 7,544 B / 44 allocations |
+| 300-tick active replay | approximately 2.96 MB / 20,904 allocations | approximately 2.48 MB / 14,339 allocations |
+
+These before/after measurements use the current challenge and Star scheduling
+rules. The October 14 timing baseline above used earlier rules and cannot
+establish a comparable timing regression. The allocation reduction does not
+establish hosted capacity or browser frame performance.

@@ -159,6 +159,33 @@ func TestRunEndedTotalsPresentAndIndependentFromState(t *testing.T) {
 	}
 }
 
+func TestGenerateNextKeepsInputAndResultIndependent(t *testing.T) {
+	input := foundationRun(t, DefaultConfiguration())
+	result, err := GenerateNext(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(input.Pipes) == 0 || len(result.State.Pipes) == 0 {
+		t.Fatal("expected generated pipes")
+	}
+
+	result.State.Pipes[0].X++
+	result.State.Config.Challenges.Families[0].GapCenters[0]++
+	resultPipeX := result.State.Pipes[0].X
+	resultGap := result.State.Config.Challenges.Families[0].GapCenters[0]
+	if input.Pipes[0].X == result.State.Pipes[0].X ||
+		input.Config.Challenges.Families[0].GapCenters[0] == result.State.Config.Challenges.Families[0].GapCenters[0] {
+		t.Fatal("GenerateNext result aliases input state")
+	}
+
+	input.Pipes[0].X++
+	input.Config.Challenges.Families[0].GapCenters[0]++
+	if result.State.Pipes[0].X != resultPipeX ||
+		result.State.Config.Challenges.Families[0].GapCenters[0] != resultGap {
+		t.Fatal("GenerateNext input mutation changed returned state")
+	}
+}
+
 func TestFixtureHarnessComparesEventsToRawJSON(t *testing.T) {
 	data, err := os.ReadFile("../../../contracts/simulation/golden-v1.json")
 	if err != nil {

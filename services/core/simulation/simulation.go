@@ -324,7 +324,7 @@ func Step(input State, frames []Input) (Result, error) {
 	if phase != Running {
 		return Result{s, events}, nil
 	}
-	gen, e := GenerateNext(s)
+	gen, e := generateNextOwned(s)
 	if e != nil {
 		return Result{}, e
 	}
