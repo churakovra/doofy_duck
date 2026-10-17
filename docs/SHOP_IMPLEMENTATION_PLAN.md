@@ -45,6 +45,35 @@ cosmetic ownership and explicit preview before purchase. These are proposals
 until approved. Do not silently make all existing test cosmetics owned or paid.
 Account and practice equipment must not overwrite each other's selections.
 
+## Owner direction received during implementation
+
+October 17 follow-up: coins are the ordinary internal currency; coin cosmetic
+prices should span 20–1,000. In-game Stars are premium, available from gameplay,
+later Telegram Stars funding and explicitly defined events; Star cosmetic prices
+start around 100–200. The owner requests a 1:1 funding denomination for purchased
+in-game Stars versus Telegram Stars. This is direction for the later PAY contract,
+not payment activation, interchangeability of assets or a cash-out promise.
+
+The owner approved 1:1 verified pickup credit with hard per-run caps of 30 coins
+and seven in-game Stars. Coins should be accessible without task completion;
+practice remains local and cannot fund account purchases. The owner clarified
+that the proposed Star tasks were intended to establish a valid Telegram user
+able to pay, rather than specific mandatory tasks. Telegram research below
+informs the final eligibility proposal; confirmation is pending.
+Before wallet activation gameplay earns coins only, not Stars; whether existing
+verified coin facts receive historical account credit still requires an explicit
+activation/backfill decision. No existing practice balances are imported.
+
+Initial catalog direction: 2–3 coin-priced and two Star-priced cosmetics for each
+of skins and maps/backgrounds. The owner accepted proposing two coin-priced and two Star-priced items per
+category plus one additional free default. Exact items/prices and whether
+“versions” mean separate products remain to be approved. Coin-priced
+items are not zero-cost items. Current storage work does not activate rewards.
+
+The owner confirmed intentionally stopping Docker during the interrupted recovery
+test. Do not interpret that test's final failed submissions as a backend failure;
+a fresh complete recovery measurement remains required.
+
 ## Milestones and tasks
 
 Tasks below include meaningful tests first, expected-red execution, focused
@@ -245,3 +274,28 @@ reported accurately.
 Related: [development plan](DEVELOPMENT_PLAN.md),
 [economy policy](MVP_SPECIFICATIONS.md#3-initial-economy-catalog-and-payment-policy),
 [architecture](ADR-001-MICROSERVICES.md), [backend evidence](BACKEND_FOUNDATION.md).
+
+## Telegram identity and payment eligibility research
+
+Checked official documentation October 17, 2026. Backend-validated
+[Mini App initialization](https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app)
+establishes authenticated Telegram identity and freshness, not unique humanity,
+age or ability to pay. The documented Bot API User fields have no general payment
+eligibility flag; [getMyStarBalance](https://core.telegram.org/bots/api#getmystarbalance)
+returns the bot balance. MTProto
+[payments.getStarsStatus](https://core.telegram.org/method/payments.getStarsStatus)
+is documented for user clients, not a bot querying arbitrary players.
+Conclusion: do not introduce an assumed “can donate” verification API.
+
+[Telegram digital-goods payments](https://core.telegram.org/bots/payments-stars)
+use XTR invoices, pre-checkout validation and a successful-payment update before
+fulfillment; a frontend invoice-close event alone cannot authorize credit.
+Users may acquire Stars during checkout. Telegram Premium status does not
+establish ability to pay. Regional/payment restrictions can still affect checkout.
+
+Proposal awaiting owner confirmation: authenticated Telegram accounts may earn
+and spend verified gameplay Stars without prior payment or extra tasks.
+Only purchased funding requires validated successful payment. This keeps free
+play available without claiming that every authenticated account can transact.
+The 1:1 funding denomination does not imply developer cash proceeds equal the
+consumer's purchase price; digital-goods funding remains the separate PAY phase.
