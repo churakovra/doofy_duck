@@ -13,6 +13,7 @@ const harness = vi.hoisted(() => ({
   restore: vi.fn(), loadTelegramWebApp: vi.fn(), currentRun: vi.fn(), latestRun: vi.fn(), createRun: vi.fn(), getRun: vi.fn(), submitCheckpoint: vi.fn(),
   takeover: vi.fn(), abandon: vi.fn(), login: vi.fn(), loginDev: vi.fn(), logout: vi.fn(), progress: vi.fn(),
   shopEquipment: vi.fn(), completion: vi.fn(),
+  clearAccount: vi.fn(),
   gameAppearance: null as unknown,
   traceRecords: new Map<string, unknown>(), save: vi.fn(), runPhase: 'READY', runOptions: null as null | { onTick(state: unknown, inputs: readonly unknown[]): void },
 }));
@@ -24,6 +25,7 @@ vi.mock('./telegram-web-app', async () => {
 
 vi.mock('./account-api', () => ({
   AccountApi: class {
+    cancelPendingRequests = vi.fn();
     restore = harness.restore;
     currentRun = harness.currentRun;
     latestRun = harness.latestRun;
@@ -55,7 +57,7 @@ vi.mock('./account-trace', async () => {
         harness.traceRecords.set(`${trace.accountId}:${trace.runId}`, trace);
       }),
       remove: async (accountId: string, runId: string) => { harness.traceRecords.delete(`${accountId}:${runId}`); },
-      clearAccount: async () => { harness.traceRecords.clear(); },
+      clearAccount: harness.clearAccount,
     }),
   };
 });
@@ -88,6 +90,7 @@ const runSnapshot = (changes: Record<string, unknown> = {}) => ({
 });
 let root: ReturnType<typeof createRoot>;
 let host: HTMLDivElement;
+let restoreLocks = () => undefined;
 
 beforeEach(async () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
@@ -97,6 +100,10 @@ beforeEach(async () => {
   harness.progress.mockResolvedValue({ bestScore: 0 });
   harness.shopEquipment.mockResolvedValue({ equipment: [{ item_type: 'skin', item_id: 'classic', revision: 1 }, { item_type: 'background', item_id: 'meadow', revision: 1 }] });
   harness.completion.mockResolvedValue({ status: 'pending', reason: 'settlement_disabled', credited: { FEATHER: '0', GAME_STAR: '0' } });
+  harness.clearAccount.mockImplementation(async (accountId: string) => {
+    for (const key of harness.traceRecords.keys()) if (key.startsWith(`${accountId}:`)) harness.traceRecords.delete(key);
+  });
+  harness.logout.mockResolvedValue(undefined);
   harness.currentRun.mockResolvedValue(undefined);
   harness.latestRun.mockResolvedValue(undefined);
   harness.createRun.mockResolvedValue(runSnapshot());
@@ -109,6 +116,8 @@ beforeEach(async () => {
 
 afterEach(() => {
   act(() => root.unmount()); host.remove(); vi.unstubAllGlobals(); vi.clearAllMocks();
+  restoreLocks(); restoreLocks = () => undefined;
+  vi.restoreAllMocks();
   vi.useRealTimers();
 });
 
@@ -357,6 +366,36 @@ describe('account run transport', () => {
     expect(host.textContent).toContain('Начать полёт с аккаунтом');
   });
 
+  it('refreshes pending settlement after delivery completes', async () => {
+    vi.useFakeTimers();
+    harness.currentRun.mockResolvedValue(runSnapshot({ status: 'completed', verificationStatus: 'verified', deliveryStatus: 'pending' }));
+    let delivered = false;
+    harness.completion.mockImplementation(async () => delivered
+      ? { status: 'committed', reason: 'credited', credited: { FEATHER: '40', GAME_STAR: '5' } }
+      : { status: 'pending', reason: 'awaiting_delivery', credited: { FEATHER: '0', GAME_STAR: '0' } });
+    harness.getRun.mockResolvedValue(runSnapshot({ status: 'completed', verificationStatus: 'verified', deliveryStatus: 'delivered' }));
+    await act(async () => { root.render(<LocaleProvider><AccountGame key="settlement-after-delivery" onBack={vi.fn()} /></LocaleProvider>); });
+    await vi.waitFor(() => expect(harness.completion).toHaveBeenCalledTimes(1));
+    delivered = true;
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+    await vi.waitFor(() => expect(host.querySelector('.account-settlement')?.textContent).toContain('40'));
+    expect(harness.completion.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('finishes local logout when remote revocation fails', async () => {
+    let failClear!: () => void;
+    harness.clearAccount.mockImplementationOnce(() => new Promise((_resolve, reject) => {
+      failClear = () => reject(new Error('storage unavailable'));
+    }));
+    harness.logout.mockRejectedValueOnce(new Error('offline'));
+    const logoutButton = [...host.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.includes('Выйти'))!;
+    await act(async () => { logoutButton.click(); });
+    await vi.waitFor(() => expect(host.querySelector('.account-dev-label input')).toBeTruthy());
+    expect(harness.clearAccount).toHaveBeenCalledTimes(1);
+    await act(async () => { failClear(); });
+    expect(host.textContent).toContain('Сервис временно недоступен');
+  });
+
   it('does not apply a latest result after the account changes while it is loading', async () => {
     const otherAccount = { account_id: 'account-b', telegram_user_id: 8, created_at: 'later' };
     const logout = () => [...host.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.includes('Выйти'))!;
@@ -475,6 +514,54 @@ describe('account run transport', () => {
     expect(host.textContent).toContain('недоступен');
   });
 
+  it('retries a timed-out checkpoint with the same idempotency key after retaining later ticks', async () => {
+    vi.useFakeTimers();
+    const keys: string[] = [];
+    harness.submitCheckpoint.mockImplementationOnce((_runId, input) => {
+      keys.push((input as { idempotencyKey: string }).idempotencyKey);
+      return new Promise((_resolve, reject) => window.setTimeout(() => reject(Object.assign(new Error('timeout'), { status: 0, code: 'request_timeout' })), 30_000));
+    }).mockImplementationOnce(async (_runId, input) => {
+      keys.push((input as { idempotencyKey: string }).idempotencyKey);
+      return runSnapshot({ checkpointSequence: 0, activeTicks: 128 });
+    });
+    harness.runPhase = 'RUNNING';
+    await act(async () => { host.querySelector<HTMLButtonElement>('.account-panel .primary-button')?.click(); });
+    const onTick = harness.runOptions!.onTick;
+    for (let tick = 1; tick <= 120; tick++) act(() => onTick({ phase: 'RUNNING', tick } as never, []));
+    await act(async () => { await vi.waitFor(() => expect(harness.submitCheckpoint).toHaveBeenCalledTimes(1)); });
+    for (let tick = 121; tick <= 127; tick++) act(() => onTick({ phase: 'RUNNING', tick } as never, []));
+    harness.runPhase = 'DEAD';
+    act(() => onTick({ phase: 'DEAD', tick: 128 } as never, []));
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+    expect(harness.submitCheckpoint).toHaveBeenCalledTimes(1);
+    await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
+    expect(harness.submitCheckpoint.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(keys[1]).toBe(keys[0]);
+  });
+
+  it('honors Retry-After for later ticks and terminal flushes', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    harness.submitCheckpoint.mockRejectedValueOnce({ status: 429, code: 'busy', retryAfterMs: 60_000 })
+      .mockImplementation(async (_runId, input) => {
+        const checkpoint = input as { checkpointSequence: number };
+        return runSnapshot({ checkpointSequence: checkpoint.checkpointSequence, activeTicks: checkpoint.checkpointSequence === 0 ? 120 : 128 });
+      });
+    harness.runPhase = 'RUNNING';
+    await act(async () => { host.querySelector<HTMLButtonElement>('.account-panel .primary-button')?.click(); });
+    const onTick = harness.runOptions!.onTick;
+    for (let tick = 1; tick <= 120; tick++) act(() => onTick({ phase: 'RUNNING', tick } as never, []));
+    await act(async () => { await vi.waitFor(() => expect(harness.submitCheckpoint).toHaveBeenCalledTimes(1)); });
+    for (let tick = 121; tick <= 127; tick++) act(() => onTick({ phase: 'RUNNING', tick } as never, []));
+    harness.runPhase = 'DEAD';
+    act(() => onTick({ phase: 'DEAD', tick: 128 } as never, []));
+    await act(async () => { await vi.advanceTimersByTimeAsync(59_000); });
+    expect(harness.submitCheckpoint).toHaveBeenCalledTimes(1);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+    await vi.waitFor(() => expect(harness.submitCheckpoint).toHaveBeenCalledTimes(3));
+  });
+
   it('retains a locally completed flight through an outage and replays ordered checkpoints after recovery', async () => {
     vi.useFakeTimers();
     let networkAvailable = false;
@@ -497,7 +584,8 @@ describe('account run transport', () => {
     for (let tick = 121; tick <= 127; tick++) act(() => onTick({ phase: 'RUNNING', tick } as never, []));
     harness.runPhase = 'DEAD';
     act(() => onTick({ phase: 'DEAD', tick: 128 } as never, []));
-    await act(async () => { await vi.waitFor(() => expect(harness.submitCheckpoint).toHaveBeenCalledTimes(2)); });
+    expect(harness.submitCheckpoint).toHaveBeenCalledTimes(1);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
 
     const trace = harness.traceRecords.get(`${account.account_id}:${initialState.descriptor.runId}`) as {
       accountId: string; activeTicks: number; unsentTicks: unknown[];
@@ -511,13 +599,12 @@ describe('account run transport', () => {
     expect(harness.createRun).toHaveBeenCalledTimes(1);
 
     networkAvailable = true;
-    await act(async () => { await vi.advanceTimersByTimeAsync(3_000); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
 
-    expect(attempts.map((request) => request.checkpointSequence)).toEqual([0, 0, 0, 1]);
+    expect(attempts.map((request) => request.checkpointSequence)).toEqual([0, 0, 1]);
     expect(attempts[0]?.ticks).toEqual(trace.pending[0]?.ticks);
     expect(attempts[1]?.ticks).toEqual(attempts[0]?.ticks);
-    expect(attempts[2]?.ticks).toEqual(attempts[0]?.ticks);
-    expect(attempts[3]?.ticks).toEqual(trace.pending[1]?.ticks);
+    expect(attempts[2]?.ticks).toEqual(trace.pending[1]?.ticks);
     expect(host.textContent).toContain('Полёт проверен и записан в аккаунт.');
     const nextStart = [...host.querySelectorAll<HTMLButtonElement>('.account-panel button')]
       .find((button) => button.textContent?.includes('Начать полёт с аккаунтом'));
@@ -550,6 +637,59 @@ describe('account run transport', () => {
     expect(harness.submitCheckpoint).toHaveBeenCalledWith(initialState.descriptor.runId, expect.objectContaining({
       checkpointSequence: 0, writerGeneration: 2, writerToken: 'new-writer', ticks: [[{ sequence: 0, action: 'FLAP' }]],
     }));
+  });
+
+  it('applies Retry-After to checkpoints sent while reconciling a saved trace', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    await act(async () => { root.unmount(); });
+    harness.currentRun.mockResolvedValue(runSnapshot());
+    const saved = {
+      accountId: account.account_id, runId: initialState.descriptor.runId, writerGeneration: 1, writerToken: 'writer',
+      nextCheckpointSequence: 1, activeTicks: 1, unsentTicks: [],
+      pending: [{ sequence: 0, idempotencyKey: 'recovery-checkpoint-key', ticks: [[{ sequence: 0, action: 'FLAP' as const }]] }],
+    };
+    harness.traceRecords.set(`${account.account_id}:${initialState.descriptor.runId}`, saved);
+    const locks = Object.getOwnPropertyDescriptor(navigator, 'locks');
+    restoreLocks = () => {
+      if (locks) Object.defineProperty(navigator, 'locks', locks);
+      else Reflect.deleteProperty(navigator, 'locks');
+    };
+    Object.defineProperty(navigator, 'locks', { configurable: true, value: {
+      request: (_name: string, _options: LockOptions, callback: (lock: Lock | null) => Promise<unknown>) => {
+        void callback({ name: 'test-lock', mode: 'exclusive' } as Lock);
+        return Promise.resolve(undefined);
+      },
+    } });
+    let rejectedAt = 0;
+    harness.submitCheckpoint.mockImplementationOnce(async () => {
+      rejectedAt = Date.now();
+      throw { status: 429, code: 'busy', retryAfterMs: 60_000 };
+    })
+      .mockResolvedValueOnce(runSnapshot({ checkpointSequence: 0, activeTicks: 1 }));
+    root = createRoot(host);
+    await act(async () => { root.render(<LocaleProvider><AccountGame key="retry-reconcile-deadline" onBack={vi.fn()} /></LocaleProvider>); });
+    await act(async () => { await vi.waitFor(() => expect(harness.submitCheckpoint).toHaveBeenCalledTimes(1)); });
+    const checkpointKey = (harness.submitCheckpoint.mock.calls[0]?.[1] as { idempotencyKey: string }).idempotencyKey;
+    expect(checkpointKey).toBe('recovery-checkpoint-key');
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); });
+    expect(host.textContent).toContain('Связь прервана.');
+
+    const retryButton = () => [...host.querySelectorAll<HTMLButtonElement>('.account-panel button')]
+      .find((button) => button.textContent?.toLowerCase().includes('статус'))!;
+    await act(async () => { retryButton().click(); retryButton().click(); });
+    expect(harness.submitCheckpoint).toHaveBeenCalledTimes(1);
+    const remainingBeforeDeadline = Math.max(0, 59_000 - (Date.now() - rejectedAt));
+    await act(async () => { await vi.advanceTimersByTimeAsync(remainingBeforeDeadline); });
+    expect(Date.now() - rejectedAt).toBeLessThan(60_000);
+    expect(harness.submitCheckpoint).toHaveBeenCalledTimes(1);
+    await act(async () => { retryButton().click(); });
+    expect(harness.submitCheckpoint).toHaveBeenCalledTimes(1);
+
+    const remainingAfterDeadline = Math.max(1, 60_001 - (Date.now() - rejectedAt));
+    await act(async () => { await vi.advanceTimersByTimeAsync(remainingAfterDeadline); retryButton().click(); });
+    await vi.waitFor(() => expect(harness.submitCheckpoint).toHaveBeenCalledTimes(2));
+    expect((harness.submitCheckpoint.mock.calls[1]?.[1] as { idempotencyKey: string }).idempotencyKey).toBe(checkpointKey);
   });
 
   it('ignores a completion poll that resolves after logout and a different account starts a run', async () => {

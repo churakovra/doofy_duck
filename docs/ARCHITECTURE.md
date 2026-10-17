@@ -44,7 +44,7 @@ policy. Shop debit, entitlement and purchase result share one Economy transactio
 | Path | Responsibility |
 | --- | --- |
 | [apps/web/src/main.tsx](../apps/web/src/main.tsx) | React mount and error boundary |
-| `apps/web/src/AccountGame.tsx`, `account-api.ts`, `account-trace.ts` | Account-mode lifecycle, in-memory access credentials, exact input transport and validated IndexedDB recovery |
+| `apps/web/src/AccountGame.tsx`, `account-api.ts`, `account-trace.ts`, `checkpoint-backoff.ts`, `account-logout.ts` | Account-mode lifecycle, bounded authenticated requests, shared checkpoint retry deadlines, ordered logout cleanup, exact input transport and validated IndexedDB recovery |
 | `services/platform/app`, `services/platform/migrations` | Telegram auth, signed tokens, rotating refresh sessions, account lookup and idempotent completion inbox |
 | `services/platform/app/economy` | Wallet ledger, gated completion settlement, catalog, inventory, revisioned equipment, atomic purchases and operator worker/audit commands |
 | `services/core/backend` | Go HTTP authorization, run ownership, replay/checkpoints, writer fencing, outage windows, outbox and load harness |

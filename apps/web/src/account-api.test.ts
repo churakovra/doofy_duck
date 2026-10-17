@@ -129,6 +129,49 @@ describe('account API authentication', () => {
     await expect(api.createRun()).rejects.toMatchObject({ status: 429, code: 'busy', retryAfterMs: 3000 });
   });
 
+  it('times out a stalled authenticated request and aborts its transport', async () => {
+    vi.useFakeTimers();
+    const fetcher = vi.fn<FetchLike>()
+      .mockResolvedValueOnce(response({ access_token: 'secret', token_type: 'Bearer', expires_in: 600 }))
+      .mockResolvedValueOnce(response({ account_id: 'a', telegram_user_id: 7, created_at: 'now' }))
+      .mockImplementationOnce(() => new Promise<Response>(() => undefined));
+    const api = new AccountApi({ fetcher });
+    await api.login('init');
+    const pending = expect(api.createRun()).rejects.toMatchObject({ code: 'request_timeout' });
+    await vi.advanceTimersByTimeAsync(30_000);
+    await pending;
+    expect(fetcher.mock.calls[2]?.[1]?.signal).toBeInstanceOf(AbortSignal);
+    expect(fetcher.mock.calls[2]?.[1]?.signal?.aborted).toBe(true);
+  });
+
+  it('bounds authenticated response body consumption as well as fetch', async () => {
+    vi.useFakeTimers();
+    const stalledBody = { ok: true, status: 200, headers: new Headers(), json: () => new Promise(() => undefined) } as Response;
+    const fetcher = vi.fn<FetchLike>()
+      .mockResolvedValueOnce(response({ access_token: 'secret', token_type: 'Bearer', expires_in: 600 }))
+      .mockResolvedValueOnce(response({ account_id: 'a', telegram_user_id: 7, created_at: 'now' }))
+      .mockResolvedValueOnce(stalledBody);
+    const api = new AccountApi({ fetcher });
+    await api.login('init');
+    const pending = expect(api.createRun()).rejects.toMatchObject({ code: 'request_timeout' });
+    await vi.advanceTimersByTimeAsync(30_000);
+    await pending;
+  });
+
+  it('cancels an in-flight request when the account client is torn down', async () => {
+    const fetcher = vi.fn<FetchLike>()
+      .mockResolvedValueOnce(response({ access_token: 'secret', token_type: 'Bearer', expires_in: 600 }))
+      .mockResolvedValueOnce(response({ account_id: 'a', telegram_user_id: 7, created_at: 'now' }))
+      .mockImplementationOnce(() => new Promise<Response>(() => undefined));
+    const api = new AccountApi({ fetcher });
+    await api.login('init');
+    const request = api.createRun();
+    const cancelled = expect(request).rejects.toMatchObject({ code: 'account_session_superseded' });
+    api.cancelPendingRequests();
+    await cancelled;
+    expect(fetcher.mock.calls[2]?.[1]?.signal?.aborted).toBe(true);
+  });
+
   it('loads the authenticated account latest run and maps an empty account to undefined', async () => {
     const latest = { runId: 'run-latest', status: 'completed' };
     const fetcher = vi.fn<FetchLike>()

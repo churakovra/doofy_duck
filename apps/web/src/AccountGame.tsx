@@ -13,6 +13,8 @@ import { useGameAudio } from './useGameAudio';
 import { useGameRun } from './useGameRun';
 import { DEFAULT_EQUIPMENT, type Equipment } from './wardrobe';
 import { loadTelegramWebApp, TelegramWebAppUnavailableError } from './telegram-web-app';
+import { CheckpointBackoff } from './checkpoint-backoff';
+import { finishAccountLogout } from './account-logout';
 
 type Screen = 'signed-out' | 'idle' | 'loading' | 'active' | 'recovering' | 'takeover' | 'locked';
 type CompletionSettlement = { status: 'pending' | 'committed' | 'ineligible' | 'actionable_failure'; reason: string; credited: { FEATHER: string; GAME_STAR: string } };
@@ -54,6 +56,7 @@ function accountErrorCopy(reason: unknown, messages: ReturnType<typeof useLocale
 
 export function AccountGame({ onBack }: { onBack(): void }) {
   const frameRef = useRef<HTMLDivElement>(null);
+  const canvasReady = useCallback(() => undefined, []);
   const [api] = useState(() => new AccountApi());
   const [storage] = useState<TraceStorage>(() => createAccountTraceStorage());
   const { locale, messages, setLocale } = useLocale();
@@ -80,7 +83,7 @@ export function AccountGame({ onBack }: { onBack(): void }) {
   const [equipment, setEquipment] = useState<Equipment>(DEFAULT_EQUIPMENT);
   const writeChainRef = useRef(Promise.resolve());
   const pumpRef = useRef(false);
-  const retryRef = useRef(0);
+  const checkpointBackoffRef = useRef(new CheckpointBackoff());
   const retryTimerRef = useRef<number | undefined>(undefined);
   const releaseLockRef = useRef<(() => void) | undefined>(undefined);
   const restorePromiseRef = useRef<Promise<AccountSummary> | null>(null);
@@ -111,9 +114,10 @@ export function AccountGame({ onBack }: { onBack(): void }) {
   useEffect(() => () => {
     sessionEpochRef.current += 1;
     accountRef.current = null;
+    api.cancelPendingRequests();
     releaseLockRef.current?.();
     if (retryTimerRef.current !== undefined) window.clearTimeout(retryTimerRef.current);
-  }, []);
+  }, [api]);
 
   const refreshAccountProgress = useCallback(async (accountId: string, epoch: number) => {
     try {
@@ -141,7 +145,8 @@ export function AccountGame({ onBack }: { onBack(): void }) {
   }, [persistTrace]);
 
   const pumpCheckpoints = useCallback(async () => {
-    if (pumpRef.current || !traceRef.current) return;
+    const pendingTrace = traceRef.current;
+    if (pumpRef.current || !pendingTrace || !checkpointBackoffRef.current.canAttempt(pendingTrace.runId)) return;
     pumpRef.current = true;
     const epoch = sessionEpochRef.current;
     let submittedTrace: AccountTrace | undefined;
@@ -175,7 +180,7 @@ export function AccountGame({ onBack }: { onBack(): void }) {
           }
           break;
         }
-        retryRef.current = 0;
+        checkpointBackoffRef.current.succeeded();
         setNotice('');
       }
     } catch (reason) {
@@ -227,13 +232,12 @@ export function AccountGame({ onBack }: { onBack(): void }) {
       } else {
         setError('');
         setNotice(messages.accountServiceUnavailable);
-        const delay = Math.max(apiError?.retryAfterMs ?? 0, Math.min(30_000, 1_000 * 2 ** Math.min(retryRef.current, 5))) + Math.floor(Math.random() * 500);
-        retryRef.current += 1;
+        const delay = checkpointBackoffRef.current.defer(apiError?.retryAfterMs);
         if (retryTimerRef.current !== undefined) window.clearTimeout(retryTimerRef.current);
         retryTimerRef.current = window.setTimeout(() => { void pumpCheckpoints(); }, delay);
       }
     } finally {
-      pumpRef.current = false;
+      if (epoch === sessionEpochRef.current) pumpRef.current = false;
     }
   }, [api, messages, persistTrace, refreshAccountProgress, storage]);
 
@@ -259,7 +263,7 @@ export function AccountGame({ onBack }: { onBack(): void }) {
   }, [persistTrace, pumpCheckpoints]);
 
   const reconcile = useCallback(async (next: AccountRunSnapshot, user: AccountSummary, writerClaimed = false, epoch = sessionEpochRef.current) => {
-    if (epoch !== sessionEpochRef.current) return;
+    if (epoch !== sessionEpochRef.current || !checkpointBackoffRef.current.canAttempt(next.runId)) return;
     setScreen('loading');
     setSnapshot(next);
     if (next.status !== 'active') {
@@ -307,22 +311,45 @@ export function AccountGame({ onBack }: { onBack(): void }) {
     try {
       for (const checkpoint of saved.pending) {
         if (checkpoint.sequence <= latest.checkpointSequence) continue;
-        latest = await api.submitCheckpoint(saved.runId, {
-          checkpointSequence: checkpoint.sequence,
-          writerGeneration: saved.writerGeneration,
-          writerToken: saved.writerToken,
-          idempotencyKey: checkpoint.idempotencyKey,
-          ticks: checkpoint.ticks,
-        });
-        if (epoch !== sessionEpochRef.current) return;
+        if (epoch !== sessionEpochRef.current || accountRef.current?.account_id !== user.account_id) return;
+        if (!checkpointBackoffRef.current.canAttempt(saved.runId) || pumpRef.current) {
+          setScreen('recovering');
+          return;
+        }
+        pumpRef.current = true;
+        try {
+          latest = await api.submitCheckpoint(saved.runId, {
+            checkpointSequence: checkpoint.sequence,
+            writerGeneration: saved.writerGeneration,
+            writerToken: saved.writerToken,
+            idempotencyKey: checkpoint.idempotencyKey,
+            ticks: checkpoint.ticks,
+          });
+          if (epoch !== sessionEpochRef.current || accountRef.current?.account_id !== user.account_id) return;
+          checkpointBackoffRef.current.succeeded();
+        } catch (reason) {
+          if (epoch !== sessionEpochRef.current || accountRef.current?.account_id !== user.account_id) return;
+          const apiError = reason instanceof AccountApiError
+            ? reason
+            : reason && typeof reason === 'object' && 'status' in reason && 'code' in reason
+              && typeof reason.status === 'number' && typeof reason.code === 'string'
+              ? reason as AccountApiError
+              : undefined;
+          checkpointBackoffRef.current.defer(apiError?.retryAfterMs);
+          throw reason;
+        } finally {
+          if (epoch === sessionEpochRef.current && accountRef.current?.account_id === user.account_id) pumpRef.current = false;
+        }
+        if (epoch !== sessionEpochRef.current || accountRef.current?.account_id !== user.account_id) return;
         saved = acknowledgeCheckpoint(saved, latest.checkpointSequence, latest.activeTicks);
         traceRef.current = saved; setTrace(saved);
         await storage.save(saved);
+        if (epoch !== sessionEpochRef.current || accountRef.current?.account_id !== user.account_id) return;
       }
       latest = await api.getRun(latest.runId);
-      if (epoch !== sessionEpochRef.current) return;
+      if (epoch !== sessionEpochRef.current || accountRef.current?.account_id !== user.account_id) return;
     } catch {
-      if (epoch !== sessionEpochRef.current) return;
+      if (epoch !== sessionEpochRef.current || accountRef.current?.account_id !== user.account_id) return;
       setSnapshot(latest);
       setScreen('recovering');
       setNotice(messages.accountConnectionRestoring);
@@ -460,14 +487,34 @@ export function AccountGame({ onBack }: { onBack(): void }) {
     const epoch = sessionEpochRef.current;
     let current = true;
     setSettlement('loading');
-    void api.completion(runId, lifeIndex).then((value) => {
-      if (!current || epoch !== sessionEpochRef.current || accountRef.current?.account_id !== accountId || snapshotRef.current?.runId !== runId) return;
-      setSettlement(parseCompletionSettlement(value));
-    }).catch(() => {
-      if (current && epoch === sessionEpochRef.current && accountRef.current?.account_id === accountId && snapshotRef.current?.runId === runId) setSettlement('unavailable');
-    });
-    return () => { current = false; };
-  }, [account?.account_id, api, snapshot?.lifeIndex, snapshot?.runId, snapshot?.status, snapshot?.verificationStatus]);
+    let timer: number | undefined;
+    let inFlight = false;
+    let delay = 2_000;
+    const isCurrent = () => current && epoch === sessionEpochRef.current
+      && accountRef.current?.account_id === accountId && snapshotRef.current?.runId === runId;
+    const refresh = async () => {
+      if (!isCurrent() || inFlight) return;
+      inFlight = true;
+      let retry = false;
+      try {
+        const result = parseCompletionSettlement(await api.completion(runId, lifeIndex));
+        if (!isCurrent()) return;
+        setSettlement(result);
+        retry = result.status === 'pending';
+      } catch {
+        if (isCurrent()) setSettlement('unavailable');
+        retry = true;
+      } finally {
+        inFlight = false;
+        if (retry && isCurrent()) {
+          timer = window.setTimeout(() => { void refresh(); }, delay);
+          delay = Math.min(delay * 2, 30_000);
+        }
+      }
+    };
+    void refresh();
+    return () => { current = false; if (timer !== undefined) window.clearTimeout(timer); };
+  }, [account?.account_id, api, snapshot?.deliveryStatus, snapshot?.lifeIndex, snapshot?.runId, snapshot?.status, snapshot?.verificationStatus]);
 
   const login = async (dev: boolean) => {
     const epoch = ++sessionEpochRef.current;
@@ -652,18 +699,29 @@ export function AccountGame({ onBack }: { onBack(): void }) {
   };
 
   const logout = async () => {
-    sessionEpochRef.current += 1;
+    const accountId = accountRef.current?.account_id;
+    const epoch = ++sessionEpochRef.current;
+    const pendingWrites = writeChainRef.current;
+    const releaseCapturedLock = releaseLockRef.current;
+    releaseLockRef.current = undefined;
     accountRef.current = null;
     setEquipment(DEFAULT_EQUIPMENT);
     setAccount(null);
     if (retryTimerRef.current !== undefined) window.clearTimeout(retryTimerRef.current);
     retryTimerRef.current = undefined;
+    checkpointBackoffRef.current.reset();
     pumpRef.current = false;
-    await writeChainRef.current;
-    if (account) await storage.clearAccount(account.account_id);
-    releaseLockRef.current?.(); releaseLockRef.current = undefined;
-    await api.logout();
     traceRef.current = null; setTrace(null); setSnapshot(null); setBestScore(null); setAccount(null); setScreen('signed-out');
+    setBusy(true);
+    void finishAccountLogout(pendingWrites,
+      () => accountId ? storage.clearAccount(accountId) : Promise.resolve(),
+      () => releaseCapturedLock?.(),
+    ).finally(() => {
+      if (epoch === sessionEpochRef.current) setBusy(false);
+    });
+    void api.logout().catch(() => {
+      if (epoch === sessionEpochRef.current) setError(messages.accountServiceUnavailable);
+    });
   };
 
   const settingsWallet = <div><p>{messages.accountDescription}</p><p>{messages.accountRewardsNotSpendable}</p></div>;
@@ -709,7 +767,7 @@ export function AccountGame({ onBack }: { onBack(): void }) {
 
   return <main className="game-shell" onPointerDown={() => undefined}>
     <div className="game-viewport"><div className="game-frame ready" ref={frameRef}>
-      <div className="stage" aria-label={messages.gameFieldLabel}><GameCanvas getState={() => snapshot?.state ?? EMPTY_STATE} onReady={() => undefined} /></div>
+      <div className="stage" aria-label={messages.gameFieldLabel}><GameCanvas getState={() => snapshot?.state ?? EMPTY_STATE} onReady={canvasReady} /></div>
       <header className="hud account-hud">
         <div className="brand"><span className="brand-mark">{messages.brandMark}</span><span>{messages.brandNameFirstLine}<br />{messages.brandNameSecondLine}</span></div>
         <div className="account-toolbar">

@@ -64,6 +64,7 @@ export class AccountApiError extends Error {
 const authCookieLockName = 'doofy-duck:auth-cookie-mutation';
 const uncertainRefreshKey = 'doofy-duck:auth-refresh-outcome-uncertain';
 const refreshTimeoutMs = 15_000;
+const authorizedRequestTimeoutMs = 30_000;
 const localRefreshQueues = new Map<string, Promise<void>>();
 
 async function withAuthCookieLock<T>(operation: () => Promise<T>, requireBrowserLock = false): Promise<T> {
@@ -124,6 +125,7 @@ export class AccountApi {
   #accessToken: string | undefined;
   #refreshFlight: Promise<void> | undefined;
   #sessionGeneration = 0;
+  #requests = new Set<AbortController>();
 
   constructor(options: AccountApiOptions = {}) {
     this.baseUrl = (options.baseUrl ?? import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '');
@@ -282,7 +284,7 @@ export class AccountApi {
     await withAuthCookieLock(async () => {
       if (generation !== this.#sessionGeneration) return;
       const csrf = csrfCookie();
-      const response = await this.fetcher(this.url('/api/v1/auth/logout'), {
+      const response = await this.fetchWithDeadline(this.url('/api/v1/auth/logout'), {
         method: 'POST',
         credentials: 'include',
         headers: {
@@ -294,20 +296,48 @@ export class AccountApi {
     });
   }
 
+  cancelPendingRequests(): void {
+    for (const controller of this.#requests) controller.abort();
+    this.#requests.clear();
+  }
+
   async authorized(path: string, init: RequestInit = {}): Promise<unknown> {
     const generation = this.#sessionGeneration;
     if (!this.#accessToken) throw new AccountApiError(401, 'account_session_required');
-    let response = await this.fetchAuthorized(path, init, generation);
-    this.assertSessionGeneration(generation);
-    if (response.status === 401) {
-      await this.refreshToken(generation);
+    const controller = new AbortController();
+    this.#requests.add(controller);
+    let timeout: number | undefined;
+    let timedOut = false;
+    const deadline = new Promise<never>((_resolve, reject) => {
+      timeout = window.setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+        reject(new AccountApiError(0, 'request_timeout'));
+      }, authorizedRequestTimeoutMs);
+    });
+    const cancelled = new Promise<never>((_resolve, reject) => {
+      controller.signal.addEventListener('abort', () => {
+        reject(new AccountApiError(0, timedOut ? 'request_timeout' : 'account_session_superseded'));
+      }, { once: true });
+    });
+    const operation = async () => {
+      let response = await this.fetchAuthorized(path, { ...init, signal: controller.signal }, generation);
       this.assertSessionGeneration(generation);
-      response = await this.fetchAuthorized(path, init, generation);
+      if (response.status === 401) {
+        await this.refreshToken(generation);
+        this.assertSessionGeneration(generation);
+        response = await this.fetchAuthorized(path, { ...init, signal: controller.signal }, generation);
+      }
       this.assertSessionGeneration(generation);
+      const body = await this.readResponse(response);
+      this.assertSessionGeneration(generation);
+      return body;
+    };
+    try { return await Promise.race([operation(), deadline, cancelled]); }
+    finally {
+      if (timeout !== undefined) window.clearTimeout(timeout);
+      this.#requests.delete(controller);
     }
-    const body = await this.readResponse(response);
-    this.assertSessionGeneration(generation);
-    return body;
   }
 
   private async fetchAuthorized(path: string, init: RequestInit, generation: number): Promise<Response> {
@@ -318,6 +348,20 @@ export class AccountApi {
     headers.set('Authorization', `Bearer ${token}`);
     if (init.body !== undefined && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
     return this.fetcher(this.url(path), { ...init, headers, credentials: 'include' });
+  }
+
+  private fetchWithDeadline(input: RequestInfo | URL, init: RequestInit): Promise<Response> {
+    const controller = new AbortController();
+    let timeout: number | undefined;
+    const deadline = new Promise<never>((_resolve, reject) => {
+      timeout = window.setTimeout(() => {
+        controller.abort();
+        reject(new AccountApiError(0, 'request_timeout'));
+      }, authorizedRequestTimeoutMs);
+    });
+    return Promise.race([
+      this.fetcher(input, { ...init, signal: controller.signal }), deadline,
+    ]).finally(() => { if (timeout !== undefined) window.clearTimeout(timeout); });
   }
 
   private async refreshToken(generation: number): Promise<void> {
@@ -383,6 +427,7 @@ export class AccountApi {
 
   private beginSessionChange(): number {
     this.#sessionGeneration += 1;
+    this.cancelPendingRequests();
     this.#accessToken = undefined;
     this.#refreshFlight = undefined;
     return this.#sessionGeneration;
