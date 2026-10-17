@@ -1,0 +1,33 @@
+services:
+  platform:
+    environment:
+      DD_ENV: production
+      DEV_AUTH_ENABLED: "false"
+      DEV_AUTH_USER_ID: "0"
+
+  core:
+    environment:
+      DD_ENV: production
+
+  gateway-tls:
+    profiles: [production]
+    image: caddy:2.10.2-alpine
+    environment:
+      PUBLIC_DOMAIN: ${PUBLIC_DOMAIN:?set PUBLIC_DOMAIN to the hosted domain}
+    volumes:
+      - ./Caddyfile.production:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on: [web, platform, core]
+    networks: [backend, egress]
+
+networks:
+  egress:
+    internal: false
+
+volumes:
+  caddy_data:
+  caddy_config:

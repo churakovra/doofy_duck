@@ -1,0 +1,26 @@
+:80 {
+    @internal path /internal/*
+    respond @internal 404
+
+    route {
+        @coreRuns path /api/v1/runs /api/v1/runs/*
+        handle @coreRuns {
+            reverse_proxy core:8080
+        }
+        handle /api/* {
+            reverse_proxy platform:8080
+        }
+        handle /.well-known/jwks.json {
+            reverse_proxy platform:8080
+        }
+        handle /healthz {
+            reverse_proxy platform:8080
+        }
+        handle /readyz {
+            reverse_proxy platform:8080
+        }
+        handle {
+            reverse_proxy web:80
+        }
+    }
+}

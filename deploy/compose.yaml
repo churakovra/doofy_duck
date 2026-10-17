@@ -1,0 +1,115 @@
+services:
+  postgres:
+    image: postgres:18.0
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:?run generate-dev-keys.py first}
+      POSTGRES_DB: postgres
+      PLATFORM_DB_PASSWORD: ${PLATFORM_DB_PASSWORD:?run generate-dev-keys.py first}
+      ECONOMY_DB_PASSWORD: ${ECONOMY_DB_PASSWORD:?run generate-dev-keys.py first}
+      CORE_DB_PASSWORD: ${CORE_DB_PASSWORD:?run generate-dev-keys.py first}
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+      - ./scripts/init-databases.sh:/docker-entrypoint-initdb.d/01-init-databases.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [backend, host-access]
+
+  platform:
+    build:
+      context: ../services/platform
+      dockerfile: Dockerfile
+    environment:
+      DD_ENV: development
+      DEV_AUTH_ENABLED: "true"
+      DEV_AUTH_USER_ID: "100000001"
+      PLATFORM_DATABASE_URL: postgresql+psycopg://platform:${PLATFORM_DB_PASSWORD}@postgres:5432/platform
+      ECONOMY_DATABASE_URL: postgresql+psycopg://economy:${ECONOMY_DB_PASSWORD}@postgres:5432/economy
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?set in generated local env}
+      ACCESS_TOKEN_PRIVATE_KEY_B64: ${ACCESS_TOKEN_PRIVATE_KEY_B64:?set in generated local env}
+      ACCESS_TOKEN_KEY_ID: ${ACCESS_TOKEN_KEY_ID:?set in generated local env}
+      ACCESS_TOKEN_PUBLIC_KEYS_JSON: ${ACCESS_TOKEN_PUBLIC_KEYS_JSON:?set in generated local env}
+      CORE_TO_PLATFORM_TOKEN: ${CORE_TO_PLATFORM_TOKEN:?set in generated local env}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    expose:
+      - "8080"
+    command:
+      - /bin/sh
+      - -ec
+      - >-
+        /opt/venv/bin/alembic -c alembic-platform.ini upgrade head;
+        /opt/venv/bin/alembic -c alembic-economy.ini upgrade head;
+        exec /opt/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8080 --no-access-log
+    networks: [backend]
+
+
+  core-migrate:
+    build:
+      context: ..
+      dockerfile: services/core/backend/Dockerfile
+    environment:
+      CORE_DATABASE_URL: postgres://core:${CORE_DB_PASSWORD}@postgres:5432/core?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: ["/core-migrate"]
+    networks: [backend]
+
+  core:
+    build:
+      context: ..
+      dockerfile: services/core/backend/Dockerfile
+    environment:
+      DD_ENV: development
+      CORE_DATABASE_URL: postgres://core:${CORE_DB_PASSWORD}@postgres:5432/core?sslmode=disable
+      CORE_PLATFORM_COMPLETION_URL: http://platform:8080/internal/v1/run-completions
+      CORE_TO_PLATFORM_TOKEN: ${CORE_TO_PLATFORM_TOKEN:?set in generated local env}
+      CORE_OPERATOR_TOKEN: ${CORE_OPERATOR_TOKEN:?set in generated local env}
+      ACCESS_TOKEN_ISSUER: doofy-platform
+      ACCESS_TOKEN_AUDIENCE: doofy-core
+      ACCESS_TOKEN_PUBLIC_KEYS_JSON: ${ACCESS_TOKEN_PUBLIC_KEYS_JSON:?set in generated local env}
+      CORE_AUTO_MIGRATE: "false"
+    depends_on:
+      core-migrate:
+        condition: service_completed_successfully
+      platform:
+        condition: service_started
+    expose:
+      - "8080"
+    networks: [backend]
+
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/web.Dockerfile
+    expose:
+      - "80"
+    networks: [backend]
+
+  gateway:
+    profiles: [local]
+    image: caddy:2.10.2-alpine
+    volumes:
+      - ./Caddyfile.local:/etc/caddy/Caddyfile:ro
+    ports:
+      - "127.0.0.1:8080:80"
+    depends_on: [web, platform, core]
+    networks: [backend, edge]
+
+networks:
+  backend:
+    internal: true
+  edge:
+    internal: false
+  host-access:
+    internal: false
+
+volumes:
+  postgres_data:
