@@ -504,14 +504,14 @@ func TestPostgresCompletionOutboxRetriesAndOutageGrace(t *testing.T) {
 
 func mustJSON(value any) string { encoded, _ := json.Marshal(value); return string(encoded) }
 
-func TestPostgresInflightLimitRejectsWithoutMutation(t *testing.T) {
+func TestPostgresInflightQueueWaitsAndRejectsOverflowWithoutMutation(t *testing.T) {
 	pool := testPool(t)
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
 	}
 	token := integrationToken(t, priv)
-	server := &Server{DB: pool, Auth: JWTVerifier{Keys: map[string]ed25519.PublicKey{"k": pub}}, OutboxConfigured: true, MaxInflight: 1}
+	server := &Server{DB: pool, Auth: JWTVerifier{Keys: map[string]ed25519.PublicKey{"k": pub}}, OutboxConfigured: true, MaxInflight: 1, MaxQueued: 1}
 	app := httptest.NewServer(server.Handler())
 	defer app.Close()
 	created := request(t, app.Client(), http.MethodPost, app.URL+"/api/v1/runs", token, nil)
@@ -541,6 +541,18 @@ func TestPostgresInflightLimitRejectsWithoutMutation(t *testing.T) {
 		_ = lock.Rollback(context.Background())
 		t.Fatal("checkpoint did not acquire the single request slot")
 	}
+	queuedDone := make(chan *http.Response, 1)
+	go func() {
+		queuedDone <- request(t, app.Client(), http.MethodGet, app.URL+"/api/v1/runs/current", token, nil)
+	}()
+	until = time.Now().Add(2 * time.Second)
+	for len(server.QueuedRequests) != 1 && time.Now().Before(until) {
+		time.Sleep(time.Millisecond)
+	}
+	if len(server.QueuedRequests) != 1 {
+		_ = lock.Rollback(context.Background())
+		t.Fatal("second request did not enter the bounded admission queue")
+	}
 	rejected := request(t, app.Client(), http.MethodGet, app.URL+"/api/v1/runs/current", token, nil)
 	if rejected.StatusCode != 429 || rejected.Header.Get("Retry-After") != "1" {
 		t.Fatalf("inflight rejection status=%d retry=%q", rejected.StatusCode, rejected.Header.Get("Retry-After"))
@@ -558,6 +570,11 @@ func TestPostgresInflightLimitRejectsWithoutMutation(t *testing.T) {
 		t.Fatalf("checkpoint after slot release status=%d", accepted.StatusCode)
 	}
 	accepted.Body.Close()
+	queued := <-queuedDone
+	if queued.StatusCode != 200 {
+		t.Fatalf("queued request after slot release status=%d", queued.StatusCode)
+	}
+	queued.Body.Close()
 	if err = pool.QueryRow(context.Background(), `SELECT checkpoint_sequence FROM core_runs WHERE id=$1`, run.RunID).Scan(&sequence); err != nil || sequence != 0 {
 		t.Fatalf("released checkpoint missing: sequence=%d err=%v", sequence, err)
 	}

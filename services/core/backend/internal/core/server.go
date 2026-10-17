@@ -30,7 +30,10 @@ type Server struct {
 	OperatorToken    string
 	OutboxConfigured bool
 	MaxInflight      int
+	MaxQueued        int
+	QueueWait        time.Duration
 	RequestSlots     chan struct{}
+	QueuedRequests   chan struct{}
 	Now              func() time.Time
 }
 
@@ -72,7 +75,14 @@ func (s *Server) Handler() http.Handler {
 	if s.MaxInflight < 1 {
 		s.MaxInflight = 256
 	}
+	if s.MaxQueued < 1 {
+		s.MaxQueued = 1024
+	}
+	if s.QueueWait <= 0 {
+		s.QueueWait = 5 * time.Second
+	}
 	s.RequestSlots = make(chan struct{}, s.MaxInflight)
+	s.QueuedRequests = make(chan struct{}, s.MaxQueued)
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, map[string]string{"status": "ok"}) })
 	mux.HandleFunc("GET /readyz", s.ready)
@@ -179,19 +189,45 @@ func (s *Server) user(next http.Handler) http.Handler {
 			writeError(w, 401, "unauthorized", "invalid bearer token")
 			return
 		}
+		queued := false
 		select {
 		case s.RequestSlots <- struct{}{}:
-			defer func() { <-s.RequestSlots }()
 		default:
-			w.Header().Set("Retry-After", "1")
-			writeError(w, 429, "too_many_requests", "Core is at capacity; retry shortly")
-			return
+			select {
+			case s.QueuedRequests <- struct{}{}:
+				queued = true
+			default:
+				rejectAtCapacity(w)
+				return
+			}
+			wait := time.NewTimer(s.QueueWait)
+			defer wait.Stop()
+			select {
+			case s.RequestSlots <- struct{}{}:
+			case <-wait.C:
+				<-s.QueuedRequests
+				rejectAtCapacity(w)
+				return
+			case <-r.Context().Done():
+				<-s.QueuedRequests
+				return
+			}
 		}
+		if queued {
+			<-s.QueuedRequests
+		}
+		defer func() { <-s.RequestSlots }()
 		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 		defer cancel()
 		next.ServeHTTP(w, r.WithContext(context.WithValue(ctx, claimsKey{}, claims)))
 	})
 }
+
+func rejectAtCapacity(w http.ResponseWriter) {
+	w.Header().Set("Retry-After", "1")
+	writeError(w, http.StatusTooManyRequests, "too_many_requests", "Core is at capacity; retry shortly")
+}
+
 func (s *Server) operator(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		provided := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")

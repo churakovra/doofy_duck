@@ -121,7 +121,26 @@ starting at 940000000, and flags `-duration 12m -clients 1000
 continuing locally and records an authenticated operator outage; it is not a
 database failover or hosted HA test. Existing local services were stopped when
 launched and restarted without rebuilding; startup is excluded from measurement.
-Results are pending. Logs remain in Docker; collect once complete with:
+The first outage run failed (exit 1). All 1,000 accounts started after 51.7 seconds
+of startup retries while local services recovered. It accepted 271,116 checkpoints,
+but ended with 1,000 unacknowledged checkpoints and 1,000 fatal client errors.
+There were 40,671 rate-limited attempts (12.36%); total checkpoint failure fraction
+was 16.37%, above the 1% gate. p95 was 946 ms and the reported maximum individual
+drain was 167,798 ms. Container inspection subsequently showed the gateway, Core, Python and PostgreSQL
+all stopped at 14:19:46–48 UTC, matching the plateau in accepted submissions.
+The run was interrupted by a stack shutdown; its final unacknowledged/fatal counts
+cannot diagnose recovery correctness. Rate limiting before shutdown remains real
+reconnect-backpressure evidence. Diagnose bounded admission behavior and rerun with
+the services available for the complete measurement. The earlier sustained
+steady-load pass remains separate evidence.
+
+A subsequent targeted fix preserves the 256 active handlers while allowing up to
+1,024 authenticated requests to wait for five seconds. Overflow/expiry still
+returns 429 with Retry-After, and cancellation releases waiting capacity.
+Expected-red regression, focused unit/race/vet, real-PostgreSQL tests and independent
+review passed. This is a tested mitigation, not a passed recovery load measurement.
+
+Logs remain in Docker; retrieve the interrupted run summary with:
 
 ```sh
 docker logs --tail 8 doofy-load-outage-final-1000

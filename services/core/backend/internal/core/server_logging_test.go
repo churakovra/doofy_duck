@@ -75,9 +75,11 @@ func TestRequestLogsCorrelateCapacityRejection(t *testing.T) {
 		Logger:      slog.New(slog.NewJSONHandler(&logs, nil)),
 		Auth:        JWTVerifier{Keys: map[string]ed25519.PublicKey{"test": publicKey}},
 		MaxInflight: 1,
+		MaxQueued:   1,
 	}
 	handler := server.Handler()
 	server.RequestSlots <- struct{}{}
+	server.QueuedRequests <- struct{}{}
 	claims := map[string]any{
 		"iss": "doofy-platform", "aud": "doofy-core",
 		"sub": "00000000-0000-4000-8000-000000000001",
