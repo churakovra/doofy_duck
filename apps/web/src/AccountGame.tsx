@@ -10,15 +10,26 @@ import { formatCountUnit, formatNumber, useLocale } from './locale';
 import { useGameAudio } from './useGameAudio';
 import { useGameRun } from './useGameRun';
 import { createWardrobeSession, readBrowserWardrobeStorage, resolveEquipmentAppearance, resolveEquipmentAssets, type Equipment } from './wardrobe';
+import { loadTelegramWebApp, TelegramWebAppUnavailableError } from './telegram-web-app';
 
 type Screen = 'signed-out' | 'idle' | 'loading' | 'active' | 'recovering' | 'takeover' | 'locked';
 const ACTIVE_TICK_LIMIT = 216_000;
 
-function telegramInitData(): string {
-  return (window as Window & { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp?.initData ?? '';
+async function telegramWebAppReady() {
+  const webApp = await loadTelegramWebApp();
+  webApp.ready?.();
+  return webApp;
+}
+
+async function loginWithTelegram(api: AccountApi): Promise<AccountSummary> {
+  const webApp = await telegramWebAppReady();
+  const initData = webApp.initData?.trim() ?? '';
+  if (!initData) throw new AccountApiError(400, 'telegram_init_data_missing');
+  return api.login(initData);
 }
 
 function accountErrorCopy(reason: unknown, messages: ReturnType<typeof useLocale>['messages']): string {
+  if (reason instanceof TelegramWebAppUnavailableError) return messages.accountActionFailed;
   if (!(reason instanceof AccountApiError)) return messages.accountServiceUnavailable;
   if (reason.code === 'telegram_init_data_missing') return messages.accountAuthOutsideTelegram;
   if (reason.code === 'account_session_expired' || reason.code === 'account_session_required' || reason.status === 401) return messages.accountSessionExpired;
@@ -68,9 +79,6 @@ export function AccountGame({ onBack }: { onBack(): void }) {
   const appearance = useMemo(() => resolveEquipmentAppearance(equipment), [equipment]);
   const imageAssets = useMemo(() => resolveEquipmentAssets(equipment), [equipment]);
 
-  useEffect(() => {
-    (window as Window & { Telegram?: { WebApp?: { ready?: () => void } } }).Telegram?.WebApp?.ready?.();
-  }, []);
 
   const claimWriter = useCallback(async (accountId: string, runId: string): Promise<boolean> => {
     releaseLockRef.current?.();
@@ -353,19 +361,32 @@ export function AccountGame({ onBack }: { onBack(): void }) {
   loadAccountRef.current = loadAccountState;
 
   useEffect(() => {
-    restorePromiseRef.current ??= api.restore();
     let cancelled = false;
+    const bootstrapEpoch = sessionEpochRef.current;
+    const isCurrentBootstrap = () => !cancelled && bootstrapEpoch === sessionEpochRef.current;
+    const telegramReady = telegramWebAppReady();
+    void telegramReady.catch(() => undefined);
+    restorePromiseRef.current ??= api.restore();
     void restorePromiseRef.current.then(async (user) => {
-      if (!cancelled) await loadAccountRef.current(user);
+      if (isCurrentBootstrap()) await loadAccountRef.current(user);
     }).catch(() => {
-      const initData = telegramInitData();
-      if (cancelled) return;
-      if (!initData) { setScreen('signed-out'); return; }
-      telegramLoginPromiseRef.current ??= api.login(initData);
-      void telegramLoginPromiseRef.current.then((user) => {
-        if (!cancelled) return loadAccountRef.current(user);
+      if (!isCurrentBootstrap()) return;
+      void telegramReady.then((webApp) => {
+        if (!isCurrentBootstrap()) return;
+        const initData = webApp.initData?.trim() ?? '';
+        if (!initData) {
+          setError(messagesRef.current.accountAuthOutsideTelegram);
+          setScreen('signed-out');
+          return;
+        }
+        telegramLoginPromiseRef.current ??= api.login(initData);
+        void telegramLoginPromiseRef.current.then((user) => {
+          if (isCurrentBootstrap()) return loadAccountRef.current(user);
+        }).catch((reason: unknown) => {
+          if (isCurrentBootstrap()) { setError(accountErrorCopy(reason, messagesRef.current)); setScreen('signed-out'); }
+        });
       }).catch((reason: unknown) => {
-        if (!cancelled) { setError(accountErrorCopy(reason, messagesRef.current)); setScreen('signed-out'); }
+        if (isCurrentBootstrap()) { setError(accountErrorCopy(reason, messagesRef.current)); setScreen('signed-out'); }
       });
     });
     return () => { cancelled = true; };
@@ -403,12 +424,10 @@ export function AccountGame({ onBack }: { onBack(): void }) {
   }, [account?.account_id, api, refreshAccountProgress, snapshot?.runId, snapshot?.status, storage]);
 
   const login = async (dev: boolean) => {
-    const epoch = sessionEpochRef.current;
+    const epoch = ++sessionEpochRef.current;
     setBusy(true); setError('');
     try {
-      const user = dev
-        ? await api.loginDev(Number(devUserId))
-        : await api.login(telegramInitData());
+      const user = dev ? await api.loginDev(Number(devUserId)) : await loginWithTelegram(api);
       if (epoch !== sessionEpochRef.current) return;
       await loadAccountState(user);
       if (epoch !== sessionEpochRef.current) return;
@@ -421,13 +440,20 @@ export function AccountGame({ onBack }: { onBack(): void }) {
   };
 
   const reauthenticate = async () => {
-    const epoch = sessionEpochRef.current;
+    const epoch = ++sessionEpochRef.current;
     setBusy(true);
     setError('');
     try {
-      const user = telegramInitData()
-        ? await api.login(telegramInitData())
-        : await api.loginDev(Number(devUserId));
+      let user: AccountSummary;
+      if (import.meta.env.DEV) {
+        try {
+          const webApp = await telegramWebAppReady();
+          user = webApp.initData?.trim() ? await api.login(webApp.initData) : await api.loginDev(Number(devUserId));
+        } catch (reason) {
+          if (!(reason instanceof TelegramWebAppUnavailableError)) throw reason;
+          user = await api.loginDev(Number(devUserId));
+        }
+      } else user = await loginWithTelegram(api);
       if (epoch !== sessionEpochRef.current) return;
       await loadAccountState(user);
       if (epoch !== sessionEpochRef.current) return;
@@ -646,7 +672,7 @@ export function AccountGame({ onBack }: { onBack(): void }) {
           {import.meta.env.DEV && <>
             <label className="account-dev-label">{messages.accountUserIdLabel}<input inputMode="numeric" value={devUserId} onChange={(event) => setDevUserId(event.target.value)} /></label>
             <GameButton variant="primary" onClick={() => void login(true)} disabled={busy || !devUserId}>{messages.accountDevLogin}</GameButton>
-            <GameButton variant="control" className="account-mode-button" onClick={() => void login(false)} disabled={busy || !telegramInitData()}>{messages.accountLogin}</GameButton>
+            <GameButton variant="control" className="account-mode-button" onClick={() => void login(false)} disabled={busy}>{messages.accountLogin}</GameButton>
           </>}
         </>}
         {screen === 'loading' && <p role="status">{messages.accountLoading}</p>}
