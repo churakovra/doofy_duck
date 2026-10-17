@@ -15,6 +15,8 @@ Follow the [development workflow](../AGENTS.md#development-workflow) and
 | [Foundation](FOUNDATION.md) | Extension boundaries for rule configuration, cosmetics, events, and future statistics |
 | [Development plan](DEVELOPMENT_PLAN.md) | MVP finish line, prioritized feature backlog, next batch, dependencies, and release acceptance gates |
 | [MVP specifications](MVP_SPECIFICATIONS.md) | Proposed difficulty, run/continue/settlement and economy rules, acceptance scenarios, and owned product/release/infrastructure decision gates |
+| [Backend foundation](BACKEND_FOUNDATION.md) | Approved ACCOUNT/RUN scope, implementation evidence and outstanding hosted acceptance |
+| [Backend operations](BACKEND_OPERATIONS.md) | Hosted acceptance, outage response, durable delivery, restore and rollback runbook |
 | [Challenge verification](CHALLENGE_RESULTS.md) | Feature 1 implementation, executed checks dated 2026-10-17, bounded physics/replay evidence and open playtest/device acceptance |
 | [Arcade simulation](ARCADE_SIMULATION.md) | Current mechanics, identities, bounds, and parity limits |
 | [Simulation contract](../contracts/simulation/README.md) | Shared fixtures and deliberate regeneration workflow |
@@ -37,7 +39,7 @@ behavior, named-device performance, and owner gameplay assessment remain open.
 | --- | --- |
 | [ADR-001](ADR-001-MICROSERVICES.md) | Selected future Python/Go service ownership and consistency boundaries |
 | [ADR-002](ADR-002-CLIENT-AND-REWARDS.md) | HTTP verification direction, currency boundaries, and later gift workflow |
-| [ADR-003](ADR-003-CURRENCY-AND-BROKER.md) | Current currency names and pending RabbitMQ recommendation |
+| [ADR-003](ADR-003-CURRENCY-AND-BROKER.md) | Current currency names, approved HTTP delivery and deferred RabbitMQ |
 | [Telegram audio research](TELEGRAM_AUDIO_RESEARCH.md) | Browser-policy basis and real-device validation limits |
 
 Supporting source ledgers: [microservices](microservices-sources.json),

@@ -116,18 +116,15 @@ application, browser and real-device checks were not run in this step.
 
 ## Immediate next batch
 
-The [specification package](MVP_SPECIFICATIONS.md) now proposes difficulty and
-run/continue/settlement behavior, with acceptance examples and a decision register.
-It separates first death from finalization and defines incremental earnings so
-continuing cannot credit the same pickup twice. These are future requirements:
-today's client still settles at `RunEnded` and the simulation still has terminal
-`DEAD` state with no authorized resume transition.
+The owner approved two backend applications, managed PostgreSQL, HTTP outbox/inbox
+delivery, one unresolved flight per account and offline completion/recovery. See
+[backend foundation](BACKEND_FOUNDATION.md) for the full approved bounds, load target
+and implementation evidence. Currency issuance remains disabled until earning rules
+are approved. Checkpoints save evidence; credit is only eligible after a verified
+death or cap completion. The next account-backed flight waits for result verification.
 
-GAME is implemented locally; collect owner playtest feedback while preparing
-ACCOUNT contracts. The next engineering feature is ACCOUNT, followed by RUN:
-a real Telegram account can start a server-issued run and recover its verified result after a
-reload. Add WALLET only after issuance policy and durable delivery are specified.
-This creates an end-to-end foundation for SHOP, CONTINUE and PAY.
+GAME and ART are implemented locally. ACCOUNT and RUN are the authorized next
+engineering work, with WALLET activation, SHOP, CONTINUE and PAY remaining later gates.
 
 The owner needs to decide challenge targets and recovery behavior, continue price
 and safe-resume behavior, launch products/prices and earning rules, visual
@@ -198,7 +195,7 @@ Produce focused specifications for:
 - Release: launch countries, age-eligibility approach, final art direction,
   operating budget, and pilot device/performance acceptance criteria.
 - Infrastructure: choose the proposed frameworks, database tooling, and broker.
-  RabbitMQ is currently a recommendation, not a completed decision.
+  Authenticated HTTP outbox/inbox delivery is approved; RabbitMQ is deferred.
 
 Acceptance: decisions have owners and explicit acceptance rules; unresolved
 items stay visible and block only their dependent work. Translations, gameplay
@@ -252,11 +249,10 @@ usable in both languages. Account ownership/purchases arrive in milestone 6.
 
 ### 4. Establish Telegram identity and service contracts
 
-Implement the selected Platform (Python), Core (Go), and Economy (Python)
-boundaries behind one public origin. Start with an authenticated end-to-end
+Implement the approved Python application (Platform and Economy modules) and Go Core
+behind one public origin. Start with an authenticated end-to-end
 service skeleton, versioned HTTP/event contracts, service-owned database
-migrations/credentials, and reproducible local startup. Add the chosen broker
-when implementing durable delivery, with transactional outbox/inbox handling.
+migrations/credentials, and reproducible local startup. Use authenticated HTTP delivery with transactional outbox/inbox handling; defer RabbitMQ.
 
 Platform validates Telegram initialization and issues application credentials.
 Core/Economy independently enforce token validity and resource ownership.
@@ -275,8 +271,8 @@ in Go → persist verified facts → credit Economy under a pinned reward policy
 show committed balances and best score.
 
 Specify bounded input buffers, retry/sequence rules, reconnect and expiry.
-Persist evidence/outbox atomically in Core; deduplicate event and business
-identities in Economy. Show pending credit during outages. Keep local practice
+Persist completion evidence/outbox atomically in Core; deduplicate event and business
+identities in the Python Economy inbox. Checkpoints do not issue currency during flight. Show pending credit during outages. Keep local practice
 progress separate; never import client balances as authoritative funds.
 Design first-death/continue/final-completion states now, even if paid continue
 activation waits for milestone 7.

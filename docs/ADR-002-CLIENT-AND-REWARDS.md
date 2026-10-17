@@ -34,7 +34,7 @@ external Telegram Stars payment asset. No internal balance implies Telegram wall
 credit, a 1:1 conversion, or a current gift entitlement.
 
 Economy owns issuance, prices, ledger, inventory, payment business state, and later
-reward eligibility/funding. Core emits verified gameplay facts; Platform owns
+reward eligibility/funding. Core emits verified death/cap completion facts; checkpoints never credit currency during flight. Account issuance stays disabled until earning rules are approved. Platform owns
 Telegram credentials and provider transport. Detailed paid products and rates
 still require specification. See [service ownership](ADR-001-MICROSERVICES.md).
 

@@ -91,152 +91,71 @@ playtest. GAME is implemented locally with draft configuration; see
 [executed verification and limits](CHALLENGE_RESULTS.md). Public release remains
 gated on accepted playtests.
 
-## 2. Run lifecycle and durable checkpoints
+## 2. Approved ACCOUNT/RUN lifecycle
 
-### Proposed states
+The October 17 owner decisions replace the earlier per-checkpoint settlement and
+independent concurrent-run proposals. See [backend foundation](BACKEND_FOUNDATION.md)
+for implementation evidence and acceptance targets.
 
-A run has a stable `run_id`, account owner, immutable rules/generator/reward policy versions, seed, and monotonically
-increasing checkpoint sequence. Define `life_index` as 0 before the optional continue and 1 after the single authorized
-continue. A checkpoint-sized settlement segment is one accepted checkpoint, not one playable life. `segment_sequence` is
-assigned once per accepted checkpoint, equals that checkpoint’s sequence, and continues monotonically across both lives; it
-never resets at continue.
+### Issuance, checkpoints and ownership
 
-| State | Meaning | Allowed next state |
-| --- | --- | --- |
-| `ACTIVE` | Inputs may be accepted and replayed | `ACTIVE`, `DEAD`, `EXPIRED`, `ABANDONED` |
-| `DEAD` | Death checkpoint is verified; life 0 may offer its unused continue, life 1 is terminal | `RESUME_PENDING`, `FINALIZING` |
-| `RESUME_PENDING` | One continue debit/resume authorization is being reconciled | `ACTIVE`, `DEAD`, `FINALIZING` only after authoritative resume impossibility and compensation |
-| `FINALIZING` | No more play is accepted; verified segments are being closed | `FINALIZED` |
-| `FINALIZED` | Terminal result recorded; no continue or new segment | none |
-| `EXPIRED` | Active lease elapsed before a verified death | `FINALIZING` |
-| `ABANDONED` | Player explicitly abandons this run | `FINALIZING` |
+Core issues account-owned run IDs, seeds and immutable simulation/configuration
+identities. Permit one unresolved run per account. An explicit device takeover
+rotates a writer generation and opaque writer credential; stale writes and stale
+abandonment requests fail. Recovery reads do not grant writer ownership.
 
-`EXPIRED` and `ABANDONED` enter the same settlement finalization path and do not erase verified checkpoint rewards. A process
-restart or disconnect alone is not abandonment. `DEAD -> FINALIZING` is allowed only when no continue claim is outstanding;
-while a committed claim is unresolved, all finalization mutations are fenced. Death in life 1 has no continue offer and proceeds
-to finalization.
+Record exact active simulation ticks, including ticks with no FLAP. Submit ordered
+batches of 1–120 ticks with a stable sequence/idempotency key. Replay from the last
+accepted state; identical retries return the original result, changed duplicates
+conflict, gaps return the expected sequence. Client positions, scores and balances
+are not authority. Save state/checkpoint evidence atomically before acknowledgment.
 
-### Checkpoint and reconnect proposal
+### Outages, recovery and limits
 
-Core issues the run descriptor and a short-lived lease. Client submits bounded, ordered input batches with `(run_id, sequence,
-start_tick, end_tick, inputs)` and an idempotency key. The trace must preserve every active simulation tick, including ticks
-with no flap, and a defined mapping from accepted browser frame clock/input timestamps to authoritative 60 Hz ticks. Current
-`InputFrame.sequence` counts FLAP inputs only and current per-step `inputHistory` is empty; neither is a checkpoint replay
-contract. Add a versioned trace schema and client recorder as part of RUN before relying on replay. Core accepts the next
-sequence only after replay from the last accepted authoritative state. Exact duplicate sequence plus identical payload returns
-its recorded result; same sequence with different payload is a conflict. Gaps/out-of-order batches are rejected with the
-expected sequence and last committed checkpoint. Client cannot submit score, totals, rewards, phase, or position as authority.
+A new account-backed flight requires successful server issuance. Known unavailability
+blocks starts with a bilingual error and Retry. Existing flights continue locally
+through network/server failures and can finish. Persist the bounded unsent trace in
+IndexedDB per account/run; storage failure permits play with a warning that close or
+reload may lose unsent progress. Never fast-forward simulation while paused.
 
-Draft engineering bound: at most 120 active ticks per checkpoint, with at most one in-flight checkpoint per run; requests have
-explicit server deadlines and maximum body size. These values are implementation defaults for load and retry control, not
-gameplay or provider guarantees. A client may retry a timed-out checkpoint with the same key/payload. On reconnect, it fetches
-server status and resumes from the last accepted checkpoint; unacknowledged inputs may be replayed only if their sequence is
-still expected. Never fast-forward simulation time while disconnected.
+Cap each run at 216,000 active ticks (one hour); pauses consume no ticks. Cap
+completion is distinct from collision death. The normal submission grace is one hour
+without accepted server contact. A persisted operator/server-recorded outage that
+overlaps the grace extends eligibility through one hour after recovery; clients
+cannot claim their own extension.
 
-A run lease expiry is evaluated against server time when a mutation is serialized. Draft engineering defaults: a 30-second
-checkpoint request deadline, a 10-minute reconnect grace after the last accepted checkpoint, and a 24-hour absolute run
-lifetime. These are proposed bounded-service defaults, not provider limits or approved product timing. Expiry prevents
-additional play; it does not void prior accepted facts. Define lease duration, renewal policy, and the exact server
-clock/deadline semantics before RUN deployment. Browser visibility pause is local UX; server checkpoints remain the authority.
+On reload, reconcile accepted state and retained inputs before resuming. Other
+devices recover only accepted server state; takeover explicitly warns that unsent
+inputs on the previous device cannot be recovered remotely. Allow confirmed explicit
+abandonment of an unfinished run, discarding unsubmitted progress.
 
-### Death, continue, and finalization
+### Verification and future settlement
 
-On each verified death, Core commits the final death checkpoint, its checkpoint-sized settlement fact, and state `DEAD`
-atomically. Only a life 0 death with the continue unused offers the choice until its configured deadline; a life 1 death
-proceeds directly to finalization. **Already verified segment rewards are
-creditable independently of the continue choice.** Economy may show them as pending until delivery commits; it must not hold
-them hostage to continue.
+A locally finished flight shows waiting/retry until verified or definitively
+rejected. The next account-backed flight waits for this result. Gameplay verification
+and completion-fact delivery have distinct statuses; a delivery outage is recoverable.
 
-If the player declines or the offer expires with no continue claim in progress, Core moves the old run to `FINALIZING`; once
-all accepted checkpoint-sized settlement facts are durably queued in its outbox and the final result is recorded, it becomes
-`FINALIZED`.
-Starting a free new run creates an independent run and does not abandon or finalize the old run. Proposed default: runs are
-independently keyed and may overlap; if product later chooses one active run per account, a new free run may be deferred until
-the old run resolves, never charged or denied permanently. If the player continues, preserve the same run ID, score, accepted
-collections, policy versions, and prior checkpoint history, and set `life_index` to 1. Do not create an extra settlement event
-at the life boundary. Continued play can earn only newly collected pickups with new collectible identities.
+Checkpoints preserve collection evidence but never credit currency during flight.
+On each verified death or cap completion, Core atomically records one immutable
+`RunLifeCompleted.v1` event with its outbox entry. Authenticated HTTP delivery retries
+to Python; the inbox deduplicates event ID and `(run_id, life_index)` with a canonical
+payload conflict check. Persist receipt and deduplication in one transaction.
 
-Safe-resume proposal: derive a deterministic resume state from the death checkpoint, retain score/collections, clear transient
-collision/contact state, and place the duck at a validated safe point. Draft geometry: place the duck at its normal X
-coordinate and at the death-state Y clamped to the reachable safe vertical interval for the next obstacle; if that interval is
-empty, select the nearest deterministic safe lane and hold the run in `RESUME_PENDING` until the server validates
-reachability. Put the next obstacle at least one configured reaction window ahead, with no obstacle/pickup collision at resume
-tick. These are technical defaults requiring simulation proof and playtest, not approved visual behavior. Pin the resume
-algorithm version in the run. A continue is consumed when Core durably records the unique resume authorization, not on button
-click. No second continue is possible.
+Issuance is disabled. Show verified pickup counts with a rewards-disabled explanation,
+not a spendable balance. Future WALLET requires approved earning eligibility/rates/caps
+and ledger rules. Future CONTINUE preserves the run ID and score, allows at most one
+continue, and credits only new earnings from its next life; credit at the first death
+must not wait for a continue decision. Resume, payment and compensation remain later
+features and must fence finalization against outstanding authorization.
 
-Continue accounting crosses Core and Economy and has no distributed ACID transaction. Use a stable `continue_id` bound to
-`(account_id, run_id, dead_checkpoint, price_quote_id)`. Proposed sequence: Economy reserves/debits once idempotently and
-records a durable operation; Core asks Economy for its status, then atomically records the authorization and a resume control
-record that references the last accepted gameplay checkpoint. This control record does not count as an accepted gameplay
-checkpoint and does not advance `checkpoint_sequence` or `segment_sequence`; only the next accepted input checkpoint advances
-them. Retries query status by the same ID. If debit succeeded but Core did not resume, retry must complete that same
-authorization or initiate an explicit compensating refund after proving no resume was committed. If Core resumed but the
-response was lost, status returns the same resumed checkpoint without another debit. Never refund based solely on a client
-timeout.
+### Required acceptance
 
-### Settlement and deduplication contract
-
-Core emits one immutable `RunSegmentVerified.v1` fact per accepted checkpoint, including stable event ID, run/account IDs,
-`life_index` (0 or 1), monotonically increasing `segment_sequence` (equal to accepted checkpoint sequence), checkpoint tick
-range, verified newly-collected collectible IDs/types, score delta and cumulative score, rule identity, reward policy version,
-and terminal marker where applicable. This checkpoint-sized settlement segment is emitted once for each accepted checkpoint,
-including the death checkpoint; continued life does not reset the sequence or emit a duplicate for the old death checkpoint.
-Resume control records do not emit settlement facts or advance sequence. Amounts are not client supplied. Economy validates
-producer identity, schema, account/run binding, life/segment-sequence progression, policy version, and issuance caps.
-
-Deduplicate at two levels: event ID and business key `(run_id, segment_sequence, reward_kind)`. Also enforce unique
-collectible identity per run so replayed or resumed history cannot issue the same pickup twice. Economy records inbox/dedup
-marker, ledger credit, and its result/outbox in one local transaction. Core persists accepted checkpoint and outbox fact in
-one local transaction. Redelivery after consumer commit returns prior outcome. Out-of-order checkpoints remain pending/rejected
-until their predecessor is known; never credit based on presumed global broker ordering.
-
-A terminal result records final score and completion reason once, but does not re-credit prior checkpoint collectibles.
-Empty/no-reward runs still finalize. Expose separate status for gameplay (`ACTIVE`/`DEAD`/terminal) and reward settlement
-(`PENDING`/`COMMITTED`/`REJECTED_REVIEW`) so temporary Economy or broker outage is visible and recoverable.
-
-### Lifecycle acceptance scenarios
-
-- Duplicate checkpoint, same bytes: return the original accepted result and the same single checkpoint-sized settlement fact. Same sequence with changed
-  bytes: conflict; state unchanged.
-- Missing sequence or reconnect from a stale client: report expected sequence; no
-  score/collection rollback and no client-authoritative state accepted.
-- Disconnect after server commit but before response:
-  retry yields the committed checkpoint; no duplicate checkpoint-sized reward.
-- Crash after Core DB commit before publish: outbox
-  later delivers the fact. Crash after broker accepted publish but before publisher records confirmation: duplicate delivery
-  is harmless in Economy.
-- Economy outage: verified checkpoint fact remains pending and is retried; death/continue offer and
-  finalization remain usable; UI does not show uncommitted funds as spendable.
-- Death checkpoint arrives concurrently with
-  lease expiry: serialize both against run version/server time. If valid death checkpoint commits before expiry, run enters
-  `DEAD`; if expiry wins, reject later input and finalize accepted prior segments. Exactly one result is observable.
-- Continue click races offer expiry: Core serializes an idempotent continue claim against the offer deadline and unused slot.
-  A committed claim blocks every old-run finalization path (decline, explicit abandonment, expiry, and any “start new run”
-  action that would otherwise abandon it) while its debit/resume outcome is reconciled. Decline/abandon requests are rejected
-  or deferred during the claim. A free new run may be created independently and does not cancel the claimed run. If expiry wins
-  before claim, Economy must not debit. If claim wins, it cannot be discarded merely because the offer deadline passes during a timeout; do
-  not create a second charge or silently discard the result.
-- Debit times out while expiry/finalization runs: query by
-  continue ID. If debit was not accepted, release the claim and finalize without charge. If accepted, complete that same
-  resume, or refund/release only after Core authoritatively proves resume is impossible and Economy records the compensation.
-  If resumed, report success and preserve the same run/score. A timeout alone never proves debit failure or resume
-  impossibility.
-- Continue claim races with decline, explicit abandonment, lease expiry, and new-run creation: claim and each old-run
-  finalization mutation serialize in Core. If finalization wins first, no debit can start; if claim wins, all old-run
-  finalization is blocked until debit/resume resolves. A free new run remains available independently and cannot cancel or
-  invalidate the claim. The old run then either resumes once or finalizes after authoritative proof that resume is impossible
-  and any required compensation is recorded.
-- Decline, abandonment, or expiry after verified pickups: prior earnings still settle once. A resumed checkpoint in
-  `life_index` 1 with a new collectible earns it once; replaying an old checkpoint, collectible ID, or life boundary earns no
-  duplicate credit.
-- Repeated
-  finalization and terminal event delivery: same final result, score, and reward outcome; no new ledger entry.
-
-**Exact next gate:** product owner approves offer duration and continue price amount in the required in-game Stars denomination, plus safe-resume player experience, and
-whether explicit abandonment is exposed; Core/Economy owners accept lease/checkpoint bounds and claim/debit/resume
-reconciliation. RUN may implement durable verified segments without issuing currency. WALLET requires accepted reward issuance
-policy; CONTINUE requires the approved price plus debit, compensation/reconciliation, and resume contracts.
+Test forged/cross-account requests, concurrent starts, duplicate/conflicting/reordered
+checkpoints, stale writers, reload, takeover, storage failure, cap/deadline boundaries,
+offline finish and later replay, outage extensions, and definitive rejection.
+Inject crashes before/after commit and delivery acknowledgment; accepted work survives
+and completion delivery has one business effect. Run real PostgreSQL tests as well
+as deterministic simulation parity. Input verification does not prove human play.
 
 ## 3. Initial economy, catalog, and payment policy
 
@@ -251,7 +170,7 @@ Initial catalog shape:
 
 | Product class | Fulfillment | Price denomination | Status |
 | --- | --- | --- | --- |
-| Earned wallet credit | Ledger entry from verified segment facts under pinned policy | Coins and/or in-game Stars | Policy open |
+| Earned wallet credit | Ledger entry from verified completion facts under pinned policy | Coins and/or in-game Stars | Policy open |
 | Cosmetic skin | Owned entitlement; equip by stable item ID | Coins, in-game Stars, or XTR after approval | Products/prices open |
 | Cosmetic background | Owned entitlement; equip by stable item ID | Coins, in-game Stars, or XTR after approval | Products/prices open |
 | One continue | Run-scoped resume authorization, consumed at most once | In-game Stars per vision | Price open |
@@ -272,7 +191,7 @@ Cosmetics cannot change simulation hitboxes, physics, route, score, or reward el
   earned and purchased units share one spendable balance or remain separate lots is **Open**. Until decided, ledger entries
   must retain provenance so policy can be applied without migrating invented assumptions. Define spend ordering and refund
   treatment before purchases are enabled.
-- Each policy version defines eligible event types, per-segment/per-run/account
+- Each policy version defines eligible event types, per-life/per-run/account
   issuance caps, rounding, expiry (if any), and the behavior for suspended or ineligible accounts. No fixed earning rate,
   conversion, or reward budget is assumed.
 - Cosmetic/internal-currency purchase debits and entitlement grant occur in one
@@ -287,7 +206,7 @@ Cosmetics cannot change simulation hitboxes, physics, route, score, or reward el
   explicit duplicate payment/refund path before sales.
 
 Acceptance before WALLET/SHOP: policy fixtures prove eligible/ineligible, cap-boundary, duplicate event, new event ID with
-duplicate business key, out-of-order segment, policy-version mismatch, concurrent debit, stale quote, and refund-pending
+duplicate business key, out-of-order completion, policy-version mismatch, concurrent debit, stale quote, and refund-pending
 outcomes. A ledger audit can reconstruct every balance from entries. UI distinguishes pending, committed, and unavailable
 balance states.
 
@@ -310,13 +229,12 @@ currency until the relevant rules are accepted.
 | Audience / product owner + release owner | Russian/English first; vision says intended audience 18+ | Launch countries, age-eligibility approach, legal/privacy review, support languages/process | RELEASE: documented country/age gates and required disclosures accepted; real Telegram account and both locales pass pilot checklist |
 | Pilot devices / release owner | Begin with a bounded opt-in pilot; measure before selecting commercial targets | Named mobile OS/browser and desktop clients, minimum OS/device set, sample size, pilot duration | RELEASE: device matrix and numeric frame-time/memory/input thresholds agreed before test; evidence recorded on each named device |
 | Budget / product owner + operations owner | Price actual hosting, broker, database, monitoring, payment/refund support, and asset costs before launch | Maximum monthly operating/payment/support budget and funded reward commitment (if any) | RELEASE: cost model and alert thresholds accepted; restore and outage drills pass within budget; no unfunded external rewards |
-| Infrastructure / engineering owner + product owner | ADR-001 service boundaries; one public origin; separate service-owned data; Docker Compose local development; HTTP checkpoints; RabbitMQ is current broker recommendation | Approve FastAPI/aiogram adapter, Go HTTP/pgx/sqlc, SQLAlchemy/Alembic, PostgreSQL per-service ownership, RabbitMQ/topology/hosting, secrets and deployment approach | ACCOUNT/RUN: reproducible local startup, auth/ownership/contract checks, durable outbox/inbox and real DB/broker failure tests; broker/provider guarantees verified from official docs at implementation |
+| Infrastructure / engineering owner + product owner | Approved two applications: Python Platform/Economy and Go Core; FastAPI/Pydantic, SQLAlchemy/Alembic, pgx/sqlc; separate PostgreSQL databases; Compose; HTTP outbox/inbox | Hosting provider, measured sizing, monthly budget, deployment approval and HA configuration; RabbitMQ deferred | ACCOUNT/RUN: local startup, auth/ownership/contracts and real DB failure tests; hosted acceptance requires 1,000 active flights, failover/restore evidence and budget approval |
 | Measurement/privacy / product owner + privacy/release owner | Measure voluntary replay, retention, purchase and fulfillment correctness with data minimization | Events, consent/disclosure, retention, access, deletion, analytics vendor, numeric targets after pilot | RELEASE: approved measurement/privacy plan and deletion/access handling before collection; targets derived from pilot evidence, never invented in this spec |
 
 These recommendations are proposals, not approvals. Product prices, currency rates, launch countries, age controls, final
 artwork, operating/reward budgets, and numerical business targets remain open. The 18+ audience direction is an existing
-requirement; implementation and eligibility policy are not yet decided. Infrastructure tool choices in ADR-001 and RabbitMQ in
-ADR-003 remain proposals until their stated owners accept them. Recheck live provider and tool contracts when implementing
+requirement; implementation and eligibility policy are not yet decided. The two-application stack and HTTP delivery in ADR-001/ADR-003 are approved; hosted provider, capacity and cost acceptance remain open. Recheck live provider and tool contracts when implementing
 integrations; this specification grants no provider guarantee.
 
 ## 5. Milestone gates

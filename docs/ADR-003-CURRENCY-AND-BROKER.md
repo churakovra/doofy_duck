@@ -1,44 +1,31 @@
-# ADR-003 — Currency names and proposed broker
+# ADR-003 — Currency names and durable delivery
 
-Status: coins + in-game Stars and HTTP checkpoints are selected. RabbitMQ is a
-recommendation awaiting approval; no broker or commercial services are deployed.
-[Product vision](PRODUCT_VISION.md) owns product scope and economic decisions.
+Status: currency names and HTTP checkpoints are selected. Authenticated HTTP
+outbox/inbox delivery is approved as of October 17, 2026; RabbitMQ is deferred.
+Hosted acceptance remains separate.
 
-## Currency names
+## Currency boundaries
 
-The product uses **coins** and **in-game Stars**, visibly separate from actual
-Telegram Stars (**XTR**). Current code retains `FEATHER` and `GAME_STAR`; this
-product naming decision does not migrate code, stored data, or event schemas.
-There is no approved 1:1 exchange rate or Telegram Stars withdrawal promise.
+Use **coins** and **in-game Stars**, separate from actual Telegram Stars (**XTR**).
+Preserve `FEATHER` and `GAME_STAR` identifiers. Local practice funds never become
+account funds. No 1:1 conversion or withdrawal is approved; gifts remain later work.
 
-Gift exchange is later work. Once enabled, its action should describe redemption
-of a specified gift under published funded rules. First-release wording must not
-imply an active gift catalog. See [client and reward boundaries](ADR-002-CLIENT-AND-REWARDS.md).
+Account issuance remains disabled until eligibility, rates, caps and spending rules
+are approved. Verified gameplay facts are not spendable balances. See the
+[product vision](PRODUCT_VISION.md) and [economy specifications](MVP_SPECIFICATIONS.md).
 
-## Broker recommendation
+## Initial delivery
 
-Recommend RabbitMQ for durable inter-service work and events, aligned with the
-owner's learning preference. Selection, topology, availability, and operating
-budget remain open. A self-hosted license does not eliminate hosting, storage,
-monitoring, recovery, or maintenance costs. No cost quote or benchmark is approved.
+Core records completion evidence and an outbox entry in one transaction. A bounded
+retry worker sends the immutable fact to Python's authenticated inbox. The receiver
+commits event-ID and run/life business deduplication with evidence before success.
+Identical retries return the prior outcome; conflicting payloads fail visibly.
 
-Core and Platform need transactional outboxes. Publishers use confirmations and
-stable business identities; consumers atomically store deduplication and domain
-updates before acknowledgment. Durable messaging does not make remote Telegram
-side effects exactly-once. Bound retries, expose unknown outcomes, and reconcile.
+Retry state, worker claims and outcomes must be durable. Expose pending delivery
+separately from gameplay verification. Client claims cannot authorize account credit.
 
-Proposed event domains: verified run facts from Core, authenticated payment facts
-from Platform, and later gift-delivery requests/results. These are design domains,
-not existing wire schemas. Commands request work; events record facts. Multiple
-services consuming one fact need independent queues rather than competing for a
-single delivery. Define versioned schemas, producer authorization, correlation,
-backoff, and operator review before deployment.
-
-RabbitMQ documents publisher confirms and consumer acknowledgments separately.[1]
-Quorum queues are an available replicated queue design, not an approved deployment
-topology for this project.[2]
-
-## Sources
-
-[1] https://www.rabbitmq.com/docs/confirms
-[2] https://www.rabbitmq.com/docs/quorum-queues
+Introduce RabbitMQ only for measured throughput/routing needs. It still requires
+transactional outbox/inbox, retries and deduplication. This decision approves neither
+a broker deployment nor payment-provider behavior. See
+[service ownership](ADR-001-MICROSERVICES.md) and the
+[backend implementation record](BACKEND_FOUNDATION.md).
