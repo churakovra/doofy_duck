@@ -7,7 +7,7 @@ import { LocaleProvider, useLocale } from './locale';
 import './style.css';
 
 const toggle = vi.fn();
-function SettingsHarness() {
+function SettingsHarness({ hideWallet = false }: { hideWallet?: boolean }) {
   const { locale, setLocale, messages } = useLocale();
   const [open, setOpen] = useState(false);
   const portalContainer = useRef<HTMLDivElement>(null);
@@ -15,15 +15,15 @@ function SettingsHarness() {
     <GameSettings locale={locale} setLocale={setLocale} messages={messages}
       preferences={{ sound: true, music: false }} toggle={toggle}
       wallet={{ FEATHER: 24, GAME_STAR: 2 }} walletPersistent walletStatus="ready" walletBlocked={false}
-      portalContainer={portalContainer} open={open} onOpenChange={setOpen} />
+      portalContainer={portalContainer} open={open} onOpenChange={setOpen} hideWallet={hideWallet} />
   </div></header><div className="stage" /></section></main>;
 }
 
 let root: ReturnType<typeof createRoot>;
 let host: HTMLDivElement;
-function render(locale: 'ru' | 'en' = 'ru') {
+function render(locale: 'ru' | 'en' = 'ru', hideWallet = false) {
   const storage = { getItem: (key: string) => key === 'doofy-duck:locale:v1' ? locale : null, setItem: vi.fn() } as unknown as Storage;
-  act(() => root.render(<LocaleProvider storage={storage}><SettingsHarness /></LocaleProvider>));
+  act(() => root.render(<LocaleProvider storage={storage}><SettingsHarness hideWallet={hideWallet} /></LocaleProvider>));
 }
 function click(element: Element) { act(() => element.dispatchEvent(new MouseEvent('click', { bubbles: true }))); }
 function menuTrigger() { return host.querySelector<HTMLButtonElement>('[aria-label="Меню"], [aria-label="Menu"]'); }
@@ -37,6 +37,14 @@ beforeEach(() => {
 afterEach(() => { act(() => root.unmount()); host.remove(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe('shared game settings menu', () => {
+  it('can hide account-only wallet details while keeping language and audio settings', () => {
+    render('ru', true); openMenu();
+    const dialog = host.querySelector('[role="dialog"]')!;
+    expect(dialog.querySelector('.settings-wallet')).toBeNull();
+    expect(dialog.querySelector('.locale-controls')).not.toBeNull();
+    expect(dialog.querySelector('.audio-controls')).not.toBeNull();
+  });
+
   it('keeps a named menu trigger visible and closed until requested', () => {
     render();
     expect(menuTrigger()).not.toBeNull();
