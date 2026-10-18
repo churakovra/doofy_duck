@@ -5,7 +5,10 @@ Start with the [root README](../README.md) for setup and current capabilities,
 [ARCHITECTURE](ARCHITECTURE.md) for code ownership. Read only what the task needs.
 
 Follow the [development workflow](../AGENTS.md#development-workflow) and
-[branch/commit conventions](../AGENTS.md#branches-and-commits).
+[branch/commit conventions](../AGENTS.md#branches-and-commits). For delegation,
+review, test assumptions, recovery, checkpoints or long jobs, read the relevant
+section of the [agent workflow reference](AGENT_WORKFLOW.md); it is not required
+reading in full for every task.
 
 ## Product and current implementation
 
