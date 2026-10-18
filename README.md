@@ -50,6 +50,29 @@ catalog entries or replace drawings with image assets.
 
 Touch/click the field or press Space to flap. Screen buttons do not also flap. Backgrounding pauses; returning requires explicit resume. Restart is free. Personal best is untrusted local storage, not an online score.
 
+## Make shortcuts
+
+Install the documented Node.js/npm versions, then use either local flow:
+
+```sh
+make install
+make run
+```
+
+`make run` serves the game at `http://127.0.0.1:4173/` without Docker. For account
+mode, install Docker Compose, uv, and the Python prerequisites, then run:
+
+```sh
+make run-account
+```
+
+Both run commands keep the frontend in the foreground; press Ctrl-C to stop it.
+Account mode creates `.env.dev` only when absent, starts the local backend, and
+serves the API at `http://127.0.0.1:8080/`. Choose account mode in the game and
+enter a positive development Telegram user ID. Run `make stop` to stop backend
+containers while preserving the PostgreSQL data volume. `make help` lists the
+available commands; `make logs SERVICE=core` filters backend logs to Core.
+
 ## Account-backed local development
 
 Generate ignored local credentials once, then start the stack from the repository root:
