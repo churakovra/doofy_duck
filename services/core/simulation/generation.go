@@ -2,6 +2,84 @@ package simulation
 
 import "fmt"
 
+func wetlandEncounter(seed uint32, block int64, intro, pressure []string) string {
+	if block < int64(len(intro)) {
+		return intro[block]
+	}
+	pressureIndex := (block - int64(len(intro))) / 2
+	if (block-int64(len(intro)))%2 == 1 {
+		return "steady"
+	}
+	offset := int64(Mix32(seed^uint32(0x85ebca6b))) % int64(len(pressure))
+	return pressure[(offset+pressureIndex)%int64(len(pressure))]
+}
+func wetlandObstacles(typeID string, gapCenter int64, c Config) []ObstacleDefinition {
+	p := c.Pipes
+	openingTop, openingBottom := gapCenter-p.GapHeight/2, gapCenter+p.GapHeight/2
+	width := p.Width
+	switch typeID {
+	case "pipes":
+		return []ObstacleDefinition{{TypeID: typeID, Y: p.CeilingY, Width: width, Height: openingTop - p.CeilingY}, {TypeID: typeID, Y: openingBottom, Width: width, Height: p.FloorY - openingBottom}}
+	case "vine":
+		return []ObstacleDefinition{{TypeID: typeID, Y: p.CeilingY, Width: width, Height: openingTop - p.CeilingY}}
+	case "rock":
+		return []ObstacleDefinition{{TypeID: typeID, Y: openingBottom, Width: width, Height: p.FloorY - openingBottom}}
+	default:
+		height := int64(42000)
+		return []ObstacleDefinition{{TypeID: typeID, Y: gapCenter - height/2, Width: width, Height: height}}
+	}
+}
+func wetlandRewardPoint(c Config, p Pipe, radius int64, star bool) (int64, int64) {
+	var authored WetlandRewardPoint
+	if star {
+		authored = c.Wetland.StarRoute
+	} else {
+		for _, family := range c.Wetland.Families {
+			if family.ID == p.EncounterFamily && p.StationStep != nil {
+				authored = family.RewardRoute[*p.StationStep]
+				break
+			}
+		}
+	}
+	debris := false
+	for _, obstacle := range p.Obstacles {
+		if obstacle.TypeID == "debris" {
+			debris = true
+			break
+		}
+	}
+	var offset int64
+	if debris {
+		clearance := int64(21000) + c.Flight.DuckHalfHeight + 1
+		minY, maxY := c.Pipes.CeilingY+c.Flight.DuckHalfHeight, c.Pipes.FloorY-c.Flight.DuckHalfHeight
+		upperReach, lowerReach := p.GapCenter-minY, maxY-p.GapCenter
+		direction := sign64(authored.YOffset)
+		if direction > 0 && lowerReach < clearance { direction = -1 }
+		if direction < 0 && upperReach < clearance { direction = 1 }
+		reach := upperReach
+		if direction > 0 { reach = lowerReach }
+		magnitude := authored.YOffset
+		if magnitude < 0 { magnitude = -magnitude }
+		offset = direction * max64(clearance, min64(magnitude, reach))
+	} else {
+		offsetLimit := c.Pipes.GapHeight/2 - c.Flight.DuckHalfHeight - radius - 2
+		magnitude := authored.YOffset
+		if magnitude < 0 { magnitude = -magnitude }
+		offset = sign64(authored.YOffset) * min64(magnitude, offsetLimit)
+	}
+	return p.X + authored.XOffset, p.GapCenter + offset
+}
+
+func sign64(v int64) int64 {
+	if v < 0 {
+		return -1
+	}
+	if v > 0 {
+		return 1
+	}
+	return 0
+}
+
 func CreateRun(d Descriptor, configurations ...Config) (State, error) {
 	if e := validateDescriptor(d); e != nil {
 		return State{}, e
@@ -13,7 +91,9 @@ func CreateRun(d Descriptor, configurations ...Config) (State, error) {
 	if len(configurations) == 1 {
 		c = configurations[0]
 	} else if d.ConfigID == DefaultConfigID {
-		c = DefaultConfiguration()
+		c = WetlandConfiguration()
+	} else if d.ConfigID == PriorDefaultConfigID {
+		c = PriorDefaultConfiguration()
 	} else if d.ConfigID == LegacyDefaultConfigID {
 		c = LegacyDefaultConfiguration()
 	} else {
@@ -59,8 +139,16 @@ func generateNextOwned(s State) (Result, error) {
 		}
 	}
 	x := s.Config.Pipes.SafeLeadIn
-	if len(pipes) > 0 {
-		x = pipes[len(pipes)-1].X + s.Config.Pipes.Spacing
+	if s.Config.Wetland != nil && s.NextPipeX != nil {
+		x = *s.NextPipeX
+	} else if len(pipes) > 0 {
+		spacing := s.Config.Pipes.Spacing
+		if pipes[len(pipes)-1].StationSpacing != nil {
+			spacing = *pipes[len(pipes)-1].StationSpacing
+		}
+		x = pipes[len(pipes)-1].X + spacing
+	} else if s.NextPipeX != nil {
+		x = *s.NextPipeX
 	}
 	for int64(len(pipes)) < s.Config.Limits.MaxActivePipes && x <= s.Config.Pipes.Horizon {
 		rng += 0x9e3779b9
@@ -68,7 +156,26 @@ func generateNextOwned(s State) (Result, error) {
 		raw := p.GapMinCenter + int64(Mix32(uint32(s.Descriptor.Seed)^uint32(index+1)*uint32(0x9e3779b9)))%(p.GapMaxCenter-p.GapMinCenter+1)
 		challengeID := ""
 		challengeStep := int64(0)
-		if challenge != nil {
+		stationStep := index % 4
+		family := ""
+		var stationSpacing *int64
+		if wetland := s.Config.Wetland; wetland != nil {
+			family = wetlandEncounter(uint32(s.Descriptor.Seed), index/4, wetland.IntroFamilies, wetland.PressureFamilies)
+			familySpec := WetlandFamily{}
+			for _, candidate := range wetland.Families {
+				if candidate.ID == family {
+					familySpec = candidate
+					break
+				}
+			}
+			spacing := familySpec.StationSpacing[stationStep]
+			if family == "steady" && index/4 >= int64(len(wetland.IntroFamilies)) {
+				spacing = wetland.RecoverySpacing
+			}
+			stationSpacing = &spacing
+			raw = familySpec.GapCenters[stationStep]
+		}
+		if challenge != nil && s.Config.Wetland == nil {
 			challengeStep = index % challenge.PipesPerFamily
 			block := index / challenge.PipesPerFamily
 			if block == 0 {
@@ -98,18 +205,42 @@ func generateNextOwned(s State) (Result, error) {
 			value := challengeStep
 			challengeStepPointer = &value
 		}
-		pipes = append(pipes, Pipe{ID: fmt.Sprintf("pipe-%d", index), Index: index, X: x, GapCenter: gap, ChallengeID: challengeID, ChallengeStep: challengeStepPointer})
+		pipe := Pipe{ID: fmt.Sprintf("pipe-%d", index), Index: index, X: x, GapCenter: gap, ChallengeID: challengeID, ChallengeStep: challengeStepPointer}
+		if family != "" {
+			step := stationStep
+			pipe.StationID = fmt.Sprintf("station-%d", index)
+			pipe.StationStep = &step
+			pipe.EncounterFamily = family
+			pipe.StationSpacing = stationSpacing
+			var typeID string
+			for _, candidate := range s.Config.Wetland.Families {
+				if candidate.ID == family {
+					typeID = candidate.ObstacleTypes[stationStep]
+					break
+				}
+			}
+			pipe.Obstacles = wetlandObstacles(typeID, gap, s.Config)
+		}
+		pipes = append(pipes, pipe)
 		var e error
 		index, e = inc(index, 1)
 		if e != nil {
 			return Result{}, e
 		}
-		x += s.Config.Pipes.Spacing
+		if stationSpacing != nil {
+			x += *stationSpacing
+		} else {
+			x += s.Config.Pipes.Spacing
+		}
 	}
 	s.Pipes = pipes
 	s.RNGState = rng
 	s.NextPipeIndex = index
 	s.LastGapCenter = previousGap
+	if s.Config.Wetland != nil {
+		nextX := x
+		s.NextPipeX = &nextX
+	}
 	return Result{State: s, Events: []Event{}}, nil
 }
 func WorldSpeedAt(config Config, tick int64, scores ...int64) (int64, error) {

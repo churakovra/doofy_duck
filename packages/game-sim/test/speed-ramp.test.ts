@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_CONFIG, configIdFor, createRunDescriptor, createRun, makeInput, pauseRun, restartRun, resumeRun, step, worldSpeedAt } from '../src/index.js';
+import { PRIOR_DEFAULT_CONFIG, configIdFor, createRunDescriptor, createRun, makeInput, pauseRun, restartRun, resumeRun, step, worldSpeedAt } from '../src/index.js';
 import type { RunState } from '../src/index.js';
 
-const descriptor = (runId = 'speed-test', config = DEFAULT_CONFIG) => createRunDescriptor({ runId, seed: 3 }, config);
+const descriptor = (runId = 'speed-test', config = PRIOR_DEFAULT_CONFIG) => createRunDescriptor({ runId, seed: 3 }, config);
 const runningAt = (tick: number, extra: Partial<RunState> = {}) => {
   const initial = step(createRun(descriptor()), [makeInput(0, 'FLAP')]).state;
   return { ...initial, tick, phase: 'RUNNING' as const, duck: { ...initial.duck, y: 280000, vy: 0 }, pipes: [{ id: 'p', index: 90, x: 800000, gapCenter: 280000, scored: false }], collectibles: [{ id: 'c', typeId: 'FEATHER', x: 800000, y: 280000, amount: 1, radius: 7000, collected: false }], ...extra };
@@ -10,23 +10,23 @@ const runningAt = (tick: number, extra: Partial<RunState> = {}) => {
 
 describe('active-time world speed ramp', () => {
   it('computes the specified one-based integer speed curve exactly', () => {
-    expect([0, 1, 2, 2701, 5400, 5401, 9000].map(tick => worldSpeedAt(DEFAULT_CONFIG, tick)))
+    expect([0, 1, 2, 2701, 5400, 5401, 9000].map(tick => worldSpeedAt(PRIOR_DEFAULT_CONFIG, tick)))
       .toEqual([3000, 3000, 3000, 4800, 4800, 4800, 4800]);
   });
   it.each([[1.5], [Number.MAX_SAFE_INTEGER], [Number.MAX_SAFE_INTEGER + 1], [Number.NaN], [Number.POSITIVE_INFINITY], [Number.NEGATIVE_INFINITY]])(
     'rejects invalid tick values: %s', (tick) => {
-      expect(() => worldSpeedAt(DEFAULT_CONFIG, tick!)).toThrow();
+      expect(() => worldSpeedAt(PRIOR_DEFAULT_CONFIG, tick!)).toThrow();
     },
   );
   it('keeps zero and negative ticks at base speed as Go does, and accepts MAX_COUNTER', () => {
-    expect(worldSpeedAt(DEFAULT_CONFIG, 0)).toBe(3000);
-    expect(worldSpeedAt(DEFAULT_CONFIG, -1)).toBe(3000);
-    expect(worldSpeedAt(DEFAULT_CONFIG, Number.MAX_SAFE_INTEGER - 1)).toBe(4800);
+    expect(worldSpeedAt(PRIOR_DEFAULT_CONFIG, 0)).toBe(3000);
+    expect(worldSpeedAt(PRIOR_DEFAULT_CONFIG, -1)).toBe(3000);
+    expect(worldSpeedAt(PRIOR_DEFAULT_CONFIG, Number.MAX_SAFE_INTEGER - 1)).toBe(4800);
   });
   it.each([
-    ['zero ramp', { ...DEFAULT_CONFIG, pipes: { ...DEFAULT_CONFIG.pipes, rampTicks: 0 } }],
-    ['incomplete config', { ...DEFAULT_CONFIG, pipes: undefined }],
-    ['out-of-range speed config', { ...DEFAULT_CONFIG, pipes: { ...DEFAULT_CONFIG.pipes, maxSpeed: 10_000_001 } }],
+    ['zero ramp', { ...PRIOR_DEFAULT_CONFIG, pipes: { ...PRIOR_DEFAULT_CONFIG.pipes, rampTicks: 0 } }],
+    ['incomplete config', { ...PRIOR_DEFAULT_CONFIG, pipes: undefined }],
+    ['out-of-range speed config', { ...PRIOR_DEFAULT_CONFIG, pipes: { ...PRIOR_DEFAULT_CONFIG.pipes, maxSpeed: 10_000_001 } }],
   ])('rejects invalid config passed directly to worldSpeedAt: %s', (_label, config) => {
     expect(() => worldSpeedAt(config as never, 1)).toThrow();
   });
@@ -55,11 +55,11 @@ describe('active-time world speed ramp', () => {
     expect(step(restarted, [makeInput(0, 'FLAP')]).state.pipes[0]!.x).toBe(420000 - 3000);
   });
   it.each([
-    ['max speed below base', { ...DEFAULT_CONFIG.pipes, maxSpeed: 2399, rampTicks: 5400 }],
-    ['pipe width below cap speed', { ...DEFAULT_CONFIG.pipes, maxSpeed: 52001, rampTicks: 5400 }],
-    ['zero ramp', { ...DEFAULT_CONFIG.pipes, maxSpeed: 4800, rampTicks: 0 }],
-    ['unsafe ramp', { ...DEFAULT_CONFIG.pipes, maxSpeed: 4800, rampTicks: Number.MAX_SAFE_INTEGER }],
+    ['max speed below base', { ...PRIOR_DEFAULT_CONFIG.pipes, maxSpeed: 2399, rampTicks: 5400 }],
+    ['pipe width below cap speed', { ...PRIOR_DEFAULT_CONFIG.pipes, maxSpeed: 52001, rampTicks: 5400 }],
+    ['zero ramp', { ...PRIOR_DEFAULT_CONFIG.pipes, maxSpeed: 4800, rampTicks: 0 }],
+    ['unsafe ramp', { ...PRIOR_DEFAULT_CONFIG.pipes, maxSpeed: 4800, rampTicks: Number.MAX_SAFE_INTEGER }],
   ])('rejects invalid speed config: %s', (_label, pipes) => {
-    expect(() => configIdFor({ ...DEFAULT_CONFIG, pipes } as never)).toThrow();
+    expect(() => configIdFor({ ...PRIOR_DEFAULT_CONFIG, pipes } as never)).toThrow();
   });
 });

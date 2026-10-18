@@ -10,7 +10,7 @@ func foundationRun(t *testing.T, config Config) State {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s, err := CreateRun(Descriptor{"foundation-edge", 1, SimulationVersion, GeneratorVersion, id}, config)
+	s, err := CreateRun(Descriptor{"foundation-edge", 1, PriorSimulationVersion, PriorGeneratorVersion, id}, config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -20,7 +20,7 @@ func foundationRun(t *testing.T, config Config) State {
 func TestFoundationCollectiblePrototypeKeys(t *testing.T) {
 	for _, typeID := range []string{"__proto__", "constructor", "toString"} {
 		t.Run(typeID, func(t *testing.T) {
-			c := DefaultConfiguration()
+			c := PriorDefaultConfiguration()
 			c.Collectibles = []Definition{{typeID, 1, 1, 0, 0, 3, 7000, "appearance-v1"}}
 			c.StarSchedule = nil
 			s := foundationRun(t, c)
@@ -67,7 +67,7 @@ func TestFoundationCanonicalJSONEscapesAndUTF16KeyOrder(t *testing.T) {
 }
 
 func TestFoundationSpawnWeightAcceptsMaxSafeInteger(t *testing.T) {
-	c := DefaultConfiguration()
+	c := PriorDefaultConfiguration()
 	c.SpawnNoneWeight = 9007199254740991
 	for i := range c.Collectibles {
 		c.Collectibles[i].Weight = 0
@@ -78,7 +78,7 @@ func TestFoundationSpawnWeightAcceptsMaxSafeInteger(t *testing.T) {
 }
 
 func TestFoundationNegativeMidpointsUseFloor(t *testing.T) {
-	c := DefaultConfiguration()
+	c := PriorDefaultConfiguration()
 	c.Challenges = nil
 	c.Pipes.CeilingY, c.Pipes.FloorY = -1000000, -439001
 	c.Pipes.GapMinCenter, c.Pipes.GapMaxCenter = -840000, -599999

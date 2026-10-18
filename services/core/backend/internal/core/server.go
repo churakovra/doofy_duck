@@ -308,13 +308,13 @@ func (s *Server) createRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	seed := int64(uint32(seedBytes[0])<<24 | uint32(seedBytes[1])<<16 | uint32(seedBytes[2])<<8 | uint32(seedBytes[3]))
-	config := sim.DefaultConfiguration()
+	config := sim.WetlandConfiguration()
 	configID, e := sim.ConfigIDFor(config)
 	if e != nil {
 		writeError(w, 500, "internal", "simulation configuration invalid")
 		return
 	}
-	state, e := sim.CreateRun(sim.Descriptor{RunID: id, Seed: seed, SimulationVersion: sim.SimulationVersion, GeneratorVersion: sim.GeneratorVersion, ConfigID: configID}, config)
+	state, e := sim.CreateRun(sim.Descriptor{RunID: id, Seed: seed, SimulationVersion: sim.WetlandSimulationVersion, GeneratorVersion: sim.WetlandGeneratorVersion, ConfigID: configID}, config)
 	if e != nil {
 		writeError(w, 500, "internal", "could not create simulation")
 		return
@@ -331,7 +331,7 @@ func (s *Server) createRun(w http.ResponseWriter, r *http.Request) {
 	}
 	hash := sha256.Sum256([]byte(token))
 	now := s.now()
-	_, e = tx.Exec(ctx, `INSERT INTO core_runs(id,account_id,seed,simulation_version,generator_version,config_id,state,status,writer_token_hash,last_contact) VALUES($1,$2,$3,$4,$5,$6,$7,'active',$8,$9)`, id, account, seed, sim.SimulationVersion, sim.GeneratorVersion, configID, raw, hash[:], now)
+	_, e = tx.Exec(ctx, `INSERT INTO core_runs(id,account_id,seed,simulation_version,generator_version,config_id,state,status,writer_token_hash,last_contact) VALUES($1,$2,$3,$4,$5,$6,$7,'active',$8,$9)`, id, account, seed, sim.WetlandSimulationVersion, sim.WetlandGeneratorVersion, configID, raw, hash[:], now)
 	if e != nil {
 		writeError(w, 409, "active_run_exists", "an active or pending run already exists")
 		return
@@ -341,7 +341,7 @@ func (s *Server) createRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Location", "/api/v1/runs/"+id)
-	writeJSON(w, 201, Snapshot{RunID: id, AccountID: account, LifeIndex: 0, Seed: seed, SimulationVersion: sim.SimulationVersion, GeneratorVersion: sim.GeneratorVersion, ConfigID: configID, State: state, Status: "active", VerificationStatus: "in_progress", DeliveryStatus: "not_ready", CheckpointSequence: -1, WriterGeneration: 1, ActiveTicks: 0, ActiveTickLimit: ActiveTickLimit, SubmissionDeadline: now.Add(time.Hour), WriterToken: token})
+	writeJSON(w, 201, Snapshot{RunID: id, AccountID: account, LifeIndex: 0, Seed: seed, SimulationVersion: sim.WetlandSimulationVersion, GeneratorVersion: sim.WetlandGeneratorVersion, ConfigID: configID, State: state, Status: "active", VerificationStatus: "in_progress", DeliveryStatus: "not_ready", CheckpointSequence: -1, WriterGeneration: 1, ActiveTicks: 0, ActiveTickLimit: ActiveTickLimit, SubmissionDeadline: now.Add(time.Hour), WriterToken: token})
 }
 func (s *Server) currentRun(w http.ResponseWriter, r *http.Request) {
 	account := principal(r).AccountID

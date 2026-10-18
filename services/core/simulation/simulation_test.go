@@ -7,20 +7,48 @@ import (
 )
 
 func TestCurrentContractIdentity(t *testing.T) {
-	if SimulationVersion != "1.4.0" || GeneratorVersion != "1.3.0" || DefaultConfigID != "dd-v1-star-interval-v1" {
-		t.Fatalf("unexpected contract identity: %s/%s/%s", SimulationVersion, GeneratorVersion, DefaultConfigID)
+	if SimulationVersion != "2.0.0" || GeneratorVersion != "2.0.0" || DefaultConfigID != "dd-v2-wetland-v1" {
+		t.Fatalf("unexpected wetland identity: %s/%s/%s", SimulationVersion, GeneratorVersion, DefaultConfigID)
 	}
-	config := DefaultConfiguration()
+	current, err := CreateRun(Descriptor{RunID: "current", Seed: 4, SimulationVersion: SimulationVersion, GeneratorVersion: GeneratorVersion, ConfigID: DefaultConfigID})
+	if err != nil || current.Config.Wetland == nil || current.NextPipeX == nil {
+		t.Fatalf("wetland default run missing catalog/cursor: err=%v", err)
+	}
+	if PriorSimulationVersion != "1.4.0" || PriorGeneratorVersion != "1.3.0" || PriorDefaultConfigID != "dd-v1-star-interval-v1" {
+		t.Fatalf("unexpected contract identity: %s/%s/%s", PriorSimulationVersion, PriorGeneratorVersion, PriorDefaultConfigID)
+	}
+	config := PriorDefaultConfiguration()
 	id, err := ConfigIDFor(config)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if id != DefaultConfigID {
-		t.Fatalf("default config ID = %q, want %q", id, DefaultConfigID)
+	if id != PriorDefaultConfigID {
+		t.Fatalf("default config ID = %q, want %q", id, PriorDefaultConfigID)
 	}
 	legacyID, err := ConfigIDFor(LegacyDefaultConfiguration())
 	if err != nil || legacyID != LegacyDefaultConfigID {
 		t.Fatalf("legacy default config ID = %q, err=%v", legacyID, err)
+	}
+	prior, err := CreateRun(Descriptor{RunID: "prior", Seed: 4, SimulationVersion: PriorSimulationVersion, GeneratorVersion: PriorGeneratorVersion, ConfigID: PriorDefaultConfigID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(prior)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var priorObject map[string]json.RawMessage
+	if err := json.Unmarshal(encoded, &priorObject); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := priorObject["nextPipeX"]; ok {
+		t.Fatal("prior state gained wetland spawn cursor")
+	}
+	if prior.Config.Wetland != nil {
+		t.Fatal("prior config gained wetland catalog")
+	}
+	if _, ok := priorObject["pipes"]; !ok {
+		t.Fatal("prior state lost pipes")
 	}
 }
 
@@ -79,16 +107,265 @@ func TestFoundationSpeedFullFixtureParity(t *testing.T) {
 	}
 }
 
+func TestWetlandRawFullStateAndEventFixtureParity(t *testing.T) {
+	if err := VerifyWetlandFixtures("../../../contracts/simulation/wetland-v1.json"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestWetlandStepAdvancesSpawnCursorAfterEveryStationWasPruned(t *testing.T) {
+	state, err := CreateRun(Descriptor{RunID: "wetland-refill", Seed: 32, SimulationVersion: SimulationVersion, GeneratorVersion: GeneratorVersion, ConfigID: DefaultConfigID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	state.Phase, state.Tick = Running, 2700
+	state.Pipes = []Pipe{}
+	state.NextPipeIndex, state.NextSpawnPipeIndex = 2, 2
+	nextX := int64(500000)
+	state.NextPipeX = &nextX
+	state.Duck.Y, state.Duck.VY = 280000, 0
+	result, err := Step(state, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.State.Pipes) == 0 || result.State.Pipes[0].Index != 2 || result.State.Pipes[0].X != 495200 {
+		t.Fatalf("refilled station = %+v, want index 2 at 495200", result.State.Pipes)
+	}
+	if len(result.State.Pipes) != 2 || result.State.Pipes[1].X != 795200 {
+		t.Fatalf("refill did not fill the visible horizon: %+v", result.State.Pipes)
+	}
+	if result.State.NextPipeX == nil || *result.State.NextPipeX != 1095200 {
+		t.Fatalf("next spawn cursor = %v, want 1095200", result.State.NextPipeX)
+	}
+}
+
 func TestExportedDefaultsAreIndependentCopies(t *testing.T) {
 	patterns := PatternCatalog()
-	config := DefaultConfiguration()
+	config := PriorDefaultConfiguration()
 	patterns[0].Gaps[0]++
 	config.Collectibles[0].Amount++
 	if PatternCatalog()[0].Gaps[0] == patterns[0].Gaps[0] {
 		t.Fatal("pattern accessor exposed canonical gaps")
 	}
-	if DefaultConfiguration().Collectibles[0].Amount == config.Collectibles[0].Amount {
+	if PriorDefaultConfiguration().Collectibles[0].Amount == config.Collectibles[0].Amount {
 		t.Fatal("config accessor exposed canonical definitions")
+	}
+}
+
+func TestReviewedWetlandStationFixture(t *testing.T) {
+	data, err := os.ReadFile("../../../contracts/simulation/wetland-v1.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture struct {
+		FixtureRevision   string          `json:"fixtureRevision"`
+		SimulationVersion string          `json:"simulationVersion"`
+		GeneratorVersion  string          `json:"generatorVersion"`
+		ConfigID          string          `json:"configId"`
+		Seed              int64           `json:"seed"`
+		FamilySequence    []string        `json:"familySequence"`
+		Catalog           []WetlandFamily `json:"catalog"`
+	}
+	if err := json.Unmarshal(data, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	if fixture.FixtureRevision != "wetland-stations-1" || fixture.SimulationVersion != SimulationVersion || fixture.GeneratorVersion != GeneratorVersion || fixture.ConfigID != DefaultConfigID {
+		t.Fatalf("unexpected wetland fixture identity: %+v", fixture)
+	}
+	config := WetlandConfiguration()
+	if len(config.Wetland.Families) != len(fixture.Catalog) {
+		t.Fatal("catalog length differs from reviewed fixture")
+	}
+	for i, family := range config.Wetland.Families {
+		want, _ := json.Marshal(fixture.Catalog[i])
+		got, _ := json.Marshal(family)
+		if string(got) != string(want) {
+			t.Fatalf("catalog family %d differs: %s != %s", i, got, want)
+		}
+	}
+	config.Pipes.Horizon = 10000000
+	config.Limits.MaxActivePipes = 28
+	config.Limits.MaxActiveCollectibles = 29
+	config.StarSchedule = nil
+	id, err := ConfigIDFor(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	descriptor := Descriptor{RunID: "wetland-fixture", Seed: fixture.Seed, SimulationVersion: SimulationVersion, GeneratorVersion: GeneratorVersion, ConfigID: id}
+	state, err := CreateRun(descriptor, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var families []string
+	for index := int64(0); index < int64(len(fixture.FamilySequence))*4; index++ {
+		pipe := state.Pipes[index]
+		family := config.Wetland.Families[0]
+		for _, candidate := range config.Wetland.Families {
+			if candidate.ID == pipe.EncounterFamily {
+				family = candidate
+				break
+			}
+		}
+		step := *pipe.StationStep
+		if pipe.GapCenter != family.GapCenters[step] || len(pipe.Obstacles) == 0 || pipe.Obstacles[0].TypeID != family.ObstacleTypes[step] {
+			t.Fatalf("station %d geometry differs from catalog", index)
+		}
+		wantSpacing := family.StationSpacing[step]
+		block := pipe.Index / 4
+		if pipe.EncounterFamily == "steady" && block >= 2 && block%2 == 1 {
+			wantSpacing = config.Wetland.RecoverySpacing
+		}
+		if pipe.StationSpacing == nil || *pipe.StationSpacing != wantSpacing {
+			t.Fatalf("station %d spacing = %v, want %d", index, pipe.StationSpacing, wantSpacing)
+		}
+		if step == 0 {
+			families = append(families, pipe.EncounterFamily)
+		}
+	}
+	if len(families) != len(fixture.FamilySequence) {
+		t.Fatal("incomplete family sequence")
+	}
+	for i, family := range families {
+		if family != fixture.FamilySequence[i] {
+			t.Fatalf("family %d = %s, want %s", i, family, fixture.FamilySequence[i])
+		}
+	}
+	for i := 2; i < len(families); i += 2 {
+		if families[i] == families[i-2] {
+			t.Fatalf("pressure family repeated at block %d", i)
+		}
+	}
+	state.Pipes = []Pipe{}
+	nextX := int64(9500000)
+	state.NextPipeX = &nextX
+	state.NextPipeIndex = 28
+	refilled, err := GenerateNext(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(refilled.State.Pipes) == 0 || refilled.State.Pipes[0].Index != 28 || refilled.State.Pipes[0].X != nextX {
+		t.Fatalf("pruned refill restarted: %+v", refilled.State.Pipes)
+	}
+}
+
+func TestWetlandObstacleRectanglesAreLethal(t *testing.T) {
+	config := WetlandConfiguration()
+	config.StarSchedule = nil
+	config.Pipes.Horizon = 3000000
+	config.Limits.MaxActivePipes = 8
+	id, err := ConfigIDFor(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	descriptor := Descriptor{RunID: "wetland-collision", Seed: 9, SimulationVersion: SimulationVersion, GeneratorVersion: GeneratorVersion, ConfigID: id}
+	initial, err := CreateRun(descriptor, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]bool{}
+	for _, pipe := range initial.Pipes {
+		for _, obstacle := range pipe.Obstacles {
+			if seen[obstacle.TypeID] {
+				continue
+			}
+			seen[obstacle.TypeID] = true
+			state := cloneState(initial)
+			state.Phase = Running
+			state.Duck.Y = obstacle.Y + obstacle.Height/2
+			state.Duck.VY = 0
+			state.Pipes = []Pipe{pipe}
+			state.Pipes[0].X = state.Duck.X
+			state.Pipes[0].Obstacles = []ObstacleDefinition{obstacle}
+			result, stepErr := Step(state, nil)
+			if stepErr != nil {
+				t.Fatalf("%s step: %v", obstacle.TypeID, stepErr)
+			}
+			if result.State.Phase != Dead {
+				t.Errorf("%s rectangle did not collide", obstacle.TypeID)
+			}
+		}
+	}
+	for _, typeID := range []string{"pipes", "vine", "rock", "debris"} {
+		if !seen[typeID] {
+			t.Errorf("missing obstacle type %s", typeID)
+		}
+	}
+	pairedPipes := false
+	for _, pipe := range initial.Pipes {
+		if len(pipe.Obstacles) > 0 && pipe.Obstacles[0].TypeID == "pipes" {
+			if len(pipe.Obstacles) != 2 {
+				t.Fatalf("paired pipes have %d rectangles, want two", len(pipe.Obstacles))
+			}
+			pairedPipes = true
+			break
+		}
+	}
+	if !pairedPipes {
+		t.Fatal("catalog did not generate paired pipes")
+	}
+}
+
+func TestWetlandTrailsSpawnWholeAndStable(t *testing.T) {
+	config := WetlandConfiguration()
+	config.StarSchedule = nil
+	config.Pipes.Horizon = 4000000
+	config.Limits.MaxActivePipes = 12
+	config.Limits.MaxActiveCollectibles = 13
+	id, err := ConfigIDFor(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, err := CreateRun(Descriptor{RunID: "wetland-trails", Seed: 11, SimulationVersion: SimulationVersion, GeneratorVersion: GeneratorVersion, ConfigID: id}, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state.Phase = Running
+	result, err := Step(state, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"feather-trail-0-1", "feather-trail-0-3", "feather-trail-1-0", "feather-trail-1-1", "feather-trail-1-2", "feather-trail-1-3", "feather-trail-2-0", "feather-trail-2-1", "feather-trail-2-2", "feather-trail-2-3"}
+	if len(result.State.Collectibles) != len(want) {
+		t.Fatalf("spawned %d rewards, want complete ten-item route", len(result.State.Collectibles))
+	}
+	for i, collectible := range result.State.Collectibles {
+		if collectible.ID != want[i] || collectible.TypeID != "FEATHER" || collectible.Amount != 1 {
+			t.Errorf("reward %d = %+v, want ID %s one FEATHER", i, collectible, want[i])
+		}
+	}
+}
+
+func TestWetlandStarCapacityReservesWholeTrail(t *testing.T) {
+	config := WetlandConfiguration()
+	config.Pipes.Horizon = 1700000
+	config.Limits.MaxActivePipes, config.Limits.MaxActiveCollectibles = 8, 10
+	config.StarSchedule = &StarSchedule{MinIntervalPipes: 8, MaxIntervalPipes: 8}
+	id, err := ConfigIDFor(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, err := CreateRun(Descriptor{RunID: "wetland-star-route", Seed: 11, SimulationVersion: SimulationVersion, GeneratorVersion: GeneratorVersion, ConfigID: id}, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state.Phase = Running
+	ordinal := int64(0)
+	state.NextStarPipeIndex, state.StarScheduleOrdinal = 1, &ordinal
+	result, err := Step(state, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stars, feathers := 0, 0
+	for _, item := range result.State.Collectibles {
+		if item.TypeID == "GAME_STAR" && item.ID == "star-1" {
+			stars++
+		}
+		if item.TypeID == "FEATHER" {
+			feathers++
+		}
+	}
+	if stars != 1 || feathers != 3 || int64(len(result.State.Collectibles)) > config.Limits.MaxActiveCollectibles {
+		t.Fatalf("star route was dropped or exceeded reserve: stars=%d feathers=%d items=%d", stars, feathers, len(result.State.Collectibles))
 	}
 }
 
@@ -99,7 +376,7 @@ func TestValidateConfigRejectsNumbersOutsideJavaScriptSafeIntegerDomain(t *testi
 		"version": func(c *Config) { c.Collectibles[0].Version = 1 << 53 },
 	} {
 		t.Run(name, func(t *testing.T) {
-			c := DefaultConfiguration()
+			c := PriorDefaultConfiguration()
 			mutate(&c)
 			if err := ValidateConfig(c); err == nil {
 				t.Fatal("accepted unsafe integer")
@@ -109,7 +386,7 @@ func TestValidateConfigRejectsNumbersOutsideJavaScriptSafeIntegerDomain(t *testi
 }
 
 func TestValidateConfigRejectsInt64MinValue(t *testing.T) {
-	config := DefaultConfiguration()
+	config := PriorDefaultConfiguration()
 	config.Flight.DuckX = -1 << 63
 	if err := ValidateConfig(config); err == nil {
 		t.Fatal("ValidateConfig accepted MinInt64")
@@ -128,12 +405,12 @@ func TestCanonicalJSONRejectsNonSafeOrFractionalNumbers(t *testing.T) {
 }
 
 func TestRunEndedTotalsPresentAndIndependentFromState(t *testing.T) {
-	config := DefaultConfiguration()
+	config := PriorDefaultConfiguration()
 	id, err := ConfigIDFor(config)
 	if err != nil {
 		t.Fatal(err)
 	}
-	s, err := CreateRun(Descriptor{"totals-test", 1, SimulationVersion, GeneratorVersion, id}, config)
+	s, err := CreateRun(Descriptor{"totals-test", 1, PriorSimulationVersion, PriorGeneratorVersion, id}, config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -160,7 +437,7 @@ func TestRunEndedTotalsPresentAndIndependentFromState(t *testing.T) {
 }
 
 func TestGenerateNextKeepsInputAndResultIndependent(t *testing.T) {
-	input := foundationRun(t, DefaultConfiguration())
+	input := foundationRun(t, PriorDefaultConfiguration())
 	result, err := GenerateNext(input)
 	if err != nil {
 		t.Fatal(err)

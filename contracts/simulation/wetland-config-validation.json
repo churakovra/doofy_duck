@@ -1,0 +1,168 @@
+{
+  "fixtureRevision": "wetland-config-validation-1",
+  "cases": [
+    {
+      "name": "wetland-with-legacy-challenges",
+      "accepted": false,
+      "withChallenges": true
+    },
+    {
+      "name": "default-wetland",
+      "accepted": true
+    },
+    {
+      "name": "wetland-schedule-uses-authored-station-spacing",
+      "accepted": true,
+      "pipes": {
+        "spacing": 100000
+      }
+    },
+    {
+      "name": "no-stars",
+      "accepted": true,
+      "noStars": true
+    },
+    {
+      "name": "no-stars-exact-capacity",
+      "accepted": true,
+      "limits": {
+        "maxActivePipes": 8,
+        "maxActiveCollectibles": 10
+      },
+      "noStars": true
+    },
+    {
+      "name": "no-stars-exact-active-pipes-capacity",
+      "accepted": true,
+      "noStars": true,
+      "limits": {
+        "maxActivePipes": 10,
+        "maxActiveCollectibles": 10
+      }
+    },
+    {
+      "name": "custom-safe-world-and-width",
+      "accepted": true,
+      "flight": {
+        "duckHalfHeight": 15000
+      },
+      "pipes": {
+        "width": 64000,
+        "ceilingY": 20000,
+        "floorY": 581000
+      }
+    },
+    {
+      "name": "missing-feather",
+      "accepted": false,
+      "removeFeather": true
+    },
+    {
+      "name": "zero-recovery-spacing",
+      "accepted": false,
+      "recoverySpacing": 0
+    },
+    {
+      "name": "unapproved-recovery-spacing",
+      "accepted": false,
+      "recoverySpacing": 300000
+    },
+    {
+      "name": "coin-zero-x",
+      "accepted": false,
+      "coin": {
+        "family": "steady",
+        "step": 0,
+        "xOffset": 0
+      }
+    },
+    {
+      "name": "coin-oversized-x",
+      "accepted": false,
+      "coin": {
+        "family": "steady",
+        "step": 0,
+        "xOffset": 120001
+      }
+    },
+    {
+      "name": "coin-oversized-y",
+      "accepted": false,
+      "coin": {
+        "family": "steady",
+        "step": 0,
+        "yOffset": 70001
+      }
+    },
+    {
+      "name": "star-zero-x",
+      "accepted": false,
+      "starRoute": {
+        "xOffset": 0
+      }
+    },
+    {
+      "name": "star-negative-x",
+      "accepted": false,
+      "starRoute": {
+        "xOffset": -1
+      }
+    },
+    {
+      "name": "star-negative-y",
+      "accepted": false,
+      "starRoute": {
+        "yOffset": -1
+      }
+    },
+    {
+      "name": "star-oversized-y",
+      "accepted": false,
+      "starRoute": {
+        "yOffset": 70001
+      }
+    },
+    {
+      "name": "star-capacity-short",
+      "accepted": false,
+      "limits": {
+        "maxActivePipes": 10,
+        "maxActiveCollectibles": 10
+      }
+    },
+    {
+      "name": "no-star-capacity-short",
+      "accepted": false,
+      "limits": {
+        "maxActivePipes": 11,
+        "maxActiveCollectibles": 10
+      },
+      "noStars": true
+    },
+    {
+      "name": "custom-world-cannot-fit-debris-route",
+      "accepted": false,
+      "flight": {
+        "duckHalfHeight": 78000
+      }
+    },
+    {
+      "name": "coin-negative-oversized-x",
+      "accepted": false,
+      "coin": {
+        "family": "steady",
+        "step": 0,
+        "xOffset": -120001
+      }
+    },
+    {
+      "name": "coin-unrepresentable-y",
+      "accepted": false,
+      "coin": {
+        "family": "steady",
+        "step": 0,
+        "yOffset": 9007199254740992
+      }
+    }
+  ]
+}

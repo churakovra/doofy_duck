@@ -8,12 +8,12 @@ import (
 
 func newState(t *testing.T) sim.State {
 	t.Helper()
-	config := sim.DefaultConfiguration()
+	config := sim.PriorDefaultConfiguration()
 	configID, err := sim.ConfigIDFor(config)
 	if err != nil {
 		t.Fatal(err)
 	}
-	state, err := sim.CreateRun(sim.Descriptor{RunID: "00000000-0000-4000-8000-000000000001", Seed: 7, SimulationVersion: sim.SimulationVersion, GeneratorVersion: sim.GeneratorVersion, ConfigID: configID}, config)
+	state, err := sim.CreateRun(sim.Descriptor{RunID: "00000000-0000-4000-8000-000000000001", Seed: 7, SimulationVersion: sim.PriorSimulationVersion, GeneratorVersion: sim.PriorGeneratorVersion, ConfigID: configID}, config)
 	if err != nil {
 		t.Fatal(err)
 	}

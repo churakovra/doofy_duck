@@ -1,8 +1,8 @@
 import { configIdFor } from "./canonical.js";
-import { bonusY, generateNext, worldSpeedAt } from "./generation.js";
+import { bonusY, generateNext, wetlandRewardPoint, worldSpeedAt } from "./generation.js";
 import { deepFreeze, incrementCounter } from "./internal.js";
-import { DEFAULT_CONFIG, LEGACY_DEFAULT_CONFIG, validateConfig, validateDescriptor } from "./config.js";
-import { mix32, SIMULATION_VERSION, GENERATOR_VERSION, LEGACY_DEFAULT_CONFIG_ID, LEGACY_SIMULATION_VERSION, LEGACY_GENERATOR_VERSION, type Collectible, type GameConfig, type InputFrame, type Phase, type RunDescriptor, type RunDescriptorIdentity, type RunState, type StepResult, type GameEvent } from "./types.js";
+import { DEFAULT_CONFIG, LEGACY_DEFAULT_CONFIG, PRIOR_DEFAULT_CONFIG, validateConfig, validateDescriptor } from "./config.js";
+import { mix32, SIMULATION_VERSION, GENERATOR_VERSION, LEGACY_DEFAULT_CONFIG_ID, LEGACY_SIMULATION_VERSION, LEGACY_GENERATOR_VERSION, PRIOR_DEFAULT_CONFIG_ID, PRIOR_SIMULATION_VERSION, PRIOR_GENERATOR_VERSION, type Collectible, type GameConfig, type InputFrame, type Phase, type RunDescriptor, type RunDescriptorIdentity, type RunState, type StepResult, type GameEvent } from "./types.js";
 
 export function createRunDescriptor(
   identity: RunDescriptorIdentity,
@@ -10,10 +10,11 @@ export function createRunDescriptor(
 ): RunDescriptor {
   const configId = configIdFor(config);
   const legacy = configId === LEGACY_DEFAULT_CONFIG_ID;
+  const prior = configId === PRIOR_DEFAULT_CONFIG_ID;
   return {
     ...identity,
-    simulationVersion: legacy ? LEGACY_SIMULATION_VERSION : SIMULATION_VERSION,
-    generatorVersion: legacy ? LEGACY_GENERATOR_VERSION : GENERATOR_VERSION,
+    simulationVersion: legacy ? LEGACY_SIMULATION_VERSION : prior ? PRIOR_SIMULATION_VERSION : SIMULATION_VERSION,
+    generatorVersion: legacy ? LEGACY_GENERATOR_VERSION : prior ? PRIOR_GENERATOR_VERSION : GENERATOR_VERSION,
     configId,
   };
 }
@@ -23,7 +24,7 @@ export function createRun(
   config?: GameConfig,
 ): RunState {
   validateDescriptor(descriptor);
-  const resolvedConfig = config ?? (descriptor.configId === LEGACY_DEFAULT_CONFIG_ID ? LEGACY_DEFAULT_CONFIG : DEFAULT_CONFIG);
+  const resolvedConfig = config ?? (descriptor.configId === LEGACY_DEFAULT_CONFIG_ID ? LEGACY_DEFAULT_CONFIG : descriptor.configId === PRIOR_DEFAULT_CONFIG_ID ? PRIOR_DEFAULT_CONFIG : DEFAULT_CONFIG);
   validateConfig(resolvedConfig);
   if (descriptor.configId !== configIdFor(resolvedConfig))
     throw Error("configId does not identify supplied config");
@@ -56,6 +57,11 @@ export function createRun(
   };
   return generateNext(s).state;
 }
+function stationRightEdge(pipe: RunState["pipes"][number], config: GameConfig): number {
+  if (config.wetland && pipe.obstacles?.length)
+    return Math.max(...pipe.obstacles.map(obstacle => pipe.x + obstacle.xOffset + Math.floor(obstacle.width / 2)));
+  return pipe.x + Math.floor(config.pipes.width / 2);
+}
 function cloneConfig(config: GameConfig): GameConfig {
   const { starSchedule, ...base } = config;
   return {
@@ -70,6 +76,7 @@ function cloneConfig(config: GameConfig): GameConfig {
       pressureFamilyIds: [...config.challenges.pressureFamilyIds],
       families: config.challenges.families.map(family => ({ ...family, gapCenters: [...family.gapCenters] })),
     },
+    ...(config.wetland == null ? {} : { wetland: { ...config.wetland, stationSpacing: [...config.wetland.stationSpacing], introFamilies: [...config.wetland.introFamilies], pressureFamilies: [...config.wetland.pressureFamilies], starRoute: { ...config.wetland.starRoute }, families: config.wetland.families.map(family => ({ ...family, gapCenters: [...family.gapCenters], obstacleTypes: [...family.obstacleTypes], stationSpacing: [...family.stationSpacing], rewardRoute: family.rewardRoute.map(point => ({ ...point })) })) } }),
     ...(starSchedule == null ? {} : { starSchedule: { ...starSchedule } }),
   };
 }
@@ -129,6 +136,11 @@ export function step(
         r = p.x + Math.floor(pc.width / 2),
         dl = duck.x - f.duckHalfWidth,
         dr = duck.x + f.duckHalfWidth;
+      if (input.config.wetland && p.obstacles?.length) return p.obstacles.some(obstacle =>
+        dr >= obstacle.xOffset + p.x - Math.floor(obstacle.width / 2) &&
+        dl <= obstacle.xOffset + p.x + Math.floor(obstacle.width / 2) &&
+        y + f.duckHalfHeight >= obstacle.y && y - f.duckHalfHeight <= obstacle.y + obstacle.height,
+      );
       return (
         dr >= l &&
         dl <= r &&
@@ -151,16 +163,12 @@ export function step(
     outPipes = pipes.map((p) => {
       if (
         !p.scored &&
-        p.x + Math.floor(pc.width / 2) < duck.x - f.duckHalfWidth
+        stationRightEdge(p, input.config) < duck.x - f.duckHalfWidth
       ) {
         score = incrementCounter(score);
-        events.push({
-          type: "PipePassed",
-          runId: input.descriptor.runId,
-          pipeId: p.id,
-          score,
-          tick: input.tick + 1,
-        });
+        events.push(input.config.wetland
+          ? { type: "ObstaclePassed", runId: input.descriptor.runId, stationId: p.stationId ?? p.id, score, tick: input.tick + 1 }
+          : { type: "PipePassed", runId: input.descriptor.runId, pipeId: p.id, score, tick: input.tick + 1 });
         return { ...p, scored: true };
       }
       return p;
@@ -170,7 +178,12 @@ export function step(
     phase,
     tick: input.tick + 1,
     duck,
-    pipes: outPipes.filter((p) => p.x + pc.width >= -pc.width),
+    pipes: outPipes.filter((p) => input.config.wetland
+      ? stationRightEdge(p, input.config) >= duck.x - f.duckHalfWidth
+      : p.x + pc.width >= -pc.width),
+    ...(input.config.wetland && input.nextPipeX !== undefined
+      ? { nextPipeX: input.nextPipeX - speed }
+      : {}),
     score,
     nextInputSequence: expected,
     inputHistory: [],
@@ -209,6 +222,22 @@ export function step(
         return definition.weight > 0 && roll < cumulative;
       });
       const scheduledStar = next.config.starSchedule != null && pipe.index === nextStarPipeIndex;
+      const block = Math.floor(pipe.index / 4);
+      const wetlandRecovery = pipe.encounterFamily === "steady" && block >= 2 && block % 2 === 1;
+      const wetlandSmallTrail = pipe.encounterFamily === "steady" && (block === 0 || wetlandRecovery);
+      const wetlandTrail = next.config.wetland != null && (wetlandSmallTrail ? pipe.stationStep === 1 || pipe.stationStep === 3 : true);
+      if (wetlandTrail && next.collectibles.length >= next.config.limits.maxActiveCollectibles)
+        throw Error("wetland reward capacity invariant violated");
+      if (wetlandTrail) {
+        const definition = next.config.collectibles.find(item => item.typeId === "FEATHER")!;
+        const collectibleId = `feather-trail-${block}-${pipe.stationStep}`;
+        spawnedThisTick.add(collectibleId);
+        next = { ...next, collectibles: [...next.collectibles, {
+          id: collectibleId, typeId: "FEATHER",
+          ...wetlandRewardPoint(next.config, pipe, definition.radius),
+          amount: 1, radius: definition.radius, collected: false,
+        }] };
+      }
       if (scheduledStar) {
         const activeStars = next.collectibles.filter(collectible => collectible.typeId === "GAME_STAR").length;
         if (activeStars > 0 || next.collectibles.length >= next.config.limits.maxActiveCollectibles)
@@ -222,8 +251,9 @@ export function step(
           collectibles: [...next.collectibles, {
             id: collectibleId,
             typeId: "GAME_STAR",
-            x: pipe.x,
-            y: bonusY(next.config, input.descriptor.seed, pipe, definition.radius),
+            ...(next.config.wetland
+              ? wetlandRewardPoint(next.config, pipe, definition.radius, true)
+              : { x: pipe.x, y: bonusY(next.config, input.descriptor.seed, pipe, definition.radius) }),
             amount: 1,
             radius: definition.radius,
             collected: false,
@@ -237,7 +267,7 @@ export function step(
       const regularCount = next.config.starSchedule == null
         ? next.collectibles.length
         : next.collectibles.filter(collectible => collectible.typeId !== "GAME_STAR").length;
-      if (chosen && !scheduledStar && regularCount < next.config.limits.maxActiveCollectibles - (next.config.starSchedule == null ? 0 : 1)) {
+      if (!next.config.wetland && chosen && !scheduledStar && regularCount < next.config.limits.maxActiveCollectibles - (next.config.starSchedule == null ? 0 : 1)) {
         const collectibleId = `collectible-${pipe.index}`;
         spawnedThisTick.add(collectibleId);
         next = {

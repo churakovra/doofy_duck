@@ -588,6 +588,96 @@ def test_new_settlement_policy_credits_uncapped_stars_and_keeps_coins_capped(cli
     assert status.json()["credited"] == {"FEATHER": "10", "GAME_STAR": "700"}
 
 
+def test_wetland_settlement_is_idempotent_caps_only_feathers_and_preserves_legacy_policy(client):
+    from app import database
+    from app.economy.models import CompletionSettlement
+    from app.economy.settlement import process_settlement_batch
+    from app.economy.wallet.models import Wallet, WalletLedgerEntry
+
+    token, account_id = _login(client, 420033)
+    wetland_run = UUID(int=434)
+    first = _completion_event(
+        account_id=account_id,
+        run_id=wetland_run,
+        life_index=0,
+        feathers=20,
+        stars=900,
+        simulation_version="2.0.0",
+        generator_version="2.0.0",
+        config_id="dd-v2-wetland-v1",
+    )
+    duplicate = dict(first)
+    _accept_completion(client, first)
+    _accept_completion(client, duplicate)
+    _accept_completion(
+        client,
+        _completion_event(
+            account_id=account_id,
+            run_id=wetland_run,
+            life_index=1,
+            feathers=20,
+            stars=700,
+            simulation_version="2.0.0",
+            generator_version="2.0.0",
+            config_id="dd-v2-wetland-v1",
+        ),
+    )
+    legacy_run = UUID(int=435)
+    _accept_completion(
+        client,
+        _completion_event(
+            account_id=account_id,
+            run_id=legacy_run,
+            life_index=0,
+            feathers=5,
+            stars=500,
+            simulation_version="1.3.0",
+            generator_version="1.2.0",
+            config_id="dd-v1-stepped-v1",
+        ),
+    )
+    settings = replace(
+        client.app.state.settings,
+        economy_settlement_enabled=True,
+        economy_settlement_activated_at=datetime.now(UTC) - timedelta(minutes=1),
+    )
+    with database.EconomySession.begin() as session:
+        assert process_settlement_batch(session, settings=settings, limit=10) == 3
+    with database.EconomySession() as session:
+        wetland_rows = session.scalars(
+            select(CompletionSettlement)
+            .where(CompletionSettlement.run_id == wetland_run)
+            .order_by(CompletionSettlement.life_index)
+        ).all()
+        legacy = session.scalar(select(CompletionSettlement).where(CompletionSettlement.run_id == legacy_run))
+        assert [
+            (row.status, row.policy_version, row.feathers_credited, row.stars_credited) for row in wetland_rows
+        ] == [
+            ("committed", "verified-pickups-v3-wetland", 20, 900),
+            ("committed", "verified-pickups-v3-wetland", 10, 700),
+        ]
+        assert legacy is not None and legacy.policy_version == "verified-pickups-v1"
+        assert legacy.feathers_credited == 5 and legacy.stars_credited == 0
+        assert (
+            session.scalar(select(Wallet.balance).where(Wallet.account_id == account_id, Wallet.currency == "FEATHER"))
+            == 35
+        )
+        assert (
+            session.scalar(
+                select(Wallet.balance).where(Wallet.account_id == account_id, Wallet.currency == "GAME_STAR")
+            )
+            == 1600
+        )
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(WalletLedgerEntry)
+                .where(WalletLedgerEntry.policy_version == "verified-pickups-v3-wetland")
+            )
+            == 4
+        )
+
+
 def test_historical_backfill_credits_coins_for_both_known_profiles_and_no_stars(client):
     from app import database
     from app.economy.models import CompletionSettlement
@@ -613,8 +703,19 @@ def test_historical_backfill_credits_coins_for_both_known_profiles_and_no_stars(
         generator_version="1.3.0",
         config_id="dd-v1-star-interval-v1",
     )
+    preactivation_wetland_event = _completion_event(
+        account_id=account_id,
+        run_id=UUID(int=436),
+        feathers=20,
+        stars=700,
+        completed_at=cutoff - timedelta(minutes=10),
+        simulation_version="2.0.0",
+        generator_version="2.0.0",
+        config_id="dd-v2-wetland-v1",
+    )
     _accept_completion(client, old_identity_event)
     _accept_completion(client, new_identity_event)
+    _accept_completion(client, preactivation_wetland_event)
     settings = replace(
         client.app.state.settings,
         economy_settlement_enabled=True,
@@ -623,18 +724,24 @@ def test_historical_backfill_credits_coins_for_both_known_profiles_and_no_stars(
     with database.EconomySession() as session:
         plan = plan_historical_backfill(session, activated_at=cutoff, limit=100)
         assert plan.completion_count == 2
+        assert plan.unsupported_count == 1
         assert plan.feathers_to_credit == 40
         assert plan.game_stars_to_credit == 0
     with database.EconomySession.begin() as session:
         result = execute_historical_backfill(session, settings=settings, limit=100, execute=True)
+        assert result.completions_considered == 3
         assert result.feathers_credited == 40
         assert result.game_stars_credited == 0
+        assert result.unsupported_count == 1
     with database.EconomySession() as session:
         settlements = session.scalars(select(CompletionSettlement).order_by(CompletionSettlement.run_id)).all()
         assert [row.policy_version for row in settlements] == [
             "verified-pickups-v1",
             "verified-pickups-v2-historical-coins",
+            None,
         ]
+        assert settlements[2].status == "actionable_failure"
+        assert settlements[2].reason == "unsupported_simulation_identity"
         assert all(row.stars_credited == 0 for row in settlements)
         assert (
             session.scalar(select(Wallet.balance).where(Wallet.account_id == account_id, Wallet.currency == "FEATHER"))

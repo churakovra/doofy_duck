@@ -354,6 +354,9 @@ func TestPostgresCompletionOutboxRetriesAndOutageGrace(t *testing.T) {
 		t.Fatalf("create status=%d", resp.StatusCode)
 	}
 	state := run.State
+	if state.Descriptor.SimulationVersion != sim.WetlandSimulationVersion || state.Descriptor.GeneratorVersion != sim.WetlandGeneratorVersion || state.Descriptor.ConfigID != sim.WetlandDefaultConfigID || state.Config.Wetland == nil {
+		t.Fatalf("new run did not pin wetland rules: %+v", state.Descriptor)
+	}
 	var ticks [][]sim.Input
 	for i := 0; i < CheckpointTickLimit; i++ {
 		inputs := []sim.Input(nil)
@@ -704,12 +707,12 @@ func TestPostgresBestScoreProjectionIsMonotonicAndAccountScoped(t *testing.T) {
 	if positiveResp.StatusCode != http.StatusCreated {
 		t.Fatalf("positive run create status=%d", positiveResp.StatusCode)
 	}
-	config := sim.DefaultConfiguration()
+	config := sim.PriorDefaultConfiguration()
 	configID, err := sim.ConfigIDFor(config)
 	if err != nil {
 		t.Fatal(err)
 	}
-	state, err = sim.CreateRun(sim.Descriptor{RunID: positiveRun.RunID, Seed: 42, SimulationVersion: sim.SimulationVersion, GeneratorVersion: sim.GeneratorVersion, ConfigID: configID}, config)
+	state, err = sim.CreateRun(sim.Descriptor{RunID: positiveRun.RunID, Seed: 42, SimulationVersion: sim.PriorSimulationVersion, GeneratorVersion: sim.PriorGeneratorVersion, ConfigID: configID}, config)
 	if err != nil {
 		t.Fatal(err)
 	}

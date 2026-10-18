@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
-  DEFAULT_CONFIG, configIdFor, createRun, createRunDescriptor, generateNext, makeInput, validateConfig,
+  PRIOR_DEFAULT_CONFIG, configIdFor, createRun, createRunDescriptor, generateNext, makeInput, validateConfig,
   pauseRun, resumeRun, restartRun, step, worldSpeedAt,
 } from '../src/index.js';
 import type { RunState } from '../src/index.js';
 
-const descriptor = createRunDescriptor({ runId: 'challenge-test', seed: 0x12345678 });
+const descriptor = createRunDescriptor({ runId: 'challenge-test', seed: 0x12345678 }, PRIOR_DEFAULT_CONFIG);
 
 function blockAt(block: number, seed = descriptor.seed): RunState {
-  const base = createRun(createRunDescriptor({ runId: descriptor.runId, seed }));
+  const base = createRun(createRunDescriptor({ runId: descriptor.runId, seed }, PRIOR_DEFAULT_CONFIG), PRIOR_DEFAULT_CONFIG);
   return {
     ...base,
     config: { ...base.config, pipes: { ...base.config.pipes, horizon: 1_400_000 } },
@@ -65,46 +65,46 @@ describe('stepped default challenges', () => {
     expect(resumeRun(paused).pipes.map(pipe => pipe.challengeId)).toEqual(
       started.pipes.map(pipe => pipe.challengeId),
     );
-    const restarted = restartRun(started, createRunDescriptor({ runId: 'challenge-restart', seed: descriptor.seed }));
+    const restarted = restartRun(started, createRunDescriptor({ runId: 'challenge-restart', seed: descriptor.seed }, PRIOR_DEFAULT_CONFIG));
     expect(restarted.pipes.map(pipe => pipe.challengeId)).toEqual(initial.pipes.map(pipe => pipe.challengeId));
   });
 
   it('lets custom configurations explicitly retain legacy gap-only generation', () => {
-    const config = { ...DEFAULT_CONFIG, challenges: null };
+    const config = { ...PRIOR_DEFAULT_CONFIG, challenges: null };
     const customDescriptor = createRunDescriptor({ runId: 'legacy-custom', seed: 8 }, config);
     const pipes = createRun(customDescriptor, config).pipes;
     expect(pipes.every(pipe => pipe.challengeId === undefined)).toBe(true);
     const withoutChallenges = Object.fromEntries(
-      Object.entries(DEFAULT_CONFIG).filter(([key]) => key !== 'challenges'),
-    ) as Omit<typeof DEFAULT_CONFIG, 'challenges'>;
+      Object.entries(PRIOR_DEFAULT_CONFIG).filter(([key]) => key !== 'challenges'),
+    ) as Omit<typeof PRIOR_DEFAULT_CONFIG, 'challenges'>;
     expect(configIdFor(withoutChallenges)).toBe(configIdFor(config));
-    expect(configIdFor(config)).not.toBe(configIdFor(DEFAULT_CONFIG));
+    expect(configIdFor(config)).not.toBe(configIdFor(PRIOR_DEFAULT_CONFIG));
   });
 
   it('validates challenge families and freezes defensive config copies', () => {
-    const family = DEFAULT_CONFIG.challenges!.families.find(item => item.id === 'pressure-rise')!;
-    expect(() => validateConfig({ ...DEFAULT_CONFIG, challenges: {
-      ...DEFAULT_CONFIG.challenges!, families: DEFAULT_CONFIG.challenges!.families.map(item =>
+    const family = PRIOR_DEFAULT_CONFIG.challenges!.families.find(item => item.id === 'pressure-rise')!;
+    expect(() => validateConfig({ ...PRIOR_DEFAULT_CONFIG, challenges: {
+      ...PRIOR_DEFAULT_CONFIG.challenges!, families: PRIOR_DEFAULT_CONFIG.challenges!.families.map(item =>
         item.id === family.id ? { ...item, gapCenters: [100000, 100000, 100000, 100000] } : item,
       ),
     } })).toThrow(/challenge/i);
-    expect(() => validateConfig({ ...DEFAULT_CONFIG, challenges: {
-      ...DEFAULT_CONFIG.challenges!, families: DEFAULT_CONFIG.challenges!.families.map(item =>
+    expect(() => validateConfig({ ...PRIOR_DEFAULT_CONFIG, challenges: {
+      ...PRIOR_DEFAULT_CONFIG.challenges!, families: PRIOR_DEFAULT_CONFIG.challenges!.families.map(item =>
         item.id === 'intro-steady' ? { ...item, id: '   ' } : item,
       ),
     } })).toThrow(/challenge/i);
-    expect(() => validateConfig({ ...DEFAULT_CONFIG, challenges: {
-      ...DEFAULT_CONFIG.challenges!, families: DEFAULT_CONFIG.challenges!.families.map(item =>
+    expect(() => validateConfig({ ...PRIOR_DEFAULT_CONFIG, challenges: {
+      ...PRIOR_DEFAULT_CONFIG.challenges!, families: PRIOR_DEFAULT_CONFIG.challenges!.families.map(item =>
         item.id === 'intro-steady' ? { ...item, gapCenters: [320000, 280000, 280000, 280000] } : item,
       ),
     } })).toThrow(/intro/i);
-    expect(() => validateConfig({ ...DEFAULT_CONFIG, challenges: {
-      ...DEFAULT_CONFIG.challenges!, families: DEFAULT_CONFIG.challenges!.families.map(item =>
+    expect(() => validateConfig({ ...PRIOR_DEFAULT_CONFIG, challenges: {
+      ...PRIOR_DEFAULT_CONFIG.challenges!, families: PRIOR_DEFAULT_CONFIG.challenges!.families.map(item =>
         item.id === 'recovery-steady' ? { ...item, gapCenters: [280000, 240000, 200000, 190000] } : item,
       ),
     } })).toThrow(/boundary/i);
-    const input = { ...DEFAULT_CONFIG, challenges: {
-      ...DEFAULT_CONFIG.challenges!, families: DEFAULT_CONFIG.challenges!.families.map(item => ({ ...item, gapCenters: [...item.gapCenters] })),
+    const input = { ...PRIOR_DEFAULT_CONFIG, challenges: {
+      ...PRIOR_DEFAULT_CONFIG.challenges!, families: PRIOR_DEFAULT_CONFIG.challenges!.families.map(item => ({ ...item, gapCenters: [...item.gapCenters] })),
     } };
     const run = createRun(createRunDescriptor({ runId: 'copy-check', seed: 2 }, input), input);
     input.challenges!.families[0]!.gapCenters[0] = 1;
@@ -112,9 +112,9 @@ describe('stepped default challenges', () => {
   });
 
   it('requires pressure families to leave no single safe duck lane for the whole tier', () => {
-    const pressure = DEFAULT_CONFIG.challenges!.families.filter(family => family.band === 'pressure');
+    const pressure = PRIOR_DEFAULT_CONFIG.challenges!.families.filter(family => family.band === 'pressure');
     const centers = pressure.flatMap(family => family.gapCenters);
-    const safeMargin = DEFAULT_CONFIG.pipes.gapHeight / 2 - DEFAULT_CONFIG.flight.duckHalfHeight;
+    const safeMargin = PRIOR_DEFAULT_CONFIG.pipes.gapHeight / 2 - PRIOR_DEFAULT_CONFIG.flight.duckHalfHeight;
     expect(Math.min(...centers) + safeMargin).toBeLessThan(Math.max(...centers) - safeMargin);
   });
 
@@ -123,10 +123,10 @@ describe('stepped default challenges', () => {
     const collisionEntryX = 138000;
     const speedCap = 4800;
     const heldLaneTicks = 18;
-    expect(worldSpeedAt(DEFAULT_CONFIG, 2701)).toBe(speedCap);
+    expect(worldSpeedAt(PRIOR_DEFAULT_CONFIG, 2701)).toBe(speedCap);
     expect((observationX - collisionEntryX) / speedCap).toBe(46.25);
     expect(heldLaneTicks).toBeLessThan((observationX - collisionEntryX) / speedCap);
-    const set = DEFAULT_CONFIG.challenges!;
+    const set = PRIOR_DEFAULT_CONFIG.challenges!;
     const families = new Map(set.families.map(family => [family.id, family]));
     const cruise = set.cruiseFamilyIds;
     const edges: [string, string][] = [];
@@ -147,7 +147,7 @@ describe('stepped default challenges', () => {
         phase: 'RUNNING', tick: 2700,
         duck: { ...initial.duck, y: families.get(fromId)!.gapCenters[3]! + offset, vy },
         pipes: Array.from({ length: 8 }, (_, i) => ({
-          id: `witness-${i}`, index: i, x: 360000 + i * DEFAULT_CONFIG.pipes.spacing,
+          id: `witness-${i}`, index: i, x: 360000 + i * PRIOR_DEFAULT_CONFIG.pipes.spacing,
           gapCenter: i < 4 ? target.gapCenters[i]! : 280000, scored: false,
         })),
         nextPipeIndex: 8, lastGapCenter: 280000, nextSpawnPipeIndex: 8,
@@ -168,7 +168,7 @@ describe('stepped default challenges', () => {
     const transitions = new Set<string>();
     let survived = 0;
     for (let seed = 0; seed < 64; seed++) {
-      let state = createRun(createRunDescriptor({ runId: `challenge-corpus-${seed}`, seed }));
+      let state = createRun(createRunDescriptor({ runId: `challenge-corpus-${seed}`, seed }, PRIOR_DEFAULT_CONFIG), PRIOR_DEFAULT_CONFIG);
       let sequence = 0;
       let previousFamily = '';
       let observedTarget = 280000;

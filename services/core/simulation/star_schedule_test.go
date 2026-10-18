@@ -27,12 +27,12 @@ func TestStarScheduleMatchesAuthoredParityVectors(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, example := range fixture.Cases {
-		config := DefaultConfiguration()
+		config := PriorDefaultConfiguration()
 		id, err := ConfigIDFor(config)
 		if err != nil {
 			t.Fatal(err)
 		}
-		state, err := CreateRun(Descriptor{RunID: "star-vector", Seed: example.Seed, SimulationVersion: SimulationVersion, GeneratorVersion: GeneratorVersion, ConfigID: id}, config)
+		state, err := CreateRun(Descriptor{RunID: "star-vector", Seed: example.Seed, SimulationVersion: PriorSimulationVersion, GeneratorVersion: PriorGeneratorVersion, ConfigID: id}, config)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -65,12 +65,12 @@ func TestStarScheduleIntervalsAndReservedCapacity(t *testing.T) {
 	firstIntervals := map[int64]bool{}
 	laterIntervals := map[int64]bool{}
 	for seed := int64(0); seed < 64; seed++ {
-		config := DefaultConfiguration()
+		config := PriorDefaultConfiguration()
 		id, err := ConfigIDFor(config)
 		if err != nil {
 			t.Fatal(err)
 		}
-		state, err := CreateRun(Descriptor{RunID: "star-schedule", Seed: seed, SimulationVersion: SimulationVersion, GeneratorVersion: GeneratorVersion, ConfigID: id}, config)
+		state, err := CreateRun(Descriptor{RunID: "star-schedule", Seed: seed, SimulationVersion: PriorSimulationVersion, GeneratorVersion: PriorGeneratorVersion, ConfigID: id}, config)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -114,17 +114,17 @@ func TestStarScheduleIntervalsAndReservedCapacity(t *testing.T) {
 }
 
 func TestScheduledStarConfigRequiresCapacityAndTravelDistance(t *testing.T) {
-	config := DefaultConfiguration()
+	config := PriorDefaultConfiguration()
 	config.Limits.MaxActiveCollectibles = 2
 	if err := ValidateConfig(config); err == nil {
 		t.Fatal("accepted a scheduled Star config without a reserved slot")
 	}
-	config = DefaultConfiguration()
+	config = PriorDefaultConfiguration()
 	config.Pipes.Spacing = 100000
 	if err := ValidateConfig(config); err == nil {
 		t.Fatal("accepted a scheduled Star config whose prior Star can remain visible")
 	}
-	config = DefaultConfiguration()
+	config = PriorDefaultConfiguration()
 	config.Pipes.Spacing = 121000
 	if err := ValidateConfig(config); err == nil {
 		t.Fatal("accepted a scheduled Star config that can overlap the prune boundary")
@@ -180,7 +180,7 @@ func TestExplicitNullStarConfigMatchesFrozenLegacyState(t *testing.T) {
 }
 
 func TestMinimumValidStarPruneSpacingRunsWithoutOverlap(t *testing.T) {
-	config := DefaultConfiguration()
+	config := PriorDefaultConfiguration()
 	config.Challenges = nil
 	config.Pipes.Spacing = 121251
 	config.Pipes.MaxSpeed = 3000
@@ -190,7 +190,7 @@ func TestMinimumValidStarPruneSpacingRunsWithoutOverlap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	state, err := CreateRun(Descriptor{RunID: "star-prune-valid-boundary", Seed: 0, SimulationVersion: SimulationVersion, GeneratorVersion: GeneratorVersion, ConfigID: id}, config)
+	state, err := CreateRun(Descriptor{RunID: "star-prune-valid-boundary", Seed: 0, SimulationVersion: PriorSimulationVersion, GeneratorVersion: PriorGeneratorVersion, ConfigID: id}, config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -210,7 +210,7 @@ func TestMinimumValidStarPruneSpacingRunsWithoutOverlap(t *testing.T) {
 }
 
 func TestScheduledStarSuppressesSamePipeCoinAfterAdvancingCoinRNG(t *testing.T) {
-	config := DefaultConfiguration()
+	config := PriorDefaultConfiguration()
 	config.SpawnNoneWeight = 0
 	for i := range config.Collectibles {
 		if config.Collectibles[i].TypeID == "FEATHER" {
@@ -221,7 +221,7 @@ func TestScheduledStarSuppressesSamePipeCoinAfterAdvancingCoinRNG(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	state, err := CreateRun(Descriptor{RunID: "star-coin-collision", Seed: 42, SimulationVersion: SimulationVersion, GeneratorVersion: GeneratorVersion, ConfigID: id}, config)
+	state, err := CreateRun(Descriptor{RunID: "star-coin-collision", Seed: 42, SimulationVersion: PriorSimulationVersion, GeneratorVersion: PriorGeneratorVersion, ConfigID: id}, config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -246,12 +246,12 @@ func TestScheduledStarSuppressesSamePipeCoinAfterAdvancingCoinRNG(t *testing.T) 
 }
 
 func TestPauseResumePreservesScheduledStarReplay(t *testing.T) {
-	config := DefaultConfiguration()
+	config := PriorDefaultConfiguration()
 	id, err := ConfigIDFor(config)
 	if err != nil {
 		t.Fatal(err)
 	}
-	descriptor := Descriptor{RunID: "star-pause", Seed: 981, SimulationVersion: SimulationVersion, GeneratorVersion: GeneratorVersion, ConfigID: id}
+	descriptor := Descriptor{RunID: "star-pause", Seed: 981, SimulationVersion: PriorSimulationVersion, GeneratorVersion: PriorGeneratorVersion, ConfigID: id}
 	initial, err := CreateRun(descriptor, config)
 	if err != nil {
 		t.Fatal(err)
@@ -309,12 +309,12 @@ func TestLegacyDescriptorUsesLegacyRules(t *testing.T) {
 }
 
 func TestScheduledStarPickupCreditsExactlyOne(t *testing.T) {
-	config := DefaultConfiguration()
+	config := PriorDefaultConfiguration()
 	id, err := ConfigIDFor(config)
 	if err != nil {
 		t.Fatal(err)
 	}
-	descriptor := Descriptor{RunID: "star-pickup", Seed: 12, SimulationVersion: SimulationVersion, GeneratorVersion: GeneratorVersion, ConfigID: id}
+	descriptor := Descriptor{RunID: "star-pickup", Seed: 12, SimulationVersion: PriorSimulationVersion, GeneratorVersion: PriorGeneratorVersion, ConfigID: id}
 	state, err := CreateRun(descriptor, config)
 	if err != nil {
 		t.Fatal(err)
@@ -347,12 +347,12 @@ func TestScheduledStarPickupCreditsExactlyOne(t *testing.T) {
 }
 
 func TestUncollectedScheduledStarExpiresWithoutMovingItsNextTarget(t *testing.T) {
-	config := DefaultConfiguration()
+	config := PriorDefaultConfiguration()
 	id, err := ConfigIDFor(config)
 	if err != nil {
 		t.Fatal(err)
 	}
-	descriptor := Descriptor{RunID: "star-uncollected", Seed: 12, SimulationVersion: SimulationVersion, GeneratorVersion: GeneratorVersion, ConfigID: id}
+	descriptor := Descriptor{RunID: "star-uncollected", Seed: 12, SimulationVersion: PriorSimulationVersion, GeneratorVersion: PriorGeneratorVersion, ConfigID: id}
 	state, err := CreateRun(descriptor, config)
 	if err != nil {
 		t.Fatal(err)

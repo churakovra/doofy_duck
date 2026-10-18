@@ -17,6 +17,30 @@ export function paintWorld(
   const ceilingY = px(pipes.ceilingY);
   const floorY = px(pipes.floorY);
   for (const pipe of state.pipes) {
+    if (state.config.wetland && pipe.obstacles) {
+      for (const obstacle of pipe.obstacles) {
+        const x = px(pipe.x + obstacle.xOffset);
+        const y = px(obstacle.y);
+        const width = px(obstacle.width);
+        const height = px(obstacle.height);
+        const left = x - width / 2;
+        if (obstacle.typeId === 'pipes') {
+          world.roundRect(left, y, width, height, 7).fill(appearance.world.pipe);
+          const capY = obstacle.y < pipe.gapCenter ? y + height - 10 : y;
+          world.roundRect(left - 3, capY, width + 6, 10, 4).fill(appearance.world.pipeCap);
+        } else if (obstacle.typeId === 'vine') {
+          world.roundRect(left, y, width, height, 5).fill(appearance.world.pipe);
+          world.ellipse(x, y + height - 3, width * 0.72, 5).fill(appearance.world.pipeCap);
+        } else if (obstacle.typeId === 'rock') {
+          world.roundRect(left, y, width, height, 7).fill(appearance.world.pipe);
+          world.ellipse(x, y, width * 0.55, 5).fill(appearance.world.pipeCap);
+        } else {
+          world.roundRect(left, y, width, height, 8).fill(appearance.world.pipe);
+          world.circle(x - width * 0.2, y + height * 0.3, Math.min(width, height) * 0.12).fill(appearance.world.pipeCap);
+        }
+      }
+      continue;
+    }
     const x = px(pipe.x);
     const gapTop = px(pipe.gapCenter - Math.floor(pipes.gapHeight / 2));
     const gapBottom = px(pipe.gapCenter + Math.floor(pipes.gapHeight / 2));
@@ -37,8 +61,9 @@ export function paintWorld(
       ? appearance.collectibles[definition.appearance]
       : undefined;
     const palette = colors ?? appearance.fallbackCollectible;
-    world.circle(x, y, 13).fill(palette.outer);
-    world.circle(x, y, 7).fill(palette.inner);
+    const radius = px(collectible.radius);
+    world.circle(x, y, radius).fill(palette.outer);
+    world.circle(x, y, Math.max(2, radius * 0.55)).fill(palette.inner);
   }
 }
 

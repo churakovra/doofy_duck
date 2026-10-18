@@ -1,6 +1,30 @@
 import { deepFreeze, incrementCounter, MAX_COUNTER } from "./internal.js";
 import { validateConfig } from "./config.js";
-import { mix32, type GameConfig, type Pipe, type RunState, type StepResult } from "./types.js";
+import { mix32, type EncounterFamilyId, type GameConfig, type ObstacleDefinition, type Pipe, type RunState, type StepResult } from "./types.js";
+
+function encounter(seed: number, block: number, intro: readonly EncounterFamilyId[], pressure: readonly EncounterFamilyId[]): EncounterFamilyId {
+  if (block < intro.length) return intro[block]!;
+  const pressureIndex = Math.floor((block - intro.length) / 2);
+  if ((block - intro.length) % 2 === 1) return "steady";
+  const offset = mix32(seed ^ 0x85ebca6b) % pressure.length;
+  return pressure[(offset + pressureIndex) % pressure.length]!;
+}
+
+function authoredObstacles(typeId: "pipes" | "vine" | "rock" | "debris", gapCenter: number, config: GameConfig): readonly ObstacleDefinition[] {
+  const p = config.pipes;
+  const half = Math.floor(p.gapHeight / 2);
+  const openingTop = gapCenter - half;
+  const openingBottom = gapCenter + half;
+  const width = p.width;
+  if (typeId === "pipes") return [
+    { typeId, xOffset: 0, y: p.ceilingY, width, height: openingTop - p.ceilingY },
+    { typeId, xOffset: 0, y: openingBottom, width, height: p.floorY - openingBottom },
+  ];
+  if (typeId === "vine") return [{ typeId, xOffset: 0, y: p.ceilingY, width, height: openingTop - p.ceilingY }];
+  if (typeId === "rock") return [{ typeId, xOffset: 0, y: openingBottom, width, height: p.floorY - openingBottom }];
+  const height = 42000;
+  return [{ typeId, xOffset: 0, y: gapCenter - Math.floor(height / 2), width, height }];
+}
 
 export function generateNext(s: RunState): StepResult {
   const pipes = [...s.pipes];
@@ -10,9 +34,11 @@ export function generateNext(s: RunState): StepResult {
   const challenge = s.config.challenges;
   const challengeFamilies = challenge ? new Map(challenge.families.map(family => [family.id, family])) : undefined;
   let previousGap = s.lastGapCenter;
-  let x = pipes.length
-    ? pipes[pipes.length - 1]!.x + spacing
-    : s.config.pipes.safeLeadIn;
+  let x = s.config.wetland && s.nextPipeX !== undefined
+    ? s.nextPipeX
+    : pipes.length
+      ? pipes[pipes.length - 1]!.x + (pipes[pipes.length - 1]!.stationSpacing ?? spacing)
+      : s.nextPipeX ?? s.config.pipes.safeLeadIn;
   while (
     pipes.length < s.config.limits.maxActivePipes &&
     x <= s.config.pipes.horizon
@@ -23,7 +49,14 @@ export function generateNext(s: RunState): StepResult {
     const challengeStep = challenge ? index % challenge.pipesPerFamily : undefined;
     const challengeBlock = challenge ? Math.floor(index / challenge.pipesPerFamily) : 0;
     let challengeId: string | undefined;
+    const wetland = s.config.wetland;
+    const stationStep = index % 4;
+    const family = wetland ? encounter(s.descriptor.seed, Math.floor(index / 4), wetland.introFamilies, wetland.pressureFamilies) : undefined;
+    const familySpec = family === undefined ? undefined : wetland!.families.find(item => item.id === family)!;
+    const stationSpacing = familySpec === undefined ? undefined : family === "steady" && Math.floor(index / 4) >= wetland!.introFamilies.length
+      ? wetland!.recoverySpacing : familySpec.stationSpacing[stationStep]!;
     let raw = p.gapMinCenter + sample % (p.gapMaxCenter - p.gapMinCenter + 1);
+    if (familySpec) raw = familySpec.gapCenters[stationStep]!;
     if (challenge) {
       if (challengeBlock === 0) challengeId = challenge.introFamilyId;
       else if (challengeBlock <= 2) {
@@ -45,12 +78,15 @@ export function generateNext(s: RunState): StepResult {
     previousGap = gapCenter;
     pipes.push({ id: `pipe-${index}`, index, x, gapCenter, scored: false,
       ...(challengeId === undefined ? {} : { challengeId, challengeStep: challengeStep! }),
+      ...(family === undefined ? {} : { stationId: `station-${index}`, stationStep, encounterFamily: family, stationSpacing: stationSpacing!,
+        obstacles: authoredObstacles(familySpec!.obstacleTypes[stationStep]!, gapCenter, s.config) }),
     });
     index = incrementCounter(index);
-    x += spacing;
+    x += stationSpacing ?? spacing;
   }
   return {
-    state: deepFreeze({ ...s, pipes, rngState: rng, nextPipeIndex: index, lastGapCenter: previousGap }),
+    state: deepFreeze({ ...s, pipes, rngState: rng, nextPipeIndex: index, lastGapCenter: previousGap,
+      ...(s.config.wetland ? { nextPipeX: x } : {}) }),
     events: [],
   };
 }
@@ -67,6 +103,30 @@ export function bonusY(config: GameConfig, seed: number, pipe: Pipe, radius: num
   const magnitude = 16000 + sample % Math.max(1, maxOffset - 15999);
   const signed = (sample & 0x80000000) ? -magnitude : magnitude;
   return Math.max(innerLow, Math.min(innerHigh, pipe.gapCenter + signed));
+}
+export function wetlandRewardPoint(config: GameConfig, pipe: Pipe, radius: number, star = false): { x: number; y: number } {
+  const catalog = config.wetland!;
+  const family = catalog.families.find(item => item.id === pipe.encounterFamily)!;
+  const authored = star ? catalog.starRoute : family.rewardRoute[pipe.stationStep!]!;
+  const debris = pipe.obstacles?.some(obstacle => obstacle.typeId === "debris") ?? false;
+  const half = Math.floor(config.pipes.gapHeight / 2);
+  const safeOpeningOffset = half - config.flight.duckHalfHeight - radius - 2;
+  let offset: number;
+  if (debris) {
+    const clearance = 21000 + config.flight.duckHalfHeight + 1;
+    const minY = config.pipes.ceilingY + config.flight.duckHalfHeight;
+    const maxY = config.pipes.floorY - config.flight.duckHalfHeight;
+    const upperReach = pipe.gapCenter - minY;
+    const lowerReach = maxY - pipe.gapCenter;
+    let direction = Math.sign(authored.yOffset);
+    if (direction > 0 && lowerReach < clearance) direction = -1;
+    if (direction < 0 && upperReach < clearance) direction = 1;
+    const reach = direction > 0 ? lowerReach : upperReach;
+    offset = direction * Math.max(clearance, Math.min(Math.abs(authored.yOffset), reach));
+  } else {
+    offset = Math.sign(authored.yOffset) * Math.min(Math.abs(authored.yOffset), safeOpeningOffset);
+  }
+  return { x: pipe.x + authored.xOffset, y: pipe.gapCenter + offset };
 }
 /** Speed for a one-based active simulation tick; READY is still stationary. */
 export function worldSpeedAt(config: GameConfig, tick: number, score = 0): number {

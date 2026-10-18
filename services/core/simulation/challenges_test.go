@@ -9,13 +9,13 @@ import (
 
 func challengeBlockAt(t *testing.T, block int64, seed int64) State {
 	t.Helper()
-	c := DefaultConfiguration()
+	c := PriorDefaultConfiguration()
 	c.Pipes.Horizon = 1_400_000
 	id, err := ConfigIDFor(c)
 	if err != nil {
 		t.Fatal(err)
 	}
-	d := Descriptor{"challenge-test", seed, SimulationVersion, GeneratorVersion, id}
+	d := Descriptor{"challenge-test", seed, PriorSimulationVersion, PriorGeneratorVersion, id}
 	s, err := CreateRun(d, c)
 	if err != nil {
 		t.Fatal(err)
@@ -84,12 +84,12 @@ func TestSteppedChallengeFamilyRepeatBoundAcrossSeeds(t *testing.T) {
 }
 
 func TestChallengeConfigCopiesMetadataAndRejectsInvalidFamilyData(t *testing.T) {
-	c := DefaultConfiguration()
+	c := PriorDefaultConfiguration()
 	id, err := ConfigIDFor(c)
 	if err != nil {
 		t.Fatal(err)
 	}
-	s, err := CreateRun(Descriptor{"challenge-copy", 3, SimulationVersion, GeneratorVersion, id}, c)
+	s, err := CreateRun(Descriptor{"challenge-copy", 3, PriorSimulationVersion, PriorGeneratorVersion, id}, c)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,17 +103,17 @@ func TestChallengeConfigCopiesMetadataAndRejectsInvalidFamilyData(t *testing.T) 
 		t.Fatal("generated state shares challenge metadata pointer with input")
 	}
 
-	bad := DefaultConfiguration()
+	bad := PriorDefaultConfiguration()
 	bad.Challenges.Families[0].ID = "   "
 	if ValidateConfig(bad) == nil {
 		t.Fatal("whitespace-only family ID accepted")
 	}
-	bad = DefaultConfiguration()
+	bad = PriorDefaultConfiguration()
 	bad.Challenges.Families[0].GapCenters[0] = 320000
 	if ValidateConfig(bad) == nil {
 		t.Fatal("intro family outside initial lead-in accepted")
 	}
-	bad = DefaultConfiguration()
+	bad = PriorDefaultConfiguration()
 	for i := range bad.Challenges.Families {
 		if bad.Challenges.Families[i].ID == "recovery-steady" {
 			bad.Challenges.Families[i].GapCenters = []int64{280000, 240000, 200000, 190000}
@@ -125,7 +125,7 @@ func TestChallengeConfigCopiesMetadataAndRejectsInvalidFamilyData(t *testing.T) 
 }
 
 func TestPressureFamiliesRequireDifferentSafeVerticalLanes(t *testing.T) {
-	c := DefaultConfiguration()
+	c := PriorDefaultConfiguration()
 	set := c.Challenges
 	minCenter, maxCenter := int64(1<<62), int64(0)
 	for _, id := range set.PressureFamilyIDs {
@@ -149,7 +149,7 @@ func TestPressureFamiliesRequireDifferentSafeVerticalLanes(t *testing.T) {
 }
 
 func TestEverySelectableFamilyTransitionHasBoundedPhysicsWitness(t *testing.T) {
-	c := DefaultConfiguration()
+	c := PriorDefaultConfiguration()
 	set := c.Challenges
 	families := map[string]ChallengeFamily{}
 	for _, family := range set.Families {
@@ -188,7 +188,7 @@ func TestEverySelectableFamilyTransitionHasBoundedPhysicsWitness(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				state, err := CreateRun(Descriptor{"transition-witness", 1, SimulationVersion, GeneratorVersion, id}, c)
+				state, err := CreateRun(Descriptor{"transition-witness", 1, PriorSimulationVersion, PriorGeneratorVersion, id}, c)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -240,12 +240,12 @@ func TestDefaultChallengeSeedCorpus(t *testing.T) {
 	transitions := map[string]bool{}
 	survived := 0
 	for seed := int64(0); seed < 64; seed++ {
-		c := DefaultConfiguration()
+		c := PriorDefaultConfiguration()
 		id, err := ConfigIDFor(c)
 		if err != nil {
 			t.Fatal(err)
 		}
-		state, err := CreateRun(Descriptor{fmt.Sprintf("challenge-corpus-%d", seed), seed, SimulationVersion, GeneratorVersion, id}, c)
+		state, err := CreateRun(Descriptor{fmt.Sprintf("challenge-corpus-%d", seed), seed, PriorSimulationVersion, PriorGeneratorVersion, id}, c)
 		if err != nil {
 			t.Fatal(err)
 		}

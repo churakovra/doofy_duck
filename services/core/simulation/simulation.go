@@ -68,13 +68,41 @@ type Definition struct {
 	Appearance      string `json:"appearance"`
 }
 type Config struct {
-	Flight          FlightConfig  `json:"flight"`
-	Pipes           PipeConfig    `json:"pipes"`
-	Limits          Limits        `json:"limits"`
-	Collectibles    []Definition  `json:"collectibles"`
-	SpawnNoneWeight int64         `json:"spawnNoneWeight"`
-	StarSchedule    *StarSchedule `json:"starSchedule,omitempty"`
-	Challenges      *ChallengeSet `json:"challenges"`
+	Flight          FlightConfig   `json:"flight"`
+	Pipes           PipeConfig     `json:"pipes"`
+	Limits          Limits         `json:"limits"`
+	Collectibles    []Definition   `json:"collectibles"`
+	SpawnNoneWeight int64          `json:"spawnNoneWeight"`
+	StarSchedule    *StarSchedule  `json:"starSchedule,omitempty"`
+	Challenges      *ChallengeSet  `json:"challenges"`
+	Wetland         *WetlandConfig `json:"wetland,omitempty"`
+}
+type WetlandConfig struct {
+	StationSpacing   []int64            `json:"stationSpacing"`
+	RecoverySpacing  int64              `json:"recoverySpacing"`
+	IntroFamilies    []string           `json:"introFamilies"`
+	PressureFamilies []string           `json:"pressureFamilies"`
+	CatalogVersion   int64              `json:"catalogVersion"`
+	Families         []WetlandFamily    `json:"families"`
+	StarRoute        WetlandRewardPoint `json:"starRoute"`
+}
+type WetlandRewardPoint struct {
+	XOffset int64 `json:"xOffset"`
+	YOffset int64 `json:"yOffset"`
+}
+type WetlandFamily struct {
+	ID             string               `json:"id"`
+	GapCenters     []int64              `json:"gapCenters"`
+	ObstacleTypes  []string             `json:"obstacleTypes"`
+	StationSpacing []int64              `json:"stationSpacing"`
+	RewardRoute    []WetlandRewardPoint `json:"rewardRoute"`
+}
+type ObstacleDefinition struct {
+	TypeID  string `json:"typeId"`
+	XOffset int64  `json:"xOffset"`
+	Y       int64  `json:"y"`
+	Width   int64  `json:"width"`
+	Height  int64  `json:"height"`
 }
 type StarSchedule struct {
 	MinIntervalPipes int64 `json:"minIntervalPipes"`
@@ -99,14 +127,34 @@ type Duck struct {
 	VY int64 `json:"vy"`
 }
 type Pipe struct {
-	ID            string `json:"id"`
-	Index         int64  `json:"index"`
-	X             int64  `json:"x"`
-	GapCenter     int64  `json:"gapCenter"`
-	Scored        bool   `json:"scored"`
-	ChallengeID   string `json:"challengeId,omitempty"`
-	ChallengeStep *int64 `json:"challengeStep,omitempty"`
+	ID              string               `json:"id"`
+	Index           int64                `json:"index"`
+	X               int64                `json:"x"`
+	GapCenter       int64                `json:"gapCenter"`
+	Scored          bool                 `json:"scored"`
+	ChallengeID     string               `json:"challengeId,omitempty"`
+	ChallengeStep   *int64               `json:"challengeStep,omitempty"`
+	StationID       string               `json:"stationId,omitempty"`
+	StationStep     *int64               `json:"stationStep,omitempty"`
+	EncounterFamily string               `json:"encounterFamily,omitempty"`
+	StationSpacing  *int64               `json:"stationSpacing,omitempty"`
+	Obstacles       []ObstacleDefinition `json:"obstacles,omitempty"`
 }
+
+func stationRightEdge(p Pipe, c Config) int64 {
+	if c.Wetland != nil && len(p.Obstacles) > 0 {
+		right := p.X + p.Obstacles[0].XOffset + p.Obstacles[0].Width/2
+		for _, obstacle := range p.Obstacles[1:] {
+			edge := p.X + obstacle.XOffset + obstacle.Width/2
+			if edge > right {
+				right = edge
+			}
+		}
+		return right
+	}
+	return p.X + c.Pipes.Width/2
+}
+
 type Collectible struct {
 	ID        string `json:"id"`
 	TypeID    string `json:"typeId"`
@@ -132,6 +180,7 @@ type State struct {
 	Totals              map[string]int64 `json:"totals"`
 	RNGState            uint32           `json:"rngState"`
 	NextPipeIndex       int64            `json:"nextPipeIndex"`
+	NextPipeX           *int64           `json:"nextPipeX,omitempty"`
 	LastGapCenter       int64            `json:"lastGapCenter"`
 	NextInputSequence   int64            `json:"nextInputSequence"`
 	LastCollectiblePipe int64            `json:"lastCollectiblePipe"`
@@ -145,6 +194,7 @@ type Event struct {
 	Type          string           `json:"type"`
 	RunID         string           `json:"runId"`
 	PipeID        string           `json:"pipeId,omitempty"`
+	StationID     string           `json:"stationId,omitempty"`
 	Score         *int64           `json:"score,omitempty"`
 	Tick          int64            `json:"tick"`
 	CollectibleID string           `json:"collectibleId,omitempty"`
@@ -174,8 +224,8 @@ type Pattern struct {
 }
 
 var canonicalCatalog = []Pattern{{"center", []int64{280000, 280000, 280000, 280000}}, {"rise-fall", []int64{260000, 280000, 300000, 280000}}, {"fall-rise", []int64{300000, 280000, 260000, 280000}}}
-var canonicalLegacyDefaultConfig = Config{FlightConfig{320, -5600, 8500, 100000, 12000, 10000}, PipeConfig{Speed: 3000, MaxSpeed: 4800, RampTicks: 2700, SpeedEveryPipes: 10, SpeedStepPercent: 10, GapMinCenter: 160000, GapMaxCenter: 400000, MaxGapDelta: 85000, Spacing: 300000, Width: 52000, GapHeight: 156000, SafeLeadIn: 420000, Horizon: 960000, FloorY: 561000, CeilingY: 0}, Limits{8, 2}, []Definition{{"FEATHER", 1, 34, 1, 1, 1, 7000, "feather-v1"}, {"GAME_STAR", 1, 8, 4, 3, 1, 7000, "game-star-v1"}}, 58, nil, defaultChallengeSet()}
-var canonicalDefaultConfig = Config{FlightConfig{320, -5600, 8500, 100000, 12000, 10000}, PipeConfig{Speed: 3000, MaxSpeed: 4800, RampTicks: 2700, SpeedEveryPipes: 10, SpeedStepPercent: 10, GapMinCenter: 160000, GapMaxCenter: 400000, MaxGapDelta: 85000, Spacing: 300000, Width: 52000, GapHeight: 156000, SafeLeadIn: 420000, Horizon: 960000, FloorY: 561000, CeilingY: 0}, Limits{8, 3}, []Definition{{"FEATHER", 1, 34, 1, 1, 1, 7000, "feather-v1"}, {"GAME_STAR", 1, 0, 4, 3, 1, 7000, "game-star-v1"}}, 66, &StarSchedule{8, 16}, defaultChallengeSet()}
+var canonicalLegacyDefaultConfig = Config{FlightConfig{320, -5600, 8500, 100000, 12000, 10000}, PipeConfig{Speed: 3000, MaxSpeed: 4800, RampTicks: 2700, SpeedEveryPipes: 10, SpeedStepPercent: 10, GapMinCenter: 160000, GapMaxCenter: 400000, MaxGapDelta: 85000, Spacing: 300000, Width: 52000, GapHeight: 156000, SafeLeadIn: 420000, Horizon: 960000, FloorY: 561000, CeilingY: 0}, Limits{8, 2}, []Definition{{"FEATHER", 1, 34, 1, 1, 1, 7000, "feather-v1"}, {"GAME_STAR", 1, 8, 4, 3, 1, 7000, "game-star-v1"}}, 58, nil, defaultChallengeSet(), nil}
+var canonicalDefaultConfig = Config{FlightConfig{320, -5600, 8500, 100000, 12000, 10000}, PipeConfig{Speed: 3000, MaxSpeed: 4800, RampTicks: 2700, SpeedEveryPipes: 10, SpeedStepPercent: 10, GapMinCenter: 160000, GapMaxCenter: 400000, MaxGapDelta: 85000, Spacing: 300000, Width: 52000, GapHeight: 156000, SafeLeadIn: 420000, Horizon: 960000, FloorY: 561000, CeilingY: 0}, Limits{8, 3}, []Definition{{"FEATHER", 1, 34, 1, 1, 1, 7000, "feather-v1"}, {"GAME_STAR", 1, 0, 4, 3, 1, 7000, "game-star-v1"}}, 66, &StarSchedule{8, 16}, defaultChallengeSet(), nil}
 
 func defaultChallengeSet() *ChallengeSet {
 	return &ChallengeSet{4, "intro-steady", []string{"cruise-steady", "cruise-rise", "cruise-dip", "cruise-offset"}, []string{"pressure-rise", "pressure-dip", "pressure-offset"}, "recovery-steady", []ChallengeFamily{
@@ -201,17 +251,44 @@ func PatternCatalog() []Pattern {
 }
 
 // DefaultConfiguration returns an independent copy of the default rules.
-func DefaultConfiguration() Config       { return cloneConfig(canonicalDefaultConfig) }
+func PriorDefaultConfiguration() Config  { return cloneConfig(canonicalDefaultConfig) }
+func DefaultConfiguration() Config       { return WetlandConfiguration() }
 func LegacyDefaultConfiguration() Config { return cloneConfig(canonicalLegacyDefaultConfig) }
+func WetlandConfiguration() Config {
+	c := cloneConfig(canonicalDefaultConfig)
+	c.Challenges = nil
+	c.Limits.MaxActiveCollectibles = 10
+	coinRoute := func(points ...int64) []WetlandRewardPoint {
+		out := make([]WetlandRewardPoint, 0, len(points)/2)
+		for i := 0; i < len(points); i += 2 {
+			out = append(out, WetlandRewardPoint{XOffset: points[i], YOffset: points[i+1]})
+		}
+		return out
+	}
+	c.Wetland = &WetlandConfig{CatalogVersion: 1, StationSpacing: []int64{240000, 300000, 360000}, RecoverySpacing: 360000, IntroFamilies: []string{"steady", "quick-pairs"}, PressureFamilies: []string{"dive-climb", "climb-dive", "slalom"}, StarRoute: WetlandRewardPoint{XOffset: 100000, YOffset: 70000}, Families: []WetlandFamily{
+		{ID: "steady", GapCenters: []int64{280000, 280000, 280000, 250000}, ObstacleTypes: []string{"pipes", "vine", "rock", "debris"}, StationSpacing: []int64{300000, 300000, 300000, 300000}, RewardRoute: coinRoute(-16000, 0, 16000, 18000, -16000, 18000, 16000, 68000)},
+		{ID: "quick-pairs", GapCenters: []int64{280000, 280000, 280000, 280000}, ObstacleTypes: []string{"pipes", "pipes", "vine", "vine"}, StationSpacing: []int64{240000, 240000, 360000, 360000}, RewardRoute: coinRoute(16000, 0, -16000, -18000, 16000, 18000, -16000, 0)},
+		{ID: "dive-climb", GapCenters: []int64{300000, 330000, 260000, 230000}, ObstacleTypes: []string{"rock", "debris", "vine", "pipes"}, StationSpacing: []int64{300000, 360000, 300000, 240000}, RewardRoute: coinRoute(-16000, -18000, 16000, -68000, -16000, 18000, 16000, 0)},
+		{ID: "climb-dive", GapCenters: []int64{260000, 230000, 300000, 330000}, ObstacleTypes: []string{"vine", "debris", "pipes", "rock"}, StationSpacing: []int64{300000, 360000, 300000, 240000}, RewardRoute: coinRoute(16000, 18000, -16000, 68000, 16000, -18000, -16000, 0)},
+		{ID: "slalom", GapCenters: []int64{280000, 330000, 260000, 320000}, ObstacleTypes: []string{"vine", "pipes", "rock", "debris"}, StationSpacing: []int64{300000, 240000, 360000, 300000}, RewardRoute: coinRoute(-16000, 0, 16000, -18000, -16000, 18000, 16000, -68000)},
+	}}
+	return c
+}
 
 const MaxCounter int64 = 9007199254740990
 const maxSafeInteger int64 = 9007199254740991
-const SimulationVersion = "1.4.0"
-const GeneratorVersion = "1.3.0"
-const DefaultConfigID = "dd-v1-star-interval-v1"
+const SimulationVersion = "2.0.0"
+const GeneratorVersion = "2.0.0"
+const DefaultConfigID = "dd-v2-wetland-v1"
+const PriorSimulationVersion = "1.4.0"
+const PriorGeneratorVersion = "1.3.0"
+const PriorDefaultConfigID = "dd-v1-star-interval-v1"
 const LegacySimulationVersion = "1.3.0"
 const LegacyGeneratorVersion = "1.2.0"
 const LegacyDefaultConfigID = "dd-v1-stepped-v1"
+const WetlandSimulationVersion = SimulationVersion
+const WetlandGeneratorVersion = GeneratorVersion
+const WetlandDefaultConfigID = DefaultConfigID
 
 func Step(input State, frames []Input) (Result, error) {
 	input = cloneState(input)
@@ -276,7 +353,14 @@ func Step(input State, frames []Input) (Result, error) {
 	for _, p := range pipes {
 		l, r := p.X-pc.Width/2, p.X+pc.Width/2
 		dl, dr := duck.X-f.DuckHalfWidth, duck.X+f.DuckHalfWidth
-		if dr >= l && dl <= r && (y-f.DuckHalfHeight <= p.GapCenter-pc.GapHeight/2 || y+f.DuckHalfHeight >= p.GapCenter+pc.GapHeight/2) {
+		if input.Config.Wetland != nil && len(p.Obstacles) > 0 {
+			for _, obstacle := range p.Obstacles {
+				ol, or := p.X+obstacle.XOffset-obstacle.Width/2, p.X+obstacle.XOffset+obstacle.Width/2
+				if dr >= ol && dl <= or && y+f.DuckHalfHeight >= obstacle.Y && y-f.DuckHalfHeight <= obstacle.Y+obstacle.Height {
+					dead = true
+				}
+			}
+		} else if dr >= l && dl <= r && (y-f.DuckHalfHeight <= p.GapCenter-pc.GapHeight/2 || y+f.DuckHalfHeight >= p.GapCenter+pc.GapHeight/2) {
 			dead = true
 		}
 	}
@@ -288,7 +372,7 @@ func Step(input State, frames []Input) (Result, error) {
 	} else {
 		for i := range pipes {
 			p := &pipes[i]
-			if !p.Scored && p.X+pc.Width/2 < duck.X-f.DuckHalfWidth {
+			if !p.Scored && stationRightEdge(*p, input.Config) < duck.X-f.DuckHalfWidth {
 				var e error
 				score, e = inc(score, 1)
 				if e != nil {
@@ -296,13 +380,21 @@ func Step(input State, frames []Input) (Result, error) {
 				}
 				p.Scored = true
 				sc := score
-				events = append(events, Event{Type: "PipePassed", RunID: input.Descriptor.RunID, PipeID: p.ID, Score: &sc, Tick: input.Tick + 1})
+				if input.Config.Wetland != nil {
+					events = append(events, Event{Type: "ObstaclePassed", RunID: input.Descriptor.RunID, StationID: p.StationID, Score: &sc, Tick: input.Tick + 1})
+				} else {
+					events = append(events, Event{Type: "PipePassed", RunID: input.Descriptor.RunID, PipeID: p.ID, Score: &sc, Tick: input.Tick + 1})
+				}
 			}
 		}
 	}
 	keptP := []Pipe{}
 	for _, p := range pipes {
-		if p.X+pc.Width >= -pc.Width {
+		if input.Config.Wetland != nil {
+			if stationRightEdge(p, input.Config) >= duck.X-f.DuckHalfWidth {
+				keptP = append(keptP, p)
+			}
+		} else if p.X+pc.Width >= -pc.Width {
 			keptP = append(keptP, p)
 		}
 	}
@@ -311,6 +403,10 @@ func Step(input State, frames []Input) (Result, error) {
 	s.Tick++
 	s.Duck = duck
 	s.Pipes = keptP
+	if input.Config.Wetland != nil && input.NextPipeX != nil {
+		nextX := *input.NextPipeX - speed
+		s.NextPipeX = &nextX
+	}
 	s.Score = score
 	s.NextInputSequence = expected
 	s.InputHistory = []Input{}
@@ -368,6 +464,28 @@ func Step(input State, frames []Input) (Result, error) {
 			}
 		}
 		scheduledStar := s.Config.StarSchedule != nil && p.Index == nextStar
+		block := p.Index / 4
+		recovery := p.EncounterFamily == "steady" && block >= 2 && block%2 == 1
+		smallTrail := p.EncounterFamily == "steady" && (block == 0 || recovery)
+		trail := s.Config.Wetland != nil && (!smallTrail || p.StationStep != nil && (*p.StationStep == 1 || *p.StationStep == 3))
+		if trail && int64(len(s.Collectibles)) < s.Config.Limits.MaxActiveCollectibles {
+			var definition *Definition
+			for i := range s.Config.Collectibles {
+				if s.Config.Collectibles[i].TypeID == "FEATHER" {
+					definition = &s.Config.Collectibles[i]
+					break
+				}
+			}
+			if definition == nil {
+				return Result{}, fmt.Errorf("wetland FEATHER definition missing")
+			}
+			id := fmt.Sprintf("feather-trail-%d-%d", block, *p.StationStep)
+			spawned[id] = true
+			rewardX, rewardY := wetlandRewardPoint(s.Config, p, definition.Radius, false)
+			s.Collectibles = append(s.Collectibles, Collectible{id, "FEATHER", rewardX, rewardY, 1, definition.Radius, false})
+		} else if trail {
+			return Result{}, fmt.Errorf("wetland reward capacity invariant violated")
+		}
 		if scheduledStar {
 			activeStars := 0
 			for _, collectible := range s.Collectibles {
@@ -391,7 +509,12 @@ func Step(input State, frames []Input) (Result, error) {
 			if starDefinition == nil {
 				return Result{}, fmt.Errorf("scheduled Star definition missing")
 			}
-			s.Collectibles = append(s.Collectibles, Collectible{id, "GAME_STAR", p.X, bonusY(s.Config, uint32(s.Descriptor.Seed), p, starDefinition.Radius), 1, starDefinition.Radius, false})
+			starX := p.X
+			starY := bonusY(s.Config, uint32(s.Descriptor.Seed), p, starDefinition.Radius)
+			if s.Config.Wetland != nil {
+				starX, starY = wetlandRewardPoint(s.Config, p, starDefinition.Radius, true)
+			}
+			s.Collectibles = append(s.Collectibles, Collectible{id, "GAME_STAR", starX, starY, 1, starDefinition.Radius, false})
 			ordinal := int64(1)
 			if starOrdinal != nil {
 				ordinal, e = inc(*starOrdinal, 1)
@@ -419,7 +542,7 @@ func Step(input State, frames []Input) (Result, error) {
 		if s.Config.StarSchedule != nil {
 			reservedSlots = 1
 		}
-		if chosen != nil && !scheduledStar && regularCount < s.Config.Limits.MaxActiveCollectibles-reservedSlots {
+		if s.Config.Wetland == nil && chosen != nil && !scheduledStar && regularCount < s.Config.Limits.MaxActiveCollectibles-reservedSlots {
 			id := fmt.Sprintf("collectible-%d", p.Index)
 			spawned[id] = true
 			s.Collectibles = append(s.Collectibles, Collectible{id, chosen.TypeID, p.X, bonusY(s.Config, uint32(s.Descriptor.Seed), p, chosen.Radius), chosen.Amount, chosen.Radius, false})

@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useGameRun } from './useGameRun';
 import { LocaleProvider, useLocale } from './locale';
-import { DEFAULT_CONFIG, type GameConfig, type GameEvent, type RunDescriptorIdentity } from '@doofy-duck/game-sim';
+import { DEFAULT_CONFIG, PRIOR_DEFAULT_CONFIG, type GameConfig, type GameEvent, type RunDescriptorIdentity } from '@doofy-duck/game-sim';
 
 let run: ReturnType<typeof useGameRun>;
 let frameId: number;
@@ -63,6 +63,15 @@ afterEach(() => {
 });
 
 describe('run clock integration', () => {
+  it('restarts a fresh default run with the current wetland identity', () => {
+    act(() => run.restart());
+    expect(run.getState().config.wetland?.catalogVersion).toBe(1);
+    expect(run.getState().descriptor).toMatchObject({
+      simulationVersion: '2.0.0', generatorVersion: '2.0.0', configId: 'dd-v2-wetland-v1',
+    });
+    expect(run.getState().config).toEqual(DEFAULT_CONFIG);
+  });
+
   it('keeps the same active run and input sequence when language changes', () => {
     act(() => run.start());
     frame(17);
@@ -254,8 +263,8 @@ describe('run clock integration', () => {
   });
 
   it('freezes each run config and uses the latest config and injected identity on restart', () => {
-    const firstConfig = { ...DEFAULT_CONFIG, flight: { ...DEFAULT_CONFIG.flight, gravity: 321 } };
-    const nextConfig = { ...DEFAULT_CONFIG, flight: { ...DEFAULT_CONFIG.flight, gravity: 654 } };
+    const firstConfig = { ...PRIOR_DEFAULT_CONFIG, flight: { ...PRIOR_DEFAULT_CONFIG.flight, gravity: 321 } };
+    const nextConfig = { ...PRIOR_DEFAULT_CONFIG, flight: { ...PRIOR_DEFAULT_CONFIG.flight, gravity: 654 } };
     const createIdentity = vi.fn()
       .mockReturnValueOnce({ runId: 'initial-injected', seed: 41 })
       .mockReturnValueOnce({ runId: 'injected-run', seed: 42 });
@@ -291,16 +300,16 @@ describe('run clock integration', () => {
   it('delivers scoring and collection in tick order and completion only once', () => {
     const onEvents = vi.fn();
     const config: GameConfig = {
-      ...DEFAULT_CONFIG,
+      ...PRIOR_DEFAULT_CONFIG,
       starSchedule: null,
       challenges: null,
       pipes: {
-        ...DEFAULT_CONFIG.pipes, safeLeadIn: 51_000, horizon: 51_000,
+        ...PRIOR_DEFAULT_CONFIG.pipes, safeLeadIn: 51_000, horizon: 51_000,
         gapMinCenter: 280_000, gapMaxCenter: 280_000, gapHeight: 400_000,
       },
       spawnNoneWeight: 0,
       collectibles: [{
-        ...DEFAULT_CONFIG.collectibles[0]!, minPipeIndex: 0,
+        ...PRIOR_DEFAULT_CONFIG.collectibles[0]!, minPipeIndex: 0,
         minSpacingPipes: 0, weight: 1, radius: 60_000, amount: 3,
       }],
     };

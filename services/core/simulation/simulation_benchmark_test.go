@@ -17,12 +17,12 @@ type defaultReplay struct {
 // buildDefaultReplay authors and executes the controller schedule before a
 // benchmark starts. It steers toward the nearest approaching default gap.
 func buildDefaultReplay(ticks int) (defaultReplay, error) {
-	config := DefaultConfiguration()
+	config := PriorDefaultConfiguration()
 	configID, err := ConfigIDFor(config)
 	if err != nil {
 		return defaultReplay{}, err
 	}
-	state, err := CreateRun(Descriptor{"benchmark-replay", 42, SimulationVersion, GeneratorVersion, configID}, config)
+	state, err := CreateRun(Descriptor{"benchmark-replay", 42, PriorSimulationVersion, PriorGeneratorVersion, configID}, config)
 	if err != nil {
 		return defaultReplay{}, err
 	}
@@ -89,12 +89,12 @@ func TestDefaultReplayWorkloadIsDeterministicAndActive(t *testing.T) {
 
 func benchmarkDefaultRunningState(b *testing.B) State {
 	b.Helper()
-	config := DefaultConfiguration()
+	config := PriorDefaultConfiguration()
 	configID, err := ConfigIDFor(config)
 	if err != nil {
 		b.Fatal(err)
 	}
-	state, err := CreateRun(Descriptor{"benchmark-step", 42, SimulationVersion, GeneratorVersion, configID}, config)
+	state, err := CreateRun(Descriptor{"benchmark-step", 42, PriorSimulationVersion, PriorGeneratorVersion, configID}, config)
 	if err != nil {
 		b.Fatal(err)
 	}

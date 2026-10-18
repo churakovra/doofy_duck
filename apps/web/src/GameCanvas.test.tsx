@@ -2,7 +2,7 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { DEFAULT_CONFIG, createRun, createRunDescriptor } from '@doofy-duck/game-sim';
+import { PRIOR_DEFAULT_CONFIG, createRun, createRunDescriptor } from '@doofy-duck/game-sim';
 
 const pixi = vi.hoisted(() => ({ render: vi.fn(), destroy: vi.fn(), init: vi.fn(), fill: vi.fn(), load: vi.fn(async (path: string) => ({ path })) }));
 vi.mock('pixi.js', () => {
@@ -50,7 +50,7 @@ import { LocaleProvider, useLocale } from './locale';
 let root: ReturnType<typeof createRoot>;
 let host: HTMLDivElement;
 let rafId: number;
-const state = createRun(createRunDescriptor({ runId: 'canvas-test', seed: 1 }, DEFAULT_CONFIG));
+const state = createRun(createRunDescriptor({ runId: 'canvas-test', seed: 1 }, PRIOR_DEFAULT_CONFIG));
 const runningState = { ...state, phase: 'RUNNING' as const, tick: 1 };
 const frameCallbacks: FrameRequestCallback[] = [];
 

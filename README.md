@@ -28,6 +28,7 @@ and real Telegram acceptance remain open; see the
 - [SHOP implementation](docs/SHOP_IMPLEMENTATION_RESULTS.md): delivered wallet/inventory/purchase code and verification limits.
 - [Backend verification](docs/BACKEND_FOUNDATION.md): ACCOUNT/RUN checks, capacity measurements and external acceptance gates.
 - [Challenge verification](docs/CHALLENGE_RESULTS.md): October 17 challenge checks and bounded physics evidence.
+- [Wetland challenges](docs/WETLAND_CHALLENGES.md): varied obstacles, collectible routes, compatibility and current verification status.
 
 ## Requirements
 
@@ -113,12 +114,13 @@ capacity and real Telegram/device acceptance are separate gates.
 
 - Wallet balances, purchases and equipment belong to the signed-in account. Verified completed-run pickups become spendable after settlement; pending rewards are shown separately. In-game Stars are not Telegram Stars or redeemable rewards.
 - One writer controls an active account run. Another tab or device must explicitly take over; account ownership and server verification govern persistent progress.
-- Seeded four-pipe challenge families introduce steady, rising, falling and offset routes, with recovery blocks after pressure sections. The schedule advances with pipe encounter order; pause freezes play and restart resets the schedule.
-- Active-time world speed ramps from180 to288pixels/second over45seconds. Score adds speed in10% steps per10 passed pipes until the same cap, which can be reached earlier. Default pipe spacing is300pixels.
+- Seeded four-station wetland encounters mix paired pipes, hanging vines, ground rocks/reeds and floating debris. Two introductory families lead into alternating pressure and recovery encounters, with authored 240/300/360-pixel spacing. Pause freezes play and restart resets the schedule.
+- Active-time world speed ramps from 180 to 288 pixels/second over 45 seconds. Score adds speed in 10% steps per 10 cleared obstacle stations until the same cap, which can be reached earlier. Each station scores once, including a pair of pipes.
+- Optional coin routes and seeded Stars reward harder flight paths. Verified coin credit retains its 30-per-run wallet cap; collecting more does not raise that cap. See the wetland record for controller evidence and remaining owner playtesting.
 - Velocity tilt, wing/flap motion, restrained squash/stretch and bounded visual effects improve feedback without changing authoritative hitboxes. Extra motion respects the reduced-motion setting.
 - Original synthesized flap/pickup/death sounds and a quiet music loop unlock from a user gesture. Separate sound/music controls are saved locally; backgrounding and pause silence playback.
 
-The current rules use simulation version1.4.0, generator version1.3.0, and default config ID `dd-v1-star-interval-v1`. Existing 1.3.0/1.2.0 runs retain the prior `dd-v1-stepped-v1` rules. See [`docs/ARCADE_SIMULATION.md`](docs/ARCADE_SIMULATION.md) for the rules.
+The current rules use simulation version 2.0.0, generator version 2.0.0, and default config ID `dd-v2-wetland-v1`. Existing 1.4.0/1.3.0 and 1.3.0/1.2.0 runs retain their original rules. See [`docs/ARCADE_SIMULATION.md`](docs/ARCADE_SIMULATION.md) for the rules and [wetland challenges](docs/WETLAND_CHALLENGES.md) for verification status.
 
 ## Verification commands
 

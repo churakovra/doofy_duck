@@ -32,7 +32,7 @@ func TestLatestRunReturnsNewestOwnedSnapshotWithoutWriterToken(t *testing.T) {
 	server := &Server{DB: pool, Auth: JWTVerifier{Keys: map[string]ed25519.PublicKey{"k": pub}}, OutboxConfigured: true}
 	app := httptest.NewServer(server.Handler())
 	defer app.Close()
-	state, err := sim.CreateRun(sim.Descriptor{RunID: "00000000-0000-4000-8000-000000000031", Seed: 7, SimulationVersion: sim.SimulationVersion, GeneratorVersion: sim.GeneratorVersion, ConfigID: sim.DefaultConfigID}, sim.DefaultConfiguration())
+	state, err := sim.CreateRun(sim.Descriptor{RunID: "00000000-0000-4000-8000-000000000031", Seed: 7, SimulationVersion: sim.PriorSimulationVersion, GeneratorVersion: sim.PriorGeneratorVersion, ConfigID: sim.PriorDefaultConfigID}, sim.PriorDefaultConfiguration())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +45,7 @@ func TestLatestRunReturnsNewestOwnedSnapshotWithoutWriterToken(t *testing.T) {
 	created := time.Date(2026, 10, 17, 12, 0, 0, 0, time.UTC)
 	insert := func(id, owner string, createdAt time.Time) {
 		t.Helper()
-		_, insertErr := pool.Exec(t.Context(), `INSERT INTO core_runs(id,account_id,seed,simulation_version,generator_version,config_id,state,status,verification_status,delivery_status,writer_token_hash,last_contact,created_at,completed_at,completion_reason) VALUES($1,$2,7,$3,$4,$5,$6,'completed','verified','delivered',decode('00','hex'),$7,$8,$7,'death')`, id, owner, sim.SimulationVersion, sim.GeneratorVersion, state.Descriptor.ConfigID, stateJSON, createdAt, createdAt)
+		_, insertErr := pool.Exec(t.Context(), `INSERT INTO core_runs(id,account_id,seed,simulation_version,generator_version,config_id,state,status,verification_status,delivery_status,writer_token_hash,last_contact,created_at,completed_at,completion_reason) VALUES($1,$2,7,$3,$4,$5,$6,'completed','verified','delivered',decode('00','hex'),$7,$8,$7,'death')`, id, owner, sim.PriorSimulationVersion, sim.PriorGeneratorVersion, state.Descriptor.ConfigID, stateJSON, createdAt, createdAt)
 		if insertErr != nil {
 			t.Fatal(insertErr)
 		}

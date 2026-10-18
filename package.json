@@ -13,7 +13,7 @@
     "dev": "npm run build:sim && npm run dev --workspace @doofy-duck/web -- --host 127.0.0.1",
     "test:go": "go -C services/core/simulation test -count=1 ./...",
     "test:go:race": "go -C services/core/simulation test -race -count=1 ./...",
-    "test:parity": "npm run build:sim && vitest run packages/game-sim/test/fixtures.test.ts && go -C services/core/simulation test -count=1 ./...",
+    "test:parity": "npm run build:sim && vitest run packages/game-sim/test/fixtures.test.ts packages/game-sim/test/wetland.test.ts && go -C services/core/simulation test -count=1 ./...",
     "check": "npm run typecheck && npm run lint && npm test && npm run test:go && npm run build",
     "check:browser": "npm run test:browser && npm run test:dev",
     "check:full": "npm run check && npm run check:browser",

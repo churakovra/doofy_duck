@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { DEFAULT_CONFIG, canonicalState, createRun, createRunDescriptor } from '@doofy-duck/game-sim';
+import { PRIOR_DEFAULT_CONFIG, WETLAND_DEFAULT_CONFIG, canonicalState, createRun, createRunDescriptor } from '@doofy-duck/game-sim';
 
 vi.mock('pixi.js', () => ({
   Container: class {
@@ -41,8 +41,8 @@ const fills = (graphic: RecordingGraphics) => graphic.calls
 describe('scene rendering', () => {
   it('draws floor, ceiling, and pipe extents from the run configuration', () => {
     const config = {
-      ...DEFAULT_CONFIG,
-      pipes: { ...DEFAULT_CONFIG.pipes, ceilingY: 20_000, floorY: 530_000, gapHeight: 100_000 },
+      ...PRIOR_DEFAULT_CONFIG,
+      pipes: { ...PRIOR_DEFAULT_CONFIG.pipes, ceilingY: 20_000, floorY: 530_000, gapHeight: 100_000 },
     };
     const initial = createRun(createRunDescriptor({ runId: 'scene-bounds', seed: 1 }, config), config);
     const state = {
@@ -66,12 +66,30 @@ describe('scene rendering', () => {
     ]));
   });
 
+  it('renders wetland hazards from authoritative rectangles and uses pickup radius for visible core', () => {
+    const initial = createRun(createRunDescriptor({ runId: 'scene-wetland', seed: 1 }, WETLAND_DEFAULT_CONFIG), WETLAND_DEFAULT_CONFIG);
+    const station = initial.pipes[0]!;
+    const state = { ...initial, pipes: [{ ...station, x: 160_000 }], collectibles: [
+      { id: 'coin', typeId: 'FEATHER', x: 200_000, y: 220_000, amount: 1, radius: 7_000, collected: false },
+    ] };
+    const world = graphics();
+
+    paintWorld(world as never, state);
+
+    const obstacle = station.obstacles![0]!;
+    const rect = world.calls.find(call => call.method === 'roundRect' && call.args[2] === obstacle.width / 1000);
+    expect(rect).toBeDefined();
+    expect(rect!.args[1]).toBe(obstacle.y / 1000);
+    expect(world.calls.filter(call => call.method === 'roundRect')).toHaveLength(4);
+    expect(world.calls.find(call => call.method === 'circle' && call.args[2] === 7)).toBeDefined();
+  });
+
   it('chooses collectible art by definition appearance and falls back for unknown appearances', () => {
     const config = {
-      ...DEFAULT_CONFIG,
+      ...PRIOR_DEFAULT_CONFIG,
       starSchedule: null,
       collectibles: [
-        { ...DEFAULT_CONFIG.collectibles[0]!, typeId: 'FEATHER', appearance: 'game-star-v1' },
+        { ...PRIOR_DEFAULT_CONFIG.collectibles[0]!, typeId: 'FEATHER', appearance: 'game-star-v1' },
       ],
     };
     const initial = createRun(createRunDescriptor({ runId: 'scene-pickups', seed: 2 }, config), config);
@@ -86,7 +104,7 @@ describe('scene rendering', () => {
         ...config,
         collectibles: [
           ...config.collectibles,
-          { ...DEFAULT_CONFIG.collectibles[1]!, typeId: 'GAME_STAR', appearance: 'constructor' },
+          { ...PRIOR_DEFAULT_CONFIG.collectibles[1]!, typeId: 'GAME_STAR', appearance: 'constructor' },
         ],
       },
     };
@@ -110,7 +128,7 @@ describe('scene rendering', () => {
       collectibles: {},
       fallbackCollectible: { outer: 0x303001, inner: 0x303002 },
     };
-    const state = createRun(createRunDescriptor({ runId: 'scene-palette', seed: 3 }, DEFAULT_CONFIG));
+    const state = createRun(createRunDescriptor({ runId: 'scene-palette', seed: 3 }, PRIOR_DEFAULT_CONFIG));
     const identityBefore = canonicalState(state);
     const { duck, wing } = makeDuck(appearance);
     const background = makeBackground(appearance);
