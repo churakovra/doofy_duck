@@ -42,7 +42,7 @@ credentials for another account must be rejected before an authenticated request
 is retried. A recoverable connection failure can offer Retry for the same launch;
 expired launch data may require reopening the Mini App through Telegram.
 Low-level refresh and session revocation endpoints retain their wire contract.
-See the [bot setup guide](../../docs/TELEGRAM_BOT_SETUP.md).
+See the [local startup instructions](../../README.md#start-locally).
 
 ## Access-token wire format
 
