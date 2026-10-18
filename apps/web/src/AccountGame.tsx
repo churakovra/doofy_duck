@@ -14,7 +14,6 @@ import { useGameRun } from './useGameRun';
 import { DEFAULT_EQUIPMENT, type Equipment } from './wardrobe';
 import { loadTelegramWebApp, TelegramWebAppUnavailableError } from './telegram-web-app';
 import { CheckpointBackoff } from './checkpoint-backoff';
-import { finishAccountLogout } from './account-logout';
 import { localDevAccount } from './account-config';
 
 type Screen = 'signed-out' | 'idle' | 'loading' | 'active' | 'recovering' | 'takeover' | 'locked';
@@ -35,19 +34,11 @@ async function telegramWebAppReady() {
   return webApp;
 }
 
-async function loginWithTelegram(api: AccountApi, isCurrent: () => boolean = () => true): Promise<AccountSummary | undefined> {
-  const webApp = await telegramWebAppReady();
-  if (!isCurrent()) return undefined;
-  const initData = webApp.initData?.trim() ?? '';
-  if (!initData) throw new AccountApiError(400, 'telegram_init_data_missing');
-  return api.login(initData);
-}
-
 function accountErrorCopy(reason: unknown, messages: ReturnType<typeof useLocale>['messages']): string {
   if (reason instanceof TelegramWebAppUnavailableError) return messages.accountActionFailed;
   if (!(reason instanceof AccountApiError)) return messages.accountServiceUnavailable;
   if (reason.code === 'telegram_init_data_missing') return messages.accountAuthOutsideTelegram;
-  if (reason.code === 'account_session_expired' || reason.code === 'account_session_required' || reason.status === 401) return messages.accountSessionExpired;
+  if (reason.code === 'account_session_identity_mismatch' || reason.code === 'account_session_expired' || reason.code === 'account_session_required' || reason.status === 401) return messages.accountSessionExpired;
   if (reason.code === 'writer_fenced') return messages.accountNeedTakeover;
   if (reason.code === 'submission_expired') return messages.accountSubmissionExpired;
   if (reason.code === 'checkpoint_gap' || reason.code === 'idempotency_conflict') return messages.accountTraceConflict;
@@ -78,7 +69,6 @@ export function AccountGame() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [reauthRequired, setReauthRequired] = useState(false);
-  const [devUserId, setDevUserId] = useState(String(localDevAccount(import.meta.env).telegramUserId));
   const localAccount = localDevAccount(import.meta.env);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [shopOpen, setShopOpen] = useState(false);
@@ -88,11 +78,32 @@ export function AccountGame() {
   const checkpointBackoffRef = useRef(new CheckpointBackoff());
   const retryTimerRef = useRef<number | undefined>(undefined);
   const releaseLockRef = useRef<(() => void) | undefined>(undefined);
-  const restorePromiseRef = useRef<Promise<AccountSummary> | null>(null);
-  const telegramLoginPromiseRef = useRef<Promise<AccountSummary> | null>(null);
+  const launchInitDataRef = useRef<string | null>(null);
+  const launchLoginFlightRef = useRef<{ launchKey: string; promise: Promise<AccountSummary> } | null>(null);
   const loadAccountRef = useRef<(user: AccountSummary) => Promise<void>>(() => Promise.resolve());
   const sessionEpochRef = useRef(0);
   const appearance = useMemo(() => accountEquipmentAppearance(equipment), [equipment]);
+
+  const authenticateLaunch = useCallback(async (isCurrent: () => boolean = () => true): Promise<AccountSummary | undefined> => {
+    if (launchInitDataRef.current === null) {
+      try { launchInitDataRef.current = (await telegramWebAppReady()).initData?.trim() ?? ''; }
+      catch (error) {
+        if (!localAccount.enabled) throw error;
+        launchInitDataRef.current = '';
+      }
+    }
+    if (!isCurrent()) return undefined;
+    const initData = launchInitDataRef.current;
+    const launchKey = initData ? `telegram:${initData}` : localAccount.enabled ? `dev:${localAccount.telegramUserId}` : '';
+    if (!launchKey) throw new AccountApiError(400, 'telegram_init_data_missing');
+    const active = launchLoginFlightRef.current;
+    if (active?.launchKey === launchKey) return active.promise;
+    const promise = initData ? api.login(initData) : api.loginDev(localAccount.telegramUserId);
+    const flight = { launchKey, promise };
+    launchLoginFlightRef.current = flight;
+    try { return await promise; }
+    finally { if (launchLoginFlightRef.current === flight) launchLoginFlightRef.current = null; }
+  }, [api, localAccount.enabled, localAccount.telegramUserId]);
 
 
   const claimWriter = useCallback(async (accountId: string, runId: string): Promise<boolean> => {
@@ -216,7 +227,7 @@ export function AccountGame() {
           setError(failureCopy);
           setNotice('');
         }
-      } else if (apiError?.status === 401) {
+      } else if (apiError?.status === 401 || apiError?.code === 'account_session_identity_mismatch') {
         setReauthRequired(true);
         setError(messages.accountSessionExpired);
         setNotice('');
@@ -416,23 +427,8 @@ export function AccountGame() {
     const isCurrentBootstrap = () => !cancelled && bootstrapEpoch === sessionEpochRef.current;
     const authenticate = async () => {
       try {
-        let initData = '';
-        try { initData = (await telegramWebAppReady()).initData?.trim() ?? ''; } catch { /* Browser may be outside Telegram. */ }
-        if (!isCurrentBootstrap()) return;
-        let user: AccountSummary;
-        if (initData) {
-          telegramLoginPromiseRef.current ??= api.login(initData);
-          user = await telegramLoginPromiseRef.current;
-        } else {
-          try {
-            restorePromiseRef.current ??= api.restore();
-            user = await restorePromiseRef.current;
-          } catch (restoreError) {
-            if (!isCurrentBootstrap()) return;
-            if (!localAccount.enabled) throw restoreError;
-            user = await api.loginDev(localAccount.telegramUserId);
-          }
-        }
+        const user = await authenticateLaunch(isCurrentBootstrap);
+        if (!user) return;
         if (isCurrentBootstrap()) await loadAccountRef.current(user);
       } catch (reason) {
         if (isCurrentBootstrap()) {
@@ -443,7 +439,7 @@ export function AccountGame() {
     };
     void authenticate();
     return () => { cancelled = true; };
-  }, [api, localAccount.enabled, localAccount.telegramUserId]);
+  }, [authenticateLaunch]);
 
   useEffect(() => {
     const shouldPoll = snapshot?.status === 'completion_pending'
@@ -521,13 +517,11 @@ export function AccountGame() {
     return () => { current = false; if (timer !== undefined) window.clearTimeout(timer); };
   }, [account?.account_id, api, snapshot?.deliveryStatus, snapshot?.lifeIndex, snapshot?.runId, snapshot?.status, snapshot?.verificationStatus]);
 
-  const login = async (dev: boolean) => {
+  const retryAuthentication = async () => {
     const epoch = ++sessionEpochRef.current;
     setBusy(true); setError('');
     try {
-      const user = dev
-        ? localAccount.enabled ? await api.loginDev(Number(devUserId)) : undefined
-        : await loginWithTelegram(api, () => epoch === sessionEpochRef.current);
+      const user = await authenticateLaunch(() => epoch === sessionEpochRef.current);
       if (epoch !== sessionEpochRef.current || !user) return;
       await loadAccountState(user);
       if (epoch !== sessionEpochRef.current) return;
@@ -539,36 +533,13 @@ export function AccountGame() {
     } finally { if (epoch === sessionEpochRef.current) setBusy(false); }
   };
 
-  const retryAuthentication = () => {
-    void (async () => {
-      if (localAccount.enabled) {
-        try {
-          const webApp = await telegramWebAppReady();
-          if (webApp.initData?.trim()) { await login(false); return; }
-        } catch { /* Use the explicitly enabled local account when Telegram is unavailable. */ }
-        await login(true);
-      } else await login(false);
-    })();
-  };
-
   const reauthenticate = async () => {
     const epoch = ++sessionEpochRef.current;
     setBusy(true);
     setError('');
     try {
-      let user: AccountSummary;
-      try {
-        const webApp = await telegramWebAppReady();
-        if (epoch !== sessionEpochRef.current) return;
-        user = webApp.initData?.trim()
-          ? await api.login(webApp.initData)
-          : localAccount.enabled ? await api.loginDev(Number(devUserId)) : await loginWithTelegram(api, () => epoch === sessionEpochRef.current) as AccountSummary;
-      } catch (reason) {
-        if (!(reason instanceof TelegramWebAppUnavailableError) || !localAccount.enabled) throw reason;
-        if (epoch !== sessionEpochRef.current) return;
-        user = await api.loginDev(Number(devUserId));
-      }
-      if (epoch !== sessionEpochRef.current) return;
+      const user = await authenticateLaunch(() => epoch === sessionEpochRef.current);
+      if (epoch !== sessionEpochRef.current || !user) return;
       await loadAccountState(user);
       if (epoch !== sessionEpochRef.current) return;
       setReauthRequired(false);
@@ -713,32 +684,6 @@ export function AccountGame() {
     } finally { if (epoch === sessionEpochRef.current) setBusy(false); }
   };
 
-  const logout = async () => {
-    const accountId = accountRef.current?.account_id;
-    const epoch = ++sessionEpochRef.current;
-    const pendingWrites = writeChainRef.current;
-    const releaseCapturedLock = releaseLockRef.current;
-    releaseLockRef.current = undefined;
-    accountRef.current = null;
-    setEquipment(DEFAULT_EQUIPMENT);
-    setAccount(null);
-    if (retryTimerRef.current !== undefined) window.clearTimeout(retryTimerRef.current);
-    retryTimerRef.current = undefined;
-    checkpointBackoffRef.current.reset();
-    pumpRef.current = false;
-    traceRef.current = null; setTrace(null); setSnapshot(null); setBestScore(null); setAccount(null); setScreen('signed-out');
-    setBusy(true);
-    void finishAccountLogout(pendingWrites,
-      () => accountId ? storage.clearAccount(accountId) : Promise.resolve(),
-      () => releaseCapturedLock?.(),
-    ).finally(() => {
-      if (epoch === sessionEpochRef.current) setBusy(false);
-    });
-    void api.logout().catch(() => {
-      if (epoch === sessionEpochRef.current) setError(messages.accountServiceUnavailable);
-    });
-  };
-
   const settingsWallet = <div><p>{messages.accountDescription}</p><p>{messages.accountRewardsNotSpendable}</p></div>;
   const activeSnapshot = snapshot?.status === 'active' && screen === 'active' && trace ? snapshot : null;
   if (activeSnapshot && account) return <AccountFlight
@@ -797,11 +742,7 @@ export function AccountGame() {
           <p className="instruction">{messages.accountDescription}</p>
         </>}
         {screen === 'signed-out' && <>
-          {localAccount.enabled && <label className="account-dev-label">{messages.accountUserIdLabel}<input inputMode="numeric" value={devUserId} onChange={(event) => setDevUserId(event.target.value)} /></label>}
-          {localAccount.enabled
-            ? <GameButton variant="primary" onClick={() => void login(true)} disabled={busy || !devUserId}>{messages.accountDevLogin}</GameButton>
-            : <GameButton variant="primary" onClick={() => void login(false)} disabled={busy}>{messages.accountLogin}</GameButton>}
-          {error && <GameButton variant="control" onClick={retryAuthentication} disabled={busy}>{messages.accountRetry}</GameButton>}
+          {error && <GameButton variant="control" onClick={() => void retryAuthentication()} disabled={busy}>{messages.accountRetry}</GameButton>}
         </>}
         {screen === 'loading' && <p role="status">{messages.accountLoading}</p>}
         {screen === 'recovering' && <><p role="status">{error || notice || messages.accountConnectionRestoring}</p>{snapshot && account && <GameButton variant="control" onClick={() => void reconcile(snapshot, account)} disabled={busy}>{messages.accountStatusRetry}</GameButton>}{snapshot?.status === 'active' && trace && <GameButton variant="control" className="account-mode-button" onClick={() => void abandon()} disabled={busy}>{messages.accountAbandon}</GameButton>}</>}
@@ -838,7 +779,6 @@ export function AccountGame() {
         {error && screen !== 'takeover' && <p className="wallet-access-error" role="alert">{error}</p>}
         {notice && <p role="status">{notice}</p>}
         {storage.persistent === false && <p className="wallet-access-error" role="status">{messages.accountStorageWarning}</p>}
-        {account && <GameButton variant="control" className="account-mode-button" onClick={() => void logout()} disabled={busy}>{messages.accountLogout}</GameButton>}
         {account && <AccountShop api={api} accountId={account.account_id} sessionEpoch={sessionEpochRef.current} locale={locale} messages={messages} portalContainer={frameRef} open={shopOpen} onOpenChange={setShopOpen} equipment={equipment} onEquipment={setEquipment} />}
       </div></section>
       <footer className="wallet-status-strip"><p className="wallet-storage">{messages.accountRewardsNotSpendable}</p></footer>
@@ -881,7 +821,7 @@ function AccountFlight(props: FlightProps) {
         <div className="brand"><span className="brand-mark">{messages.brandMark}</span><span>{messages.brandNameFirstLine}<br />{messages.brandNameSecondLine}</span></div>
         <div className="score-group"><div className="score-card"><span>{messages.scoreLabel}</span><strong>{formatNumber(locale, run.score)}</strong></div>{props.bestScore !== null && <div className="score-card"><span>{messages.bestScoreLabel}</span><strong>{formatNumber(locale, props.bestScore)}</strong></div>}</div>
         {run.phase === 'RUNNING' && <output className="running-score">{formatNumber(locale, run.score)}</output>}
-        {props.reauthRequired && <GameButton variant="control" onClick={props.onReauthenticate} disabled={props.busy}>{messages.accountLogin}</GameButton>}
+        {props.reauthRequired && <GameButton variant="control" onClick={props.onReauthenticate} disabled={props.busy}>{messages.accountRetry}</GameButton>}
         <div className="hud-actions">
           <GameSettings open={settingsOpen} onOpenChange={setSettingsOpen} locale={locale} setLocale={setLocale} messages={messages}
             preferences={audio.preferences} toggle={audio.toggle} wallet={{ FEATHER: 0, GAME_STAR: 0 }} walletPersistent walletStatus="" walletBlocked={false}
@@ -889,14 +829,14 @@ function AccountFlight(props: FlightProps) {
           {run.phase !== 'RUNNING' && <AccountShop api={props.api} accountId={props.accountId} sessionEpoch={props.sessionEpoch} locale={locale} messages={messages} portalContainer={frameRef} open={props.shopOpen} onOpenChange={props.setShopOpen} equipment={props.equipment} onEquipment={props.setEquipment} />}
         </div>
       </header>
-      <footer className="wallet-status-strip"><p className="wallet-storage">{props.error || props.notice || (props.storageWarning ? messages.accountStorageWarning : messages.accountRewardsLabel)}</p>{props.reauthRequired && <GameButton variant="control" onClick={props.onReauthenticate} disabled={props.busy}>{messages.accountLogin}</GameButton>}</footer>
+      <footer className="wallet-status-strip"><p className="wallet-storage">{props.error || props.notice || (props.storageWarning ? messages.accountStorageWarning : messages.accountRewardsLabel)}</p>{props.reauthRequired && <GameButton variant="control" onClick={props.onReauthenticate} disabled={props.busy}>{messages.accountRetry}</GameButton>}</footer>
       {run.phase !== 'RUNNING' && <section className="screen-card" aria-live="polite"><div className="screen-panel account-panel">
         {run.runtimeError ? <><p role="alert" className="error-copy">{messages[run.runtimeError]}</p><GameButton variant="primary" onClick={() => window.location.reload()}>{messages.reloadPageButton}</GameButton></> : <>
           {run.phase === 'READY' && <><p className="eyebrow">{messages.smallFlightEyebrow}</p><h1>{messages.greeting}<br />{messages.traveler}</h1><p className="instruction">{messages.readyInstructionFirstLine}<br />{messages.readyInstructionSecondLine}</p><GameButton variant="primary" onClick={start} disabled={!run.rendererReady || props.busy}>{messages.startFlightButton} <span>{messages.forwardGlyph}</span></GameButton></>}
           {run.phase === 'PAUSED' && <><p className="eyebrow">{messages.pauseEyebrow}</p><h1>{run.flightCapReached ? messages.accountPendingVerification : messages.pausedHeading}</h1><GameButton variant="primary" onClick={run.flightCapReached ? props.onFinish : start} disabled={!run.rendererReady || props.busy}>{run.flightCapReached ? messages.accountStatusRetry : messages.accountResume}</GameButton><GameButton variant="control" className="account-mode-button" onClick={props.onAbandon} disabled={props.busy}>{messages.accountAbandon}</GameButton></>}
           {run.phase === 'DEAD' && <><p className="eyebrow">{messages.completedFlightEyebrow}</p><h1>{messages.completedHeading}</h1><p className="result-score">{formatNumber(locale, run.score)} <span>{formatCountUnit(locale, 'score', run.score)}</span></p><p className="earnings-summary"><span>{messages.accountRewardsLabel}</span><strong>{formatNumber(locale, feathers)} {messages.feathersShortLabel}</strong><strong>{formatNumber(locale, stars)} {messages.gameStarsShortLabel}</strong></p><p className="wallet-disclaimer">{messages.accountRewardsNotSpendable}</p><GameButton variant="primary" onClick={props.onFinish} disabled={props.busy}>{messages.accountStatusRetry}</GameButton></>}
           {props.error && <p className="wallet-access-error" role="alert">{props.error}</p>}
-          {props.reauthRequired && <GameButton variant="control" onClick={props.onReauthenticate} disabled={props.busy}>{messages.accountLogin}</GameButton>}
+          {props.reauthRequired && <GameButton variant="control" onClick={props.onReauthenticate} disabled={props.busy}>{messages.accountRetry}</GameButton>}
           {props.notice && <p role="status">{props.notice}</p>}
           {props.storageWarning && <p className="wallet-access-error" role="status">{messages.accountStorageWarning}</p>}
         </>}

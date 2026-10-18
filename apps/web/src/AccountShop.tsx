@@ -63,7 +63,7 @@ function errorCopy(error: unknown, messages: MessageCatalog): string {
   if (error.code === 'expired_quote') return messages.accountShopExpired;
   if (error.code === 'stale_quote' || error.code === 'already_owned') return messages.accountShopStale;
   if (error.code === 'shop_disabled') return messages.accountShopDisabled;
-  if (error.status === 401 || error.code === 'account_session_required' || error.code === 'account_session_expired') return messages.accountSessionExpired;
+  if (error.status === 401 || error.code === 'account_session_required' || error.code === 'account_session_expired' || error.code === 'account_session_identity_mismatch') return messages.accountSessionExpired;
   return error.status >= 500 || error.status === 0 ? messages.accountShopUnavailable : messages.accountShopPurchaseFailed;
 }
 function isDefinitivePurchaseFailure(error: unknown): boolean {
@@ -226,7 +226,7 @@ export function AccountShop({ api, accountId, sessionEpoch, locale, messages, po
       setPending(intent);
       if (reason instanceof AccountApiError && reason.status === 404) {
         setError(messages.accountShopPending);
-      } else if (reason instanceof AccountApiError && (reason.status === 401 || reason.code === 'account_session_required' || reason.code === 'account_session_expired')) {
+      } else if (reason instanceof AccountApiError && (reason.status === 401 || reason.code === 'account_session_required' || reason.code === 'account_session_expired' || reason.code === 'account_session_identity_mismatch')) {
         setError(errorCopy(reason, messages));
       } else setError(messages.accountShopPending);
     } finally { if (isCurrentScope(intent.accountId, requestEpoch)) setBusy(false); }

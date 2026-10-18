@@ -107,10 +107,10 @@ describe('account cosmetic shop', () => {
     expect(api.shopPurchase).toHaveBeenLastCalledWith(stored['account-a'].quote.quote_id, stored['account-a'].idempotencyKey);
   });
 
-  it('retains purchase recovery after an authentication failure', async () => {
+  it('retains purchase recovery and shows reopen guidance after a refreshed account mismatch', async () => {
     api = buildApi({
-      shopPurchase: vi.fn().mockRejectedValue(new AccountApiError(401, 'account_session_expired')),
-      shopPurchaseLookup: vi.fn().mockRejectedValue(new AccountApiError(401, 'account_session_expired')),
+      shopPurchase: vi.fn().mockRejectedValue(new AccountApiError(409, 'account_session_identity_mismatch')),
+      shopPurchaseLookup: vi.fn().mockRejectedValue(new AccountApiError(409, 'account_session_identity_mismatch')),
     });
     await act(async () => { render(); await Promise.resolve(); await Promise.resolve(); });
     click('.account-shop-item:nth-child(2)');
@@ -118,7 +118,7 @@ describe('account cosmetic shop', () => {
     await act(async () => { host.querySelector<HTMLButtonElement>('.account-shop-confirmation .primary-button')!.click(); await Promise.resolve(); await Promise.resolve(); });
 
     expect(host.querySelector('.account-shop-pending')).not.toBeNull();
-    expect(host.textContent).toContain('Your session expired. Sign in with Telegram to continue.');
+    expect(host.textContent).toContain('Open the game from Telegram, then retry the connection.');
     expect(JSON.parse(localStorage.getItem('doofy-duck:account-shop-pending:v1')!)['account-a']).toBeDefined();
   });
 

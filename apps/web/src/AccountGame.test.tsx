@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRun, createRunDescriptor } from '@doofy-duck/game-sim';
 import { AccountGame } from './AccountGame';
+import { AccountApiError } from './account-api';
 import { TelegramWebAppUnavailableError } from './telegram-web-app';
 import { LocaleProvider } from './locale';
 import { DEFAULT_APPEARANCE } from './appearance';
@@ -106,6 +107,8 @@ beforeEach(async () => {
   localStorage.clear();
   harness.traceRecords.clear(); harness.runPhase = 'READY'; harness.runOptions = null; harness.runCanPlay = null; harness.runScore = 0; harness.runRuntimeError = '';
   harness.restore.mockResolvedValue(account);
+  harness.restore.mockClear(); harness.login.mockClear(); harness.loginDev.mockClear(); harness.logout.mockClear(); harness.loadTelegramWebApp.mockClear();
+  harness.loginDev.mockResolvedValue(account);
   harness.loadTelegramWebApp.mockResolvedValue({ initData: '', ready: vi.fn() });
   harness.progress.mockResolvedValue({ bestScore: 0 });
   harness.shopEquipment.mockResolvedValue({ equipment: [{ item_type: 'skin', item_id: 'classic', revision: 1 }, { item_type: 'background', item_id: 'meadow', revision: 1 }] });
@@ -214,22 +217,50 @@ describe('account run transport', () => {
     expect(host.querySelector('[role="alert"]')?.textContent).toBe(messagesEn.graphicsStartupError);
   });
 
-  it('automatically connects the configured local identity and keeps logout fenced', async () => {
-    harness.restore.mockRejectedValueOnce(new Error('no saved session'));
+  it('automatically uses only the configured development identity and exposes no account controls', async () => {
+    const foreignAccount = { account_id: 'foreign-cookie-account', telegram_user_id: 88, created_at: 'now' };
+    harness.restore.mockResolvedValue(foreignAccount);
     harness.loginDev.mockResolvedValueOnce(account);
-    await act(async () => { root.unmount(); root = createRoot(host); root.render(<LocaleProvider><AccountGame key="local-auto-login" /></LocaleProvider>); });
+    await act(async () => { root.unmount(); root = createRoot(host); root.render(<LocaleProvider><AccountGame key="configured-launch-identity" /></LocaleProvider>); });
 
     await vi.waitFor(() => expect(host.querySelector('.account-id')?.textContent).toBe('7'));
+    expect(harness.restore).not.toHaveBeenCalled();
     expect(harness.loginDev).toHaveBeenCalledWith(100000001);
-    expect(host.querySelector('.account-dev-label')).toBeNull();
+    expect(host.querySelector('input')).toBeNull();
+    expect([...host.querySelectorAll('button')].some((button) => /sign in|войти|выйти|telegram/i.test(button.textContent ?? ''))).toBe(false);
+  });
 
+  it('blocks a production launch without Telegram init data even when a cookie session exists', async () => {
+    await act(async () => { root.unmount(); });
+    vi.stubEnv('VITE_DD_DEV_AUTH_ENABLED', 'false');
+    harness.restore.mockResolvedValue(account);
+    harness.loadTelegramWebApp.mockResolvedValue({ initData: '', ready: vi.fn() });
+    root = createRoot(host);
+    await act(async () => { root.render(<LocaleProvider><AccountGame key="production-no-launch-data" /></LocaleProvider>); });
+
+    await vi.waitFor(() => expect(host.textContent).toContain('Открой игру из Telegram'));
+    expect(host.querySelector('.account-id')).toBeNull();
+    expect(harness.restore).not.toHaveBeenCalled();
+    expect([...host.querySelectorAll('button')].some((button) => /войти|telegram/i.test(button.textContent ?? ''))).toBe(false);
+    expect([...host.querySelectorAll('button')].some((button) => button.textContent?.includes('Повторить подключение'))).toBe(true);
+  });
+
+  it('retries with the same frozen Telegram launch data after an authentication failure', async () => {
+    await act(async () => { root.unmount(); });
+    harness.loadTelegramWebApp.mockResolvedValue({ initData: 'first-launch-identity', ready: vi.fn() });
+    harness.login.mockRejectedValueOnce(Object.assign(new Error('offline'), { status: 503, code: 'unavailable' }));
+    root = createRoot(host);
+    await act(async () => { root.render(<LocaleProvider><AccountGame key="frozen-launch-identity" /></LocaleProvider>); });
+    await vi.waitFor(() => expect(host.textContent).toContain('Повторить подключение'));
+
+    harness.loadTelegramWebApp.mockResolvedValue({ initData: 'changed-launch-identity', ready: vi.fn() });
+    harness.login.mockResolvedValueOnce(account);
     await act(async () => {
-      [...host.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.includes('Выйти'))?.click();
+      [...host.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.includes('Повторить подключение'))?.click();
     });
-    await vi.waitFor(() => expect(host.querySelector('.account-dev-label input')).toBeTruthy());
-    const attemptsAfterLogout = harness.loginDev.mock.calls.length;
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(harness.loginDev).toHaveBeenCalledTimes(attemptsAfterLogout);
+    await vi.waitFor(() => expect(host.querySelector('.account-id')?.textContent).toBe('7'));
+    expect(harness.login).toHaveBeenNthCalledWith(1, 'first-launch-identity');
+    expect(harness.login).toHaveBeenNthCalledWith(2, 'first-launch-identity');
   });
 
   it('shows a retry after local authentication cannot reach the backend', async () => {
@@ -255,26 +286,23 @@ describe('account run transport', () => {
     expect(harness.restore).not.toHaveBeenCalled();
   });
 
-  it('uses default account equipment after logout when the next account equipment read fails', async () => {
+  it('uses default equipment after a fresh Telegram launch when the new account wardrobe read fails', async () => {
     const nextAccount = { account_id: 'account-b', telegram_user_id: 8, created_at: 'later' };
     await act(async () => { root.unmount(); });
     harness.gameAppearance = null;
-    harness.restore.mockResolvedValue(account);
+    harness.loadTelegramWebApp.mockResolvedValueOnce({ initData: 'account-a-launch', ready: vi.fn() });
+    harness.login.mockResolvedValueOnce(account);
     harness.shopEquipment.mockReset()
       .mockResolvedValueOnce({ equipment: [{ item_type: 'skin', item_id: 'royal', revision: 1 }, { item_type: 'background', item_id: 'meadow', revision: 1 }] })
       .mockRejectedValueOnce(new Error('shop unavailable'));
     root = createRoot(host);
-    await act(async () => { root.render(<LocaleProvider><AccountGame /></LocaleProvider>); });
+    await act(async () => { root.unmount(); root = createRoot(host); root.render(<LocaleProvider><AccountGame key="equipment-account-a" /></LocaleProvider>); });
     await vi.waitFor(() => expect(host.textContent).toContain('7'));
     expect(harness.shopEquipment).toHaveBeenCalledTimes(1);
 
-    await act(async () => { host.querySelector<HTMLButtonElement>('.account-mode-button')?.click(); });
-    await vi.waitFor(() => expect(host.querySelector('.account-dev-label input')).not.toBeNull());
-    harness.loginDev.mockResolvedValueOnce(nextAccount);
-    const input = host.querySelector<HTMLInputElement>('.account-dev-label input')!;
-    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
-    setter.call(input, '8'); input.dispatchEvent(new Event('input', { bubbles: true }));
-    await act(async () => { host.querySelector<HTMLButtonElement>('.account-panel .primary-button')?.click(); });
+    harness.loadTelegramWebApp.mockResolvedValueOnce({ initData: 'account-b-launch', ready: vi.fn() });
+    harness.login.mockResolvedValueOnce(nextAccount);
+    await act(async () => { root.render(<LocaleProvider><AccountGame key="equipment-account-b" /></LocaleProvider>); });
     await vi.waitFor(() => expect(host.textContent).toContain('8'));
     harness.createRun.mockResolvedValueOnce(runSnapshot({ accountId: nextAccount.account_id, runId: 'default-flight' }));
     await act(async () => { host.querySelector<HTMLButtonElement>('.account-panel .primary-button')?.click(); });
@@ -349,7 +377,6 @@ describe('account run transport', () => {
 
   it('waits for Telegram SDK readiness before trying automatic Telegram login', async () => {
     let resolveTelegram!: (value: { initData: string; ready: () => void }) => void;
-    harness.restore.mockRejectedValue(new Error('no saved session'));
     harness.login.mockResolvedValue(account);
     harness.loadTelegramWebApp.mockImplementationOnce(() => new Promise((resolve) => { resolveTelegram = resolve; }));
     await act(async () => {
@@ -363,30 +390,24 @@ describe('account run transport', () => {
     expect(harness.login).toHaveBeenCalledWith('signed-init-data');
   });
 
-  it('does not let delayed Telegram bootstrap replace a manual development login', async () => {
-    const manualAccount = { account_id: 'account-manual', telegram_user_id: 88, created_at: 'manual' };
+  it('keeps Telegram launch identity authoritative while SDK startup is delayed', async () => {
     let resolveTelegram!: (value: { initData: string; ready: () => void }) => void;
-    harness.restore.mockRejectedValue(new Error('no saved session'));
+    harness.loginDev.mockClear(); harness.login.mockClear();
     harness.loadTelegramWebApp.mockImplementationOnce(() => new Promise((resolve) => { resolveTelegram = resolve; }));
-    harness.loginDev.mockResolvedValue(manualAccount);
     harness.login.mockResolvedValue(account);
 
     await act(async () => {
-      root.render(<LocaleProvider><AccountGame key="manual-login-before-sdk" /></LocaleProvider>);
+      root.unmount(); root = createRoot(host); root.render(<LocaleProvider><AccountGame key="delayed-telegram-authority" /></LocaleProvider>);
     });
     await vi.waitFor(() => expect(harness.loadTelegramWebApp).toHaveBeenCalled());
-    const input = host.querySelector<HTMLInputElement>('.account-dev-label input')!;
-    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
-    setter.call(input, '88');
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    await act(async () => { host.querySelector<HTMLButtonElement>('.account-panel .primary-button')?.click(); });
-    await vi.waitFor(() => expect(host.textContent).toContain('88'));
-
-    await act(async () => { resolveTelegram({ initData: 'old-telegram-init-data', ready: vi.fn() }); });
-
+    expect(harness.loginDev).not.toHaveBeenCalled();
     expect(harness.login).not.toHaveBeenCalled();
-    expect(host.textContent).toContain('88');
-    expect(host.textContent).not.toContain('7');
+
+    await act(async () => { resolveTelegram({ initData: 'delayed-authoritative-launch', ready: vi.fn() }); });
+
+    expect(harness.login).toHaveBeenCalledWith('delayed-authoritative-launch');
+    expect(harness.loginDev).not.toHaveBeenCalled();
+    expect(host.textContent).toContain('7');
   });
 
   it('does not submit delayed Telegram bootstrap credentials after the account screen unmounts', async () => {
@@ -406,52 +427,46 @@ describe('account run transport', () => {
     expect(harness.login).not.toHaveBeenCalled();
   });
 
-  it('does not leave cross-account reauthentication busy after loading the new account', async () => {
-    const nextAccount = { account_id: 'account-b', telegram_user_id: 8, created_at: 'later' };
-    harness.submitCheckpoint.mockRejectedValueOnce({ status: 401, code: 'account_session_expired' });
+  it('reauthenticates with the same launch identity and preserves its pending trace', async () => {
+    await act(async () => { root.unmount(); });
+    harness.loadTelegramWebApp.mockResolvedValue({ initData: 'same-launch-identity', ready: vi.fn() });
+    harness.login.mockResolvedValue(account);
+    root = createRoot(host);
+    await act(async () => { root.render(<LocaleProvider><AccountGame key="same-identity-recovery" /></LocaleProvider>); });
+    harness.submitCheckpoint.mockRejectedValueOnce(new AccountApiError(409, 'account_session_identity_mismatch'));
     await act(async () => { host.querySelector<HTMLButtonElement>('.account-panel .primary-button')?.click(); });
     await act(async () => { for (let tick = 1; tick <= 120; tick++) harness.runOptions!.onTick({ phase: 'RUNNING', tick } as never, []); });
     await vi.waitFor(() => expect(harness.submitCheckpoint).toHaveBeenCalledTimes(1));
-    await vi.waitFor(() => expect(host.textContent).toContain('Войти через Telegram'));
+    await vi.waitFor(() => expect(host.textContent).toContain('Повторить подключение'));
 
-    harness.loadTelegramWebApp.mockResolvedValue({ initData: 'account-b-init-data', ready: vi.fn() });
-    harness.login.mockResolvedValue(nextAccount);
     const reauthenticateButton = [...host.querySelectorAll<HTMLButtonElement>('button')]
-      .find((button) => button.textContent?.includes('Войти через Telegram'));
+      .find((button) => button.textContent?.includes('Повторить подключение'));
     expect(reauthenticateButton).toBeDefined();
     await act(async () => { reauthenticateButton!.click(); });
 
-    await vi.waitFor(() => expect(host.textContent).toContain('8'));
+    await vi.waitFor(() => expect(host.textContent).toContain('7'));
+    expect(harness.login).toHaveBeenNthCalledWith(2, 'same-launch-identity');
+    expect(harness.traceRecords.has(`${account.account_id}:${initialState.descriptor.runId}`)).toBe(true);
     const start = host.querySelector<HTMLButtonElement>('.account-panel .primary-button');
     expect(start?.disabled).toBe(false);
   });
 
-  it('ignores a delayed Telegram SDK rejection after manual login and logout', async () => {
-    const manualAccount = { account_id: 'account-manual', telegram_user_id: 88, created_at: 'manual' };
+  it('ignores a delayed Telegram SDK rejection after unmount', async () => {
     let rejectTelegram!: (reason: unknown) => void;
-    harness.restore.mockRejectedValue(new Error('no saved session'));
+    harness.loginDev.mockClear(); harness.login.mockClear();
+    vi.stubEnv('VITE_DD_DEV_AUTH_ENABLED', 'false');
     harness.loadTelegramWebApp.mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectTelegram = reject; }));
-    harness.loginDev.mockResolvedValue(manualAccount);
 
     await act(async () => {
-      root.render(<LocaleProvider><AccountGame key="logout-before-sdk-reject" /></LocaleProvider>);
+      root.unmount(); root = createRoot(host); root.render(<LocaleProvider><AccountGame key="unmount-before-sdk-reject" /></LocaleProvider>);
     });
     await vi.waitFor(() => expect(harness.loadTelegramWebApp).toHaveBeenCalled());
-    const input = host.querySelector<HTMLInputElement>('.account-dev-label input')!;
-    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
-    setter.call(input, '88');
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    await act(async () => { host.querySelector<HTMLButtonElement>('.account-panel .primary-button')?.click(); });
-    await vi.waitFor(() => expect(host.textContent).toContain('88'));
-    await act(async () => {
-      [...host.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.includes('Выйти'))?.click();
-    });
-    await vi.waitFor(() => expect(host.querySelector('.account-dev-label input')).toBeTruthy());
+    await act(async () => { root.render(<div />); });
 
     await act(async () => { rejectTelegram(new TelegramWebAppUnavailableError()); });
 
     expect(host.querySelector('.wallet-access-error')).toBeNull();
-    expect(host.textContent).not.toContain('Проверьте соединение и попробуйте ещё раз');
+    expect(harness.login).not.toHaveBeenCalled();
   });
 
   it('shows a retry after local sign-in fails and clears the error on retry', async () => {
@@ -465,7 +480,7 @@ describe('account run transport', () => {
     expect(harness.login).not.toHaveBeenCalled();
 
     harness.loginDev.mockResolvedValueOnce(account);
-    await act(async () => { host.querySelector<HTMLButtonElement>('.account-panel .account-dev-label + .primary-button')?.click(); });
+    await act(async () => { host.querySelector<HTMLButtonElement>('.account-panel button')?.click(); });
 
     expect(host.textContent).not.toContain('Проверьте соединение и повторите попытку');
     expect(host.textContent).toContain('Начать полёт');
@@ -510,43 +525,29 @@ describe('account run transport', () => {
     expect(harness.completion.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('finishes local logout when remote revocation fails', async () => {
-    let failClear!: () => void;
-    harness.clearAccount.mockImplementationOnce(() => new Promise((_resolve, reject) => {
-      failClear = () => reject(new Error('storage unavailable'));
-    }));
-    harness.logout.mockRejectedValueOnce(new Error('offline'));
-    const logoutButton = [...host.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.includes('Выйти'))!;
-    await act(async () => { logoutButton.click(); });
-    await vi.waitFor(() => expect(host.querySelector('.account-dev-label input')).toBeTruthy());
-    expect(harness.clearAccount).toHaveBeenCalledTimes(1);
-    await act(async () => { failClear(); });
-    expect(host.textContent).toContain('Сервис временно недоступен');
+  it('never renders account logout or identity selection controls', async () => {
+    expect(host.querySelector('input')).toBeNull();
+    expect([...host.querySelectorAll('button')].some((button) => /sign in|войти|выйти|telegram/i.test(button.textContent ?? ''))).toBe(false);
+    expect(harness.logout).not.toHaveBeenCalled();
   });
 
-  it('does not apply a latest result after the account changes while it is loading', async () => {
+  it('does not apply a latest result from an earlier Telegram launch', async () => {
     const otherAccount = { account_id: 'account-b', telegram_user_id: 8, created_at: 'later' };
-    const logout = () => [...host.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.includes('Выйти'))!;
-    const enterDevId = (id: string) => {
-      const input = host.querySelector<HTMLInputElement>('.account-dev-label input')!;
-      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
-      setter.call(input, id);
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-    };
     let resolveOldLatest!: (value: ReturnType<typeof runSnapshot>) => void;
-    await act(async () => { logout().click(); });
-    await vi.waitFor(() => expect(host.querySelector('.account-dev-label input')).toBeTruthy());
+    await act(async () => { root.unmount(); });
+    harness.loadTelegramWebApp.mockResolvedValueOnce({ initData: 'old-launch', ready: vi.fn() });
+    harness.login.mockResolvedValueOnce(account);
     harness.latestRun.mockImplementationOnce(() => new Promise((resolve) => { resolveOldLatest = resolve; }));
+    root = createRoot(host);
     await act(async () => {
-      root.render(<LocaleProvider><AccountGame key="restore-pending-result" /></LocaleProvider>);
+      root.render(<LocaleProvider><AccountGame key="restore-pending-result-old-launch" /></LocaleProvider>);
     });
     await vi.waitFor(() => expect(harness.latestRun).toHaveBeenCalled());
 
-    await act(async () => { logout().click(); });
-    await vi.waitFor(() => expect(host.querySelector('.account-dev-label input')).toBeTruthy());
-    harness.loginDev.mockResolvedValue(otherAccount);
+    harness.loadTelegramWebApp.mockResolvedValueOnce({ initData: 'new-launch', ready: vi.fn() });
+    harness.login.mockResolvedValueOnce(otherAccount);
     harness.latestRun.mockResolvedValue(undefined);
-    await act(async () => { enterDevId('8'); host.querySelector<HTMLButtonElement>('.account-panel .primary-button')?.click(); });
+    await act(async () => { root.render(<LocaleProvider><AccountGame key="restore-pending-result-new-launch" /></LocaleProvider>); });
     await vi.waitFor(() => expect(host.textContent).toContain('8'));
     await act(async () => {
       resolveOldLatest(runSnapshot({ state: { ...initialState, score: 99 }, status: 'completed', verificationStatus: 'verified' }));
@@ -559,19 +560,10 @@ describe('account run transport', () => {
 
   it('shows the account best score from the server across new runs', async () => {
     localStorage.setItem('doofy-duck:best:v1', JSON.stringify({ version: 1, best: 99999 }));
-    const logoutButton = [...host.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.includes('Выйти'))!;
-    await act(async () => { logoutButton.click(); });
     harness.progress.mockResolvedValue({ bestScore: 987 });
-    harness.loginDev.mockResolvedValue(account);
     harness.currentRun.mockResolvedValue(undefined);
-    await act(async () => {
-      const input = host.querySelector<HTMLInputElement>('.account-dev-label input')!;
-      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
-      setter.call(input, '7');
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-      host.querySelector<HTMLButtonElement>('.account-panel .primary-button')?.click();
-    });
-    await vi.waitFor(() => expect(harness.progress).toHaveBeenCalledTimes(2));
+    await act(async () => { root.render(<LocaleProvider><AccountGame key="server-best-score" /></LocaleProvider>); });
+    await vi.waitFor(() => expect(harness.progress).toHaveBeenCalled());
     await vi.waitFor(() => expect(host.textContent).toContain('987'));
     expect(host.textContent).toContain('РЕКОРД');
 
@@ -746,7 +738,6 @@ describe('account run transport', () => {
     await act(async () => { nextStart?.click(); });
     await vi.waitFor(() => expect(harness.traceRecords.has(`${account.account_id}:next-flight`)).toBe(true));
     expect(harness.traceRecords.get(`${account.account_id}:next-flight`)).toMatchObject({ accountId: account.account_id });
-    expect(harness.loginDev).not.toHaveBeenCalled();
   });
 
   it('preserves a valid saved tail during explicit takeover when Web Locks are unavailable', async () => {
@@ -824,7 +815,7 @@ describe('account run transport', () => {
     expect((harness.submitCheckpoint.mock.calls[1]?.[1] as { idempotencyKey: string }).idempotencyKey).toBe(checkpointKey);
   });
 
-  it('ignores a completion poll that resolves after logout and a different account starts a run', async () => {
+  it('ignores a completion poll that resolves after a new Telegram launch starts another account run', async () => {
     vi.useFakeTimers();
     const nextAccount = { account_id: 'account-b', telegram_user_id: 8, created_at: 'later' };
     harness.currentRun.mockResolvedValue(runSnapshot({ status: 'completion_pending', verificationStatus: 'verified', deliveryStatus: 'pending' }));
@@ -836,17 +827,13 @@ describe('account run transport', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
     expect(harness.getRun).toHaveBeenCalledTimes(1);
 
-    const logoutButton = [...host.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.includes('Выйти'))!;
-    await act(async () => { logoutButton.click(); });
-    harness.loginDev.mockResolvedValue(nextAccount);
+    await act(async () => { root.unmount(); });
+    harness.loadTelegramWebApp.mockResolvedValueOnce({ initData: 'second-account-launch', ready: vi.fn() });
+    harness.login.mockResolvedValueOnce(nextAccount);
     harness.currentRun.mockResolvedValue(undefined);
-    await act(async () => {
-      const input = host.querySelector<HTMLInputElement>('.account-dev-label input')!;
-      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
-      setter.call(input, '8');
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-      host.querySelector<HTMLButtonElement>('.account-panel .primary-button')?.click();
-    });
+    root = createRoot(host);
+    await act(async () => { root.render(<LocaleProvider><AccountGame key="different-launch-account" /></LocaleProvider>); });
+    await vi.waitFor(() => expect(host.textContent).toContain('8'));
     harness.createRun.mockResolvedValue(runSnapshot({ runId: 'run-b', accountId: nextAccount.account_id, writerToken: 'writer-b' }));
     await act(async () => { host.querySelector<HTMLButtonElement>('.account-panel .primary-button')?.click(); });
     await vi.waitFor(() => expect(harness.traceRecords.has(`${nextAccount.account_id}:run-b`)).toBe(true));

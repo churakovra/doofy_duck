@@ -27,6 +27,23 @@ account: `{account_id, telegram_user_id, created_at}`. `GET
 /.well-known/jwks.json` publishes the current public signing key using the standard
 OKP/Ed25519 JWK shape.
 
+## Mini App launch behavior
+
+The game authenticates automatically from Telegram launch data; it exposes no
+sign-in, logout, Telegram ID input or account switcher. Without signed launch
+data the normal frontend remains blocked, even with an existing refresh cookie.
+Explicitly configured local development authenticates the fixed configured
+identity automatically and does not restore a different cookie account.
+
+Each mounted app remains bound to its server-verified launch account. Candidate
+login credentials are installed only after the server account lookup succeeds;
+a failed lookup leaves the client unauthenticated. Refresh
+credentials for another account must be rejected before an authenticated request
+is retried. A recoverable connection failure can offer Retry for the same launch;
+expired launch data may require reopening the Mini App through Telegram.
+Low-level refresh and session revocation endpoints retain their wire contract.
+See the [bot setup guide](../../docs/TELEGRAM_BOT_SETUP.md).
+
 ## Access-token wire format
 
 Compact JWT, signed with Ed25519 (`alg: EdDSA`). Header:

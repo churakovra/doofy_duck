@@ -54,6 +54,67 @@ describe('account API authentication', () => {
     expect(JSON.stringify(api)).not.toContain('secret');
   });
 
+  it.each([
+    ['Telegram launch', (api: AccountApi) => api.login('init')],
+    ['configured development identity', (api: AccountApi) => api.loginDev(7)],
+  ])('keeps candidate credentials private until %s account validation completes', async (_label, authenticate) => {
+    let releaseAccount!: (value: Response) => void;
+    const fetcher = vi.fn<FetchLike>(async (input) => {
+      const path = String(input);
+      if (path.endsWith('/auth/telegram') || path.endsWith('/auth/dev')) {
+        return response({ access_token: 'candidate', token_type: 'Bearer', expires_in: 600 });
+      }
+      if (path.endsWith('/account')) return await new Promise<Response>((resolve) => { releaseAccount = resolve; });
+      return response({});
+    });
+    const api = new AccountApi({ fetcher });
+    const login = authenticate(api);
+    await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2));
+
+    expect(api.signedIn).toBe(false);
+    releaseAccount(response({ error: 'account_unavailable' }, 503));
+    await expect(login).rejects.toMatchObject({ code: 'account_unavailable' });
+    await expect(api.progress()).rejects.toMatchObject({ code: 'account_session_required' });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it('bounds and cancels the initial verified account lookup without refreshing', async () => {
+    vi.useFakeTimers();
+    let releaseStalledBody!: (value: unknown) => void;
+    const stalledBody = { ok: true, json: () => new Promise((resolve) => { releaseStalledBody = resolve; }) } as unknown as Response;
+    const fetcher = vi.fn<FetchLike>()
+      .mockResolvedValueOnce(response({ access_token: 'secret', token_type: 'Bearer', expires_in: 600 }))
+      .mockResolvedValueOnce(stalledBody);
+    const api = new AccountApi({ fetcher });
+    let loginOutcome: unknown;
+    try {
+      void api.login('init').then((value) => { loginOutcome = value; }, (error: unknown) => { loginOutcome = error; });
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(loginOutcome).toMatchObject({ code: 'request_timeout' });
+      expect(api.signedIn).toBe(false);
+      expect(fetcher.mock.calls.some(([path]) => String(path).endsWith('/auth/refresh'))).toBe(false);
+    } finally { releaseStalledBody?.({ account_id: 'a', telegram_user_id: 7, created_at: 'now' }); }
+
+    let releasePending!: (value: Response) => void;
+    let requestAborted = false;
+    const pending = vi.fn<FetchLike>()
+      .mockResolvedValueOnce(response({ access_token: 'next', token_type: 'Bearer', expires_in: 600 }))
+      .mockImplementationOnce((_input, init) => new Promise((resolve) => {
+        releasePending = resolve;
+        init?.signal?.addEventListener('abort', () => { requestAborted = true; }, { once: true });
+      }));
+    const cancellable = new AccountApi({ fetcher: pending });
+    let cancelOutcome: unknown;
+    void cancellable.login('init').then((value) => { cancelOutcome = value; }, (error: unknown) => { cancelOutcome = error; });
+    await vi.waitFor(() => expect(pending).toHaveBeenCalledTimes(2));
+    try {
+      cancellable.cancelPendingRequests();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(requestAborted).toBe(true);
+      expect(cancelOutcome).toMatchObject({ code: 'account_session_superseded' });
+    } finally { releasePending(response({ account_id: 'a', telegram_user_id: 7, created_at: 'now' })); }
+  });
+
   it('sends shop reads and purchases through the authenticated request path', async () => {
     const fetcher = vi.fn<FetchLike>()
       .mockResolvedValueOnce(response({ access_token: 'secret', token_type: 'Bearer', expires_in: 600 }))
@@ -95,6 +156,7 @@ describe('account API authentication', () => {
       .mockResolvedValueOnce(response({ account_id: 'a', telegram_user_id: 7, created_at: 'now' }))
       .mockResolvedValueOnce(response({}, 401))
       .mockResolvedValueOnce(response({ access_token: 'new', token_type: 'Bearer', expires_in: 600 }))
+      .mockResolvedValueOnce(response({ account_id: 'a', telegram_user_id: 7, created_at: 'now' }))
       .mockResolvedValueOnce(response({ account_id: 'a', telegram_user_id: 7, created_at: 'now' }));
     const api = new AccountApi({ baseUrl: '', fetcher });
     await api.login('init');
@@ -106,8 +168,79 @@ describe('account API authentication', () => {
       credentials: 'include',
       headers: expect.objectContaining({ 'X-CSRF-Token': 'csrf-token' }),
     }));
-    const requestHeaders = fetcher.mock.calls[4]?.[1]?.headers as Headers;
+    const requestHeaders = fetcher.mock.calls[5]?.[1]?.headers as Headers;
     expect(requestHeaders.get('Authorization')).toBe('Bearer new');
+  });
+
+  it('refuses a refresh token for another account before replaying a shop mutation', async () => {
+    installSerializedWebLocks();
+    Object.defineProperty(document, 'cookie', { configurable: true, value: 'dd_csrf=csrf-token' });
+    let accountReads = 0;
+    let purchaseCalls = 0;
+    const fetcher = vi.fn<FetchLike>(async (input) => {
+      const path = String(input);
+      if (path.endsWith('/auth/telegram')) return response({ access_token: 'old', token_type: 'Bearer', expires_in: 600 });
+      if (path.endsWith('/account')) {
+        accountReads += 1;
+        return response({ account_id: accountReads === 1 ? 'account-a' : 'account-b', telegram_user_id: accountReads === 1 ? 7 : 8, created_at: 'now' });
+      }
+      if (path.endsWith('/shop/purchases')) {
+        purchaseCalls += 1;
+        return response({}, 401);
+      }
+      if (path.endsWith('/auth/refresh')) return response({ access_token: 'foreign', token_type: 'Bearer', expires_in: 600 });
+      return response({});
+    });
+    const api = new AccountApi({ fetcher });
+    await api.login('launch-data');
+
+    await expect(api.shopPurchase('quote', 'purchase-key')).rejects.toMatchObject({ code: 'account_session_identity_mismatch' });
+    expect(accountReads).toBe(2);
+    expect(purchaseCalls).toBe(1);
+  });
+
+  it('releases the refresh lock when candidate account verification body ignores cancellation', async () => {
+    vi.useFakeTimers();
+    installSerializedWebLocks();
+    Object.defineProperty(document, 'cookie', { configurable: true, value: 'dd_csrf=csrf-token' });
+    let releaseStalledBody!: (value: unknown) => void;
+    const stalledBody = { ok: true, json: () => new Promise((resolve) => { releaseStalledBody = resolve; }) } as unknown as Response;
+    let loginCalls = 0;
+    const fetcher = vi.fn<FetchLike>(async (input, init) => {
+      const path = String(input);
+      if (path.endsWith('/auth/telegram')) {
+        loginCalls += 1;
+        return response({ access_token: loginCalls === 1 ? 'old' : 'fresh', token_type: 'Bearer', expires_in: 600 });
+      }
+      if (path.endsWith('/auth/refresh')) return response({ access_token: 'rotated', token_type: 'Bearer', expires_in: 600 });
+      if (path.endsWith('/account')) {
+        if (new Headers(init?.headers).get('Authorization') === 'Bearer rotated') return stalledBody;
+        return response({ account_id: 'a', telegram_user_id: 7, created_at: 'now' });
+      }
+      if (path.endsWith('/runs/progress')) return response({}, 401);
+      return response({ bestScore: 12 });
+    });
+    const api = new AccountApi({ fetcher });
+    await api.login('first-launch');
+    let expiredOutcome: unknown;
+    try {
+      void api.progress().then((value) => { expiredOutcome = value; }, (error: unknown) => { expiredOutcome = error; });
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(expiredOutcome).toMatchObject({ code: 'auth_refresh_outcome_uncertain' });
+      expect(localStorage.getItem('doofy-duck:auth-refresh-outcome-uncertain')).toBe('1');
+
+      // A transport may ignore abort while its response body is pending. A late
+      // foreign identity must not clear the timeout marker or install credentials.
+      releaseStalledBody?.({ account_id: 'foreign', telegram_user_id: 8, created_at: 'now' });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(localStorage.getItem('doofy-duck:auth-refresh-outcome-uncertain')).toBe('1');
+      expect(api.signedIn).toBe(false);
+
+      const relogin = api.login('same-launch').then((user) => user);
+      await vi.advanceTimersByTimeAsync(0);
+      await expect(relogin).resolves.toMatchObject({ account_id: 'a' });
+      expect(loginCalls).toBe(2);
+    } finally { releaseStalledBody?.({ account_id: 'foreign', telegram_user_id: 8, created_at: 'now' }); }
   });
 
   it('surfaces actionable HTTP errors and does not persist a token', async () => {

@@ -123,6 +123,7 @@ export class AccountApi {
   private readonly baseUrl: string;
   private readonly fetcher: FetchLike;
   #accessToken: string | undefined;
+  #boundAccountId: string | undefined;
   #refreshFlight: Promise<void> | undefined;
   #sessionGeneration = 0;
   #requests = new Set<AbortController>();
@@ -142,10 +143,7 @@ export class AccountApi {
     }));
     this.assertSessionGeneration(generation);
     clearUncertainRefresh();
-    this.#accessToken = token.access_token;
-    const account = await this.account();
-    this.assertSessionGeneration(generation);
-    return account;
+    return this.readAndBindCurrentAccount(generation, token.access_token);
   }
 
   async loginDev(telegramUserId: number): Promise<AccountSummary> {
@@ -158,19 +156,14 @@ export class AccountApi {
     }));
     this.assertSessionGeneration(generation);
     clearUncertainRefresh();
-    this.#accessToken = token.access_token;
-    const account = await this.account();
-    this.assertSessionGeneration(generation);
-    return account;
+    return this.readAndBindCurrentAccount(generation, token.access_token);
   }
 
   async restore(): Promise<AccountSummary> {
     const generation = this.#sessionGeneration;
     await this.refreshToken(generation);
     this.assertSessionGeneration(generation);
-    const account = await this.account();
-    this.assertSessionGeneration(generation);
-    return account;
+    return this.readAndBindCurrentAccount(generation);
   }
 
   async account(): Promise<AccountSummary> {
@@ -350,6 +343,69 @@ export class AccountApi {
     return this.fetcher(this.url(path), { ...init, headers, credentials: 'include' });
   }
 
+  private async readCurrentAccount(generation: number, accessToken = this.#accessToken, sharedSignal?: AbortSignal): Promise<AccountSummary> {
+    this.assertSessionGeneration(generation);
+    if (!accessToken) throw new AccountApiError(401, 'account_session_required');
+    const controller = sharedSignal ? undefined : new AbortController();
+    const signal = sharedSignal ?? controller!.signal;
+    if (controller) this.#requests.add(controller);
+    let timedOut = false;
+    let timeout: number | undefined;
+    const deadline = new Promise<never>((_resolve, reject) => {
+      if (sharedSignal) return;
+      timeout = window.setTimeout(() => {
+        timedOut = true;
+        controller!.abort();
+        reject(new AccountApiError(0, 'request_timeout'));
+      }, authorizedRequestTimeoutMs);
+    });
+    const cancelled = new Promise<never>((_resolve, reject) => {
+      if (sharedSignal) return;
+      signal.addEventListener('abort', () => {
+        reject(new AccountApiError(0, timedOut ? 'request_timeout' : 'account_session_superseded'));
+      }, { once: true });
+    });
+    const operation = async () => {
+      const response = await this.fetcher(this.url('/api/v1/account'), {
+        headers: new Headers({ Authorization: `Bearer ${accessToken}` }), credentials: 'include', signal,
+      });
+      this.assertSessionGeneration(generation);
+      const value = await this.readResponse(response);
+      this.assertSessionGeneration(generation);
+      if (!value || typeof value !== 'object') throw new AccountApiError(502, 'account_response_invalid');
+      const account = value as Partial<AccountSummary>;
+      if (typeof account.account_id !== 'string' || account.account_id.length === 0
+        || !Number.isSafeInteger(account.telegram_user_id) || (account.telegram_user_id ?? 0) <= 0
+        || typeof account.created_at !== 'string') throw new AccountApiError(502, 'account_response_invalid');
+      return account as AccountSummary;
+    };
+    try {
+      return sharedSignal ? await operation() : await Promise.race([operation(), deadline, cancelled]);
+    } finally {
+      if (timeout !== undefined) window.clearTimeout(timeout);
+      if (controller) this.#requests.delete(controller);
+    }
+  }
+
+  private async readAndBindCurrentAccount(generation: number, candidateToken = this.#accessToken): Promise<AccountSummary> {
+    try {
+      const account = await this.readCurrentAccount(generation, candidateToken);
+      this.assertSessionGeneration(generation);
+      // Keep a newly exchanged bearer private until its server-verified identity
+      // has been read successfully. The assignments are synchronous and expose
+      // the credential only after its identity binding is in place.
+      this.#boundAccountId = account.account_id;
+      if (candidateToken) this.#accessToken = candidateToken;
+      return account;
+    } catch (error) {
+      if (generation === this.#sessionGeneration) {
+        this.#accessToken = undefined;
+        this.#boundAccountId = undefined;
+      }
+      throw error;
+    }
+  }
+
   private fetchWithDeadline(input: RequestInfo | URL, init: RequestInit): Promise<Response> {
     const controller = new AbortController();
     let timeout: number | undefined;
@@ -374,26 +430,54 @@ export class AccountApi {
       if (!csrf) throw new AccountApiError(401, 'account_session_expired');
       markRefreshUncertain();
       const controller = new AbortController();
+      this.#requests.add(controller);
       let timeout: number | undefined;
       const request = this.fetchToken('/api/v1/auth/refresh', {
         method: 'POST', headers: { 'X-CSRF-Token': csrf }, signal: controller.signal,
+      }).then(async (token) => {
+        this.assertSessionGeneration(generation);
+        const expectedAccountId = this.#boundAccountId;
+        if (expectedAccountId) {
+          const refreshedAccount = await this.readCurrentAccount(generation, token.access_token, controller.signal);
+          // Some fetch implementations and test transports resolve a response body
+          // after abort. A timed-out refresh no longer owns session state.
+          if (controller.signal.aborted || timedOut) {
+            throw new AccountApiError(0, timedOut ? 'auth_refresh_outcome_uncertain' : 'account_session_superseded');
+          }
+          if (refreshedAccount.account_id !== expectedAccountId) {
+            this.#accessToken = undefined;
+            clearUncertainRefresh();
+            throw new AccountApiError(409, 'account_session_identity_mismatch');
+          }
+        }
+        this.assertSessionGeneration(generation);
+        return token;
       });
+      let timedOut = false;
       const deadline = new Promise<never>((_resolve, reject) => {
         timeout = window.setTimeout(() => {
+          timedOut = true;
           controller.abort();
           markRefreshUncertain();
           reject(new AccountApiError(0, 'auth_refresh_outcome_uncertain'));
         }, refreshTimeoutMs);
       });
+      const cancelled = new Promise<never>((_resolve, reject) => {
+        controller.signal.addEventListener('abort', () => {
+          if (!timedOut) reject(new AccountApiError(0, 'account_session_superseded'));
+        }, { once: true });
+      });
       try {
-        const token = await Promise.race([request, deadline]);
-        if (generation === this.#sessionGeneration) this.#accessToken = token.access_token;
+        const token = await Promise.race([request, deadline, cancelled]);
+        this.assertSessionGeneration(generation);
+        this.#accessToken = token.access_token;
         clearUncertainRefresh();
       } catch (error) {
         if (error instanceof AccountApiError && (error.status === 401 || error.status === 403)) clearUncertainRefresh();
         throw error;
       } finally {
         if (timeout !== undefined) window.clearTimeout(timeout);
+        this.#requests.delete(controller);
       }
     }, true).catch((error: unknown) => {
       if (generation === this.#sessionGeneration) this.#accessToken = undefined;
@@ -429,6 +513,7 @@ export class AccountApi {
     this.#sessionGeneration += 1;
     this.cancelPendingRequests();
     this.#accessToken = undefined;
+    this.#boundAccountId = undefined;
     this.#refreshFlight = undefined;
     return this.#sessionGeneration;
   }
