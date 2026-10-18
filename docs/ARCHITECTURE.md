@@ -1,42 +1,40 @@
 # Code map
 
-The repository contains a standalone local practice game and an optional account-backed
-Python/Go/PostgreSQL stack. Wallet settlement and internal-currency cosmetic shop
-modules are implemented behind default-off flags. Paid continue, XTR payments and
-hosted deployment remain outside the delivered code. The root [README](../README.md)
-owns commands; [backend evidence](BACKEND_FOUNDATION.md) distinguishes executed checks
-from hosted and real Telegram acceptance.
+The repository contains one account-backed game with a Python/Go/PostgreSQL
+stack. Local development connects a development Telegram identity; production
+requires Telegram authentication. Verified pickup settlement and the cosmetic shop
+are enabled by normal local startup unless explicitly disabled. Production economy
+activation remains separate. Paid continue, XTR payments and hosted deployment
+remain outside the delivered code.
 
 ## Runtime flow
 
 ```text
-apps/web/index.html → src/main.tsx → Game.tsx
-                                     ├─ useGameRun → clock + input → game-sim
-                                     ├─ useGameProgress → local-progress → wallet + locks + storage
-                                     ├─ useGameAudio → audio
-                                     └─ GameCanvas → scene + appearance + feel → Pixi
+apps/web/index.html → src/main.tsx → Game → AccountGame
+                                           ├─ account/session bootstrap
+                                           ├─ AccountFlight → useGameRun → game-sim
+                                           ├─ account trace/checkpoint recovery
+                                           ├─ AccountShop → wallet/inventory/equipment
+                                           ├─ useGameAudio → audio
+                                           └─ GameCanvas → scene + appearance + feel → Pixi
 
-TypeScript simulation ← shared fixtures/schema → native Go simulation
-```
-
-The browser runs the TypeScript simulation. The Go library independently replays
-the contract; the browser does not call it. React presents HUD/lifecycle changes,
-while Pixi reads simulation state and draws cosmetic feedback.
-
-Account mode uses the same simulation and renderer, with `AccountGame` coordinating
-memory-only access credentials, exact per-tick input recording, IndexedDB recovery,
-checkpoint submission and status reconciliation. It never settles the practice wallet.
-
-```text
-Browser → one-origin gateway → Python Platform: identity/session/account
+Browser → one-origin gateway → Python Platform: identity/session/account/economy
                             → Go Core: issued run → replay → PostgreSQL checkpoints
                                                      └→ durable outbox → Python inbox
+                                                                        └→ settlement worker → wallet ledger
 ```
+
+The browser runs the TypeScript simulation; Go independently replays the contract.
+AccountGame coordinates memory-only access credentials, per-tick input recording,
+IndexedDB recovery, checkpoint submission and reconciliation. There is no public
+practice path or browser-wallet fallback. Legacy local progress utilities remain
+isolated from account authority and their balances are never imported.
 
 Python owns separate Platform/Economy modules and databases; Core owns its database.
 There are no cross-service SQL reads. Completion receipts durably store verified
-facts; the optional settlement worker credits the Economy ledger under a pinned
-policy. Shop debit, entitlement and purchase result share one Economy transaction. See [approved ownership](ADR-001-MICROSERVICES.md) and the versioned
+facts; settlement credits the Economy ledger under a pinned policy. Shop debit,
+entitlement and purchase result share one transaction. See
+[approved ownership](ADR-001-MICROSERVICES.md) and the versioned
 [account](../contracts/http/account-auth-v1.md)/[run](../contracts/http/core-run-v1.md) contracts.
 
 ## Source ownership
@@ -44,20 +42,20 @@ policy. Shop debit, entitlement and purchase result share one Economy transactio
 | Path | Responsibility |
 | --- | --- |
 | [apps/web/src/main.tsx](../apps/web/src/main.tsx) | React mount and error boundary |
-| `apps/web/src/AccountGame.tsx`, `account-api.ts`, `account-trace.ts`, `checkpoint-backoff.ts`, `account-logout.ts` | Account-mode lifecycle, bounded authenticated requests, shared checkpoint retry deadlines, ordered logout cleanup, exact input transport and validated IndexedDB recovery |
+| `apps/web/src/AccountGame.tsx`, `account-api.ts`, `account-trace.ts`, `checkpoint-backoff.ts`, `account-logout.ts` | Account lifecycle, bounded authenticated requests, shared checkpoint retry deadlines, ordered logout cleanup, exact input transport and validated IndexedDB recovery |
 | `services/platform/app`, `services/platform/migrations` | Telegram auth, signed tokens, rotating refresh sessions, account lookup and idempotent completion inbox |
 | `services/platform/app/economy` | Wallet ledger, gated completion settlement, catalog, inventory, revisioned equipment, atomic purchases and operator worker/audit commands |
 | `services/core/backend` | Go HTTP authorization, run ownership, replay/checkpoints, writer fencing, outage windows, outbox and load harness |
 | `deploy` | Compose, gateway routing, isolated development credentials and cross-service smoke |
-| [Game.tsx](../apps/web/src/Game.tsx), [GameButton.tsx](../apps/web/src/GameButton.tsx), [GameSettings.tsx](../apps/web/src/GameSettings.tsx) | UI composition, shared button variants/input isolation, and the always-available settings menu |
+| [Game.tsx](../apps/web/src/Game.tsx), [GameButton.tsx](../apps/web/src/GameButton.tsx), [GameSettings.tsx](../apps/web/src/GameSettings.tsx) | Single account entry point, shared button variants/input isolation, and the settings menu |
 | [useGameRun.ts](../apps/web/src/useGameRun.ts) | Run descriptors, lifecycle, queued input, fixed-step advancement |
 | [clock.ts](../apps/web/src/clock.ts), [input.ts](../apps/web/src/input.ts) | Tick scheduling and accepted pointer/keyboard actions |
 | [GameCanvas.tsx](../apps/web/src/GameCanvas.tsx) | Serialized Pixi lifecycle and frame presentation |
 | [scene.ts](../apps/web/src/scene.ts), [appearance.ts](../apps/web/src/appearance.ts), [feel.ts](../apps/web/src/feel.ts) | Scene drawing, physics-neutral palettes, bounded cosmetic effects |
-| [GameWardrobe.tsx](../apps/web/src/GameWardrobe.tsx), [GameWardrobePreview.tsx](../apps/web/src/GameWardrobePreview.tsx), [wardrobe.ts](../apps/web/src/wardrobe.ts) | Local draft/apply wardrobe, static preview, stable cosmetic catalogs and equipment preferences |
+| [GameWardrobe.tsx](../apps/web/src/GameWardrobe.tsx), [GameWardrobePreview.tsx](../apps/web/src/GameWardrobePreview.tsx), [wardrobe.ts](../apps/web/src/wardrobe.ts) | Legacy local wardrobe helpers, static preview and shared cosmetic catalog definitions |
 | [wardrobe-assets.ts](../apps/web/src/wardrobe-assets.ts), [wardrobe-image-layer.ts](../apps/web/src/wardrobe-image-layer.ts) | Asynchronous cosmetic texture loading and shared preview/gameplay image placement with procedural fallback |
-| [useGameProgress.ts](../apps/web/src/useGameProgress.ts), [local-progress.ts](../apps/web/src/local-progress.ts) | Thin React subscription adapter and pure injected local progress session |
-| [wallet.ts](../apps/web/src/wallet.ts), [wallet-session.ts](../apps/web/src/wallet-session.ts), [storage.ts](../apps/web/src/storage.ts) | Local record validation, deduplication, tab ownership, persistence fallback |
+| [useGameProgress.ts](../apps/web/src/useGameProgress.ts), [local-progress.ts](../apps/web/src/local-progress.ts) | Legacy browser-progress adapter and pure local progress session |
+| [wallet.ts](../apps/web/src/wallet.ts), [wallet-session.ts](../apps/web/src/wallet-session.ts), [storage.ts](../apps/web/src/storage.ts) | Legacy browser-wallet validation, deduplication, tab ownership and persistence fallback |
 | [useGameAudio.ts](../apps/web/src/useGameAudio.ts), [audio.ts](../apps/web/src/audio.ts) | Audio lifecycle, preferences, synthesized sounds/music |
 | [locale.tsx](../apps/web/src/locale.tsx), [messages.ru.ts](../apps/web/src/messages.ru.ts), [messages.en.ts](../apps/web/src/messages.en.ts) | Saved locale preference, typed bilingual catalogs, count formatting, and document language |
 | [style.css](../apps/web/src/style.css) | Viewport scaling and interface layout |
@@ -114,11 +112,10 @@ executing that frame's ticks. The clock stays latched until explicit resume;
 idle/paused/dead presentation does not accumulate simulation debt. Interpolation
 is bounded to 0–1. Inputs queued before an overload pause are discarded.
 
-Practice progress is browser-owned and untrusted. The pure practice session accepts storage
-and lock dependencies; it has no server-wallet implementation. Account mode stores verified
-completion evidence separately and never imports practice balances. Its frozen
-snapshots cannot transfer authority to client balances. Paid continue transitions
-and their accounting remain feature work.
+Legacy browser progress is untrusted and unreachable through the game entry point.
+Account progress uses verified completion evidence and never imports browser
+balances. Frozen client snapshots cannot transfer authority to client balances.
+Paid continue transitions and their accounting remain feature work.
 
 [Go benchmarks](SIMULATION_BENCHMARKS.md) establish a deterministic native
 simulation baseline, not HTTP/database throughput or production player capacity.

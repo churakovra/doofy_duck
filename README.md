@@ -2,16 +2,19 @@
 
 Doofy Duck targets a commercial Telegram Mini App for players aged 18+, in Russian
 and English. The approved [product vision](docs/PRODUCT_VISION.md) defines the first
-public version and later rewards. The repository currently provides a local
-gameplay foundation, not that commercial release.
+public version and later rewards. The repository provides one account-backed game
+in local development and Telegram.
+React/PixiJS presents the shared TypeScript simulation; Go verifies runs, and
+Python/PostgreSQL persist accounts, wallets, purchases and equipment. Anonymous
+practice and the local/account mode selector have been removed.
 
-A locally playable endless pipe game: tap to flap, pass pipes for points, collect occasional coins/in-game Stars pickups into a local in-game wallet, pause, die, and restart. React/PixiJS presents a pure TypeScript simulation; a native Go package checks the same full-state/event fixtures.
-
-This is a development foundation, **not a commercial release**. An optional local
-Python/Go/PostgreSQL stack adds Telegram accounts and server-verified runs. Account wallet settlement and cosmetic purchases are implemented behind default-off
-flags. Paid continue, XTR funding, gifts and leaderboards remain unimplemented.
-Art is placeholder work. Hosted capacity and real Telegram acceptance remain open;
-see the [backend implementation record](docs/BACKEND_FOUNDATION.md).
+This is a development foundation, **not a commercial release**. Local startup
+connects a development Telegram identity and enables verified pickup settlement
+and the cosmetic shop unless explicitly disabled in local configuration. Production
+requires real Telegram authentication and separate economy activation. Paid
+continue, XTR funding, gifts and leaderboards remain unimplemented. Hosted capacity
+and real Telegram acceptance remain open; see the
+[backend implementation record](docs/BACKEND_FOUNDATION.md).
 
 ## Project navigation
 
@@ -20,140 +23,92 @@ see the [backend implementation record](docs/BACKEND_FOUNDATION.md).
 - [Code map](docs/ARCHITECTURE.md): runtime flow, file ownership, and checks by task.
 - [Foundation](docs/FOUNDATION.md): extension points for rules, cosmetics, and event consumers.
 - [Documentation map](docs/README.md): current rules, product vision, future architecture, and supporting research.
+- [Unified account game](docs/UNIFIED_ACCOUNT_GAME.md): single game path, complete local startup and verification.
 - [SHOP implementation](docs/SHOP_IMPLEMENTATION_RESULTS.md): delivered wallet/inventory/purchase code and verification limits.
 - [Backend verification](docs/BACKEND_FOUNDATION.md): ACCOUNT/RUN checks, capacity measurements and external acceptance gates.
 - [Challenge verification](docs/CHALLENGE_RESULTS.md): October 17 challenge checks and bounded physics evidence.
 
 ## Requirements
 
-Local verification toolchain: Node.js 26.11.1, npm 11.20.0, Go 1.27.2. Direct JavaScript dependencies are exact-pinned in package.json/package-lock.json; the pure Go simulation uses only the standard library. The package engine requirements currently need Node26, not an arbitrary older LTS. Local practice needs no Python, PostgreSQL, Docker, bot token or cloud server. The optional account stack uses Python 3.15.0, uv 0.13.1, pinned pgx dependencies and Docker Compose with PostgreSQL 18.0. RabbitMQ is deferred.
+Local verification toolchain: Node.js 26.11.1, npm 11.20.0, Go 1.27.2.
+Direct JavaScript dependencies are exact-pinned in package.json/package-lock.json.
+Running the game also requires Docker Desktop/Compose, Python 3.15.0 and uv 0.13.1.
+The backend uses PostgreSQL 18.0; RabbitMQ is deferred.
 
 ## Start locally
 
-From this directory:
-
-```sh
-npm ci
-npm run dev
-```
-
-Open `http://127.0.0.1:4173/`. The root dev command builds the simulation workspace entrypoint before starting Vite; a clean workspace does not need pre-existing dist files. Leave the terminal running. The server binds to localhost only. If the port is occupied, use the existing project server or deliberately stop it rather than silently starting on an unknown port.
-
-Open Menu before a flight, while paused, or after a run to choose Русский or English and control sound effects and music independently. These preferences save on this device when browser storage is available, and changing language preserves the current run. While flying, the screen shows only the score. The game pauses automatically when the app is backgrounded; resume explicitly after returning.
-
-Open Wardrobe / Гардероб before starting, while paused or after a run to preview
-and equip a duck skin and background independently. Apply saves the pair on this
-device when storage is available; closing discards the preview. The three skins
-and three worlds are freely selectable test cosmetics, not account inventory or
-approved launch art. See the [cosmetic authoring guide](docs/COSMETICS.md) to add
-catalog entries or replace drawings with image assets.
-
-Touch/click the field or press Space to flap. Screen buttons do not also flap. Backgrounding pauses; returning requires explicit resume. Restart is free. Personal best is untrusted local storage, not an online score.
-
-## Make shortcuts
-
-Install the documented Node.js/npm versions, then use either local flow:
+From this directory, with Docker running:
 
 ```sh
 make install
 make run
 ```
 
-`make run` serves the game at `http://127.0.0.1:4173/` without Docker. For account
-mode, install Docker Compose, uv, and the Python prerequisites, then run:
+Open `http://127.0.0.1:4173/`. The game connects a persistent development Telegram
+account automatically. This is a development identity, not proof of a real Telegram
+login. Local gameplay uses the same account/run, wallet, shop and equipment paths
+as Telegram gameplay. Production signs players in with Telegram initialization
+data and never falls back to development login.
 
-```sh
-make run-account
-```
+`make run` preserves existing `.env.dev` credentials and settings, adds missing
+local economy settings with a one-time UTC settlement cutoff, starts the backend
+and settlement worker, then keeps Vite in the foreground. Ctrl-C stops Vite;
+`make stop` stops the containers while preserving PostgreSQL data. `make status`
+shows service status and `make logs SERVICE=platform` follows one service.
+`make run-account` is a compatibility alias for the same startup. Use
+`make run DEV_USER_ID=123456` to configure another development identity; sign out
+first if the browser already has a session for a different account.
 
-Both run commands keep the frontend in the foreground; press Ctrl-C to stop it.
-Account mode creates `.env.dev` only when absent, starts the local backend, and
-serves the API at `http://127.0.0.1:8080/`. Choose account mode in the game and
-enter a positive development Telegram user ID. Run `make stop` to stop backend
-containers while preserving the PostgreSQL data volume. `make help` lists the
-available commands; `make logs SERVICE=core` filters backend logs to Core.
+The API and local static build are at `http://127.0.0.1:8080/`. Vite proxies the
+same API. `npm run dev` starts only the frontend; use `make run` for the complete
+local stack and automatic development sign-in. If the backend is unavailable,
+retry the connection; the app does not substitute a browser-only game or wallet.
+Never use ignored local credentials or development-auth builds publicly.
 
-## Account-backed local development
+Coins and in-game Stars collected during verified runs settle into the account
+wallet through the background worker. The shop uses account balances and owned
+items. Explicitly disabled economy settings in `.env.dev` stay disabled. Facts
+completed before the saved cutoff are not automatically credited, and earlier
+browser-only balances and equipment are not imported. Actual Telegram Stars (XTR)
+remain separate from both internal currencies.
 
-Generate ignored local credentials once, then start the stack from the repository root:
+Open Menu before a flight, while paused or after a run to choose Русский or English
+and control sound effects and music. These device preferences survive reload when
+browser storage is available. The account shop previews skins and backgrounds;
+owned equipment persists in PostgreSQL. Cosmetics never change physics or hitboxes.
 
-```sh
-(cd services/platform && uv run python ../../deploy/scripts/generate-dev-keys.py)
-docker compose --env-file .env.dev -f deploy/compose.yaml --profile local up --build -d
-npm run dev
-```
-
-Open `http://127.0.0.1:4173/`, choose account mode and enter a positive development
-Telegram user ID. Vite proxies API requests to the one-origin gateway on port 8080.
-The static build is also served at `http://127.0.0.1:8080/`; its production frontend
-uses Telegram login, while the development UI is available through Vite. Development
-login is explicitly enabled only in the local backend configuration. Never use the
-ignored `.env.dev` credentials for a public deployment.
-
-Account runs use server-issued identities and verified checkpoints, retain unsent
-inputs on this device where storage permits, and let an already-started flight
-finish locally through an outage. A completed unresolved run waits for gameplay
-verification before another account flight starts; receipt delivery retries independently.
-Device takeover requires
-confirmation. A run ends after at most one hour of active flight; pauses do not
-consume active ticks. Verified pickups are evidence only: account rewards are not
-enabled, and local practice funds are never imported.
+Touch/click the field or press Space to flap. Buttons do not also flap. The game
+pauses when backgrounded and requires explicit resume. New runs are free. Account
+runs retain unsent inputs on this device where storage permits, and an already
+started flight can finish through an outage. A completed unresolved run waits for
+verification before another flight starts; receipt delivery retries independently.
+Device takeover requires confirmation. A flight ends after at most one hour of
+active time; pauses do not consume active ticks.
 
 Automatic session refresh requires browser Web Locks and writable local storage.
-If either is unavailable, explicit reauthentication remains available; pending runs
-stay on the server. IndexedDB failure separately warns that unsent inputs may be
-lost when the page closes. Verified completed results can be reopened after login
-or reload, including from another device.
+Otherwise explicit sign-in remains available; pending runs stay on the server.
+IndexedDB failure separately warns that closing the page may lose unsent inputs.
+Verified results can be reopened after sign-in or reload, including on another
+device. Signing out leaves the sign-in screen visible.
 
-Run the local cross-service smoke after startup:
-
-```sh
-(cd services/platform && uv run python ../../deploy/scripts/backend-smoke.py)
-```
-
-This command uses disposable development accounts and checks account ownership,
-Go replay, and exactly one stored completion receipt. It requires Docker access.
-See [service contracts](contracts/http/account-auth-v1.md), the
-[Core API](contracts/http/core-run-v1.md) and the
-[operations runbook](docs/BACKEND_OPERATIONS.md). Provider, budget and deployment
-approval remain separate; the Compose production overlay is a template, not an
-HA deployment or release acceptance result.
-
-The load harness requires development authentication and disposable accounts. Run
-only against the local/test stack, with a new account ID range for each experiment:
+Run the cross-service smoke after startup:
 
 ```sh
-uv run --project services/platform --env-file .env.dev go -C services/core/backend run ./cmd/loadtest \
-  -core http://127.0.0.1:8080 -platform http://127.0.0.1:8080 \
-  -clients 1000 -duration 1h2m -checkpoints-per-second 500 \
-  -minimum-checkpoint-rate 475 -telegram-user-id-start 920000000
+npm run check:backend:smoke
 ```
 
-For outage delivery tests, run the harness inside the backend network with direct
-operator access to Core and add `-outage-after 2m -outage-duration 5m
--reconnect-spread 1m`. The gateway hides operator routes. Startup retries and measured
-checkpoint failures are reported separately; nonzero exit means an acceptance gate
-failed. See the [capacity record](docs/BACKEND_FOUNDATION.md) for actual results.
-
-Local settlement and shop mutations remain off by default. To exercise them, set
-`ECONOMY_SETTLEMENT_ENABLED=true`, choose an explicit UTC
-`ECONOMY_SETTLEMENT_ACTIVATED_AT` cutoff, and optionally set
-`ECONOMY_SHOP_ENABLED=true` in `.env.dev`, then restart the Platform service. Run
-the settlement worker in a separate terminal; Ctrl-C stops it cleanly:
-
-```sh
-docker compose --env-file .env.dev -f deploy/compose.yaml --profile local exec platform \
-  /opt/venv/bin/python -m app.economy.settlement_cli worker
-```
-
-The worker uses bounded transactions and backs off during database failures.
-Production settlement still requires the separate acceptance gates in the
-[Economy contract](contracts/http/economy-wallet-v1.md).
+It uses disposable development accounts to check ownership, replay, positive
+pickup settlement, shop/equipment reads, re-login persistence and completion
+delivery. See [service contracts](contracts/http/account-auth-v1.md), the
+[Core API](contracts/http/core-run-v1.md), the
+[wallet contract](contracts/http/economy-wallet-v1.md) and the
+[operations runbook](docs/BACKEND_OPERATIONS.md). Production activation, hosted
+capacity and real Telegram/device acceptance are separate gates.
 
 ## Current gameplay
 
-- The wallet displays cumulative balances separately from completed-run earnings and saves locally after death. It is not an account, a Telegram Stars balance, or a redeemable reward. Earlier unsaved earnings cannot be recovered.
-- One tab at a time owns the persistent wallet. Close the first tab and reload the second to transfer ownership. If browser locking/storage is unavailable, play remains available with an explicitly non-persistent memory wallet.
+- Wallet balances, purchases and equipment belong to the signed-in account. Verified completed-run pickups become spendable after settlement; pending rewards are shown separately. In-game Stars are not Telegram Stars or redeemable rewards.
+- One writer controls an active account run. Another tab or device must explicitly take over; account ownership and server verification govern persistent progress.
 - Seeded four-pipe challenge families introduce steady, rising, falling and offset routes, with recovery blocks after pressure sections. The schedule advances with pipe encounter order; pause freezes play and restart resets the schedule.
 - Active-time world speed ramps from180 to288pixels/second over45seconds. Score adds speed in10% steps per10 passed pipes until the same cap, which can be reached earlier. Default pipe spacing is300pixels.
 - Velocity tilt, wing/flap motion, restrained squash/stretch and bounded visual effects improve feedback without changing authoritative hitboxes. Extra motion respects the reduced-motion setting.

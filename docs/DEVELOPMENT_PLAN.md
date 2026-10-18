@@ -269,9 +269,10 @@ reads another service's database. Contract compatibility checks enter CI.
 
 ### 5. Deliver verified gameplay into authoritative progress
 
-Run verification, offline recovery and completion-fact delivery are implemented
-locally. Currency issuance is disabled; this milestone's ledger credit is still
-blocked on earning-policy approval.
+Run verification, offline recovery, completion-fact delivery and approved
+wallet settlement are implemented locally. Normal local startup enables
+settlement and the shop unless explicitly disabled; production activation
+requires its separate acceptance gates.
 
 Build the first complete backend slice: authenticate → issue a server-owned run
 descriptor → play locally → submit bounded ordered input checkpoints → replay
@@ -280,8 +281,8 @@ show committed balances and best score.
 
 Specify bounded input buffers, retry/sequence rules, reconnect and expiry.
 Persist completion evidence/outbox atomically in Core; deduplicate event and business
-identities in the Python Economy inbox. Checkpoints do not issue currency during flight. Show pending credit during outages. Keep local practice
-progress separate; never import client balances as authoritative funds.
+identities in the Python Economy inbox. Checkpoints do not issue currency during flight. Show pending credit during outages. Use one account-backed game path;
+never import legacy browser balances as authoritative funds.
 Design first-death/continue/final-completion states now, even if paid continue
 activation waits for milestone 7.
 

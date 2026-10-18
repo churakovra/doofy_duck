@@ -27,12 +27,12 @@ services:
     environment:
       DD_ENV: development
       DEV_AUTH_ENABLED: "true"
-      DEV_AUTH_USER_ID: "100000001"
+      DEV_AUTH_USER_ID: ${DD_DEV_TELEGRAM_USER_ID:-100000001}
       PLATFORM_DATABASE_URL: postgresql+psycopg://platform:${PLATFORM_DB_PASSWORD}@postgres:5432/platform
       ECONOMY_DATABASE_URL: postgresql+psycopg://economy:${ECONOMY_DB_PASSWORD}@postgres:5432/economy
-      ECONOMY_SETTLEMENT_ENABLED: ${ECONOMY_SETTLEMENT_ENABLED:-false}
+      ECONOMY_SETTLEMENT_ENABLED: ${ECONOMY_SETTLEMENT_ENABLED:-true}
       ECONOMY_SETTLEMENT_ACTIVATED_AT: ${ECONOMY_SETTLEMENT_ACTIVATED_AT:-}
-      ECONOMY_SHOP_ENABLED: ${ECONOMY_SHOP_ENABLED:-false}
+      ECONOMY_SHOP_ENABLED: ${ECONOMY_SHOP_ENABLED:-true}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?set in generated local env}
       ACCESS_TOKEN_PRIVATE_KEY_B64: ${ACCESS_TOKEN_PRIVATE_KEY_B64:?set in generated local env}
       ACCESS_TOKEN_KEY_ID: ${ACCESS_TOKEN_KEY_ID:?set in generated local env}
@@ -43,6 +43,12 @@ services:
         condition: service_healthy
     expose:
       - "8080"
+    healthcheck:
+      test: ["CMD", "/opt/venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/readyz', timeout=2).read()"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 30s
     command:
       - /bin/sh
       - -ec
@@ -92,8 +98,37 @@ services:
     build:
       context: ..
       dockerfile: deploy/web.Dockerfile
+      args:
+        DD_LOCAL_DEV_AUTH: "true"
+        DD_LOCAL_DEV_USER_ID: ${DD_DEV_TELEGRAM_USER_ID:-100000001}
     expose:
       - "80"
+    networks: [backend]
+
+  economy-settlement:
+    profiles: [local]
+    build:
+      context: ../services/platform
+      dockerfile: Dockerfile
+    environment:
+      DD_ENV: development
+      PLATFORM_DATABASE_URL: postgresql+psycopg://platform:${PLATFORM_DB_PASSWORD}@postgres:5432/platform
+      ECONOMY_DATABASE_URL: postgresql+psycopg://economy:${ECONOMY_DB_PASSWORD}@postgres:5432/economy
+      ECONOMY_SETTLEMENT_ENABLED: ${ECONOMY_SETTLEMENT_ENABLED:-true}
+      ECONOMY_SETTLEMENT_ACTIVATED_AT: ${ECONOMY_SETTLEMENT_ACTIVATED_AT:-}
+      ECONOMY_SHOP_ENABLED: ${ECONOMY_SHOP_ENABLED:-true}
+    depends_on:
+      platform:
+        condition: service_healthy
+    command:
+      - /bin/sh
+      - -ec
+      - >-
+        case "$$ECONOMY_SETTLEMENT_ENABLED" in
+          1|[Tt][Rr][Uu][Ee]|[Yy][Ee][Ss]|[Oo][Nn]) ;;
+          *) echo 'Local settlement is disabled by .env.dev'; exit 0 ;;
+        esac;
+        exec /opt/venv/bin/python -m app.economy.settlement_cli worker
     networks: [backend]
 
   gateway:

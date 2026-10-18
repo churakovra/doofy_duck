@@ -4,10 +4,19 @@ services:
       DD_ENV: production
       DEV_AUTH_ENABLED: "false"
       DEV_AUTH_USER_ID: "0"
+      ECONOMY_SETTLEMENT_ENABLED: "false"
+      ECONOMY_SETTLEMENT_ACTIVATED_AT: ""
+      ECONOMY_SHOP_ENABLED: "false"
 
   core:
     environment:
       DD_ENV: production
+
+  web:
+    build:
+      args:
+        DD_LOCAL_DEV_AUTH: "false"
+        DD_LOCAL_DEV_USER_ID: "100000001"
 
   gateway-tls:
     profiles: [production]

@@ -6,9 +6,10 @@ only the milestone that depends on them.
 
 Read this with the [development plan](DEVELOPMENT_PLAN.md), [current simulation rules](ARCADE_SIMULATION.md), [foundation
 boundaries](FOUNDATION.md), [service architecture](ADR-001-MICROSERVICES.md), and [currency/broker
-proposal](ADR-003-CURRENCY-AND-BROKER.md). The local practice game and optional account/run backend are implemented separately;
-Wallet, inventory and internal-currency shop code are present with issuance and
-shop mutations default-off; XTR payments and continue remain unimplemented. See
+proposal](ADR-003-CURRENCY-AND-BROKER.md). The game uses one account-backed path in local development and Telegram.
+Local startup enables verified pickup settlement and the account shop unless
+explicitly disabled; production activation stays separate. XTR payments and
+paid continue remain unimplemented. See
 [SHOP implementation](SHOP_IMPLEMENTATION_RESULTS.md) for approved earning/catalog
 decisions and current verification limits. Hosted acceptance
 and real Telegram evidence are recorded separately in [backend foundation](BACKEND_FOUNDATION.md). The

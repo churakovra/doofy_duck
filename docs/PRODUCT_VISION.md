@@ -102,12 +102,15 @@ after a pilot; low redemption alone is not a success criterion.
 
 ## Current implementation and document authority
 
-The repository currently contains a local React/PixiJS game, a pure TypeScript
-simulation and matching native Go simulation, and local progress storage. Accounts,
-commercial services, purchases, shop, continues, and gift redemption are not
-implemented. Local difficulty now uses seeded stepped challenge families and
-recovery sections alongside a speed ramp. Its draft tuning and release
-acceptance still require owner playtests and real-device evidence.
+The repository currently contains one account-backed React/PixiJS game, a pure
+TypeScript simulation and matching native Go simulation, Telegram account/session
+services, verified runs, wallet settlement and a cosmetic shop. Local startup uses
+a persistent development Telegram identity and PostgreSQL; production requires
+real Telegram sign-in. There is no anonymous practice mode. Browser-only balances
+are never imported into account wallets. Payments, paid continues and gift
+redemption remain unimplemented. Local difficulty uses seeded stepped challenge
+families and recovery sections alongside a speed ramp. Tuning, production economy
+activation, hosted acceptance and real-device evidence remain separate work.
 
 [Current simulation rules](ARCADE_SIMULATION.md) describe what runs today.
 This vision defines the commercial target; current local implementation limits
