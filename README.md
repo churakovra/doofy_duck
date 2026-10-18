@@ -23,6 +23,7 @@ and real Telegram acceptance remain open; see the
 - [Code map](docs/ARCHITECTURE.md): runtime flow, file ownership, and checks by task.
 - [Foundation](docs/FOUNDATION.md): extension points for rules, cosmetics, and event consumers.
 - [Documentation map](docs/README.md): current rules, product vision, future architecture, and supporting research.
+- [Telegram bot setup](docs/TELEGRAM_BOT_SETUP.md): automatic launch identity and first real-bot test.
 - [Unified account game](docs/UNIFIED_ACCOUNT_GAME.md): single game path, complete local startup and verification.
 - [SHOP implementation](docs/SHOP_IMPLEMENTATION_RESULTS.md): delivered wallet/inventory/purchase code and verification limits.
 - [Backend verification](docs/BACKEND_FOUNDATION.md): ACCOUNT/RUN checks, capacity measurements and external acceptance gates.
@@ -56,8 +57,8 @@ and settlement worker, then keeps Vite in the foreground. Ctrl-C stops Vite;
 `make stop` stops the containers while preserving PostgreSQL data. `make status`
 shows service status and `make logs SERVICE=platform` follows one service.
 `make run-account` is a compatibility alias for the same startup. Use
-`make run DEV_USER_ID=123456` to configure another development identity; sign out
-first if the browser already has a session for a different account.
+`make run DEV_USER_ID=123456` to configure another development identity. The
+configured identity is connected automatically; there is no in-game account selector.
 
 The API and local static build are at `http://127.0.0.1:8080/`. Vite proxies the
 same API. `npm run dev` starts only the frontend; use `make run` for the complete
@@ -86,10 +87,13 @@ Device takeover requires confirmation. A flight ends after at most one hour of
 active time; pauses do not consume active ticks.
 
 Automatic session refresh requires browser Web Locks and writable local storage.
-Otherwise explicit sign-in remains available; pending runs stay on the server.
+If refresh cannot complete, the app reconnects the same launch identity where
+possible; pending runs stay on the server.
 IndexedDB failure separately warns that closing the page may lose unsent inputs.
-Verified results can be reopened after sign-in or reload, including on another
-device. Signing out leaves the sign-in screen visible.
+Verified results can be reopened after automatic connection or reload, including on another
+device. The game has no sign-in or logout controls. Outside Telegram, the normal
+build requires a Telegram launch; a saved cookie does not bypass this. See
+[bot setup](docs/TELEGRAM_BOT_SETUP.md) for the first real Telegram test.
 
 Run the cross-service smoke after startup:
 

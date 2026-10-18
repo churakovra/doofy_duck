@@ -25,7 +25,9 @@ Browser → one-origin gateway → Python Platform: identity/session/account/eco
 ```
 
 The browser runs the TypeScript simulation; Go independently replays the contract.
-AccountGame coordinates memory-only access credentials, per-tick input recording,
+AccountGame automatically authenticates the launch identity and provides no
+account-selection or logout UI. The API client pins refreshes to the verified
+account. AccountGame coordinates memory-only access credentials, per-tick input recording,
 IndexedDB recovery, checkpoint submission and reconciliation. There is no public
 practice path or browser-wallet fallback. Legacy local progress utilities remain
 isolated from account authority and their balances are never imported.
