@@ -3,33 +3,9 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LocaleProvider, formatCount, readLocale, useLocale, writeLocale } from './locale';
-import { Game } from './Game';
 import { GameErrorBoundary } from './GameErrorBoundary';
 import { messages as russian } from './messages.ru';
 import { messages as english } from './messages.en';
-
-const integration = vi.hoisted(() => ({ canvasMounts: 0, starts: vi.fn(), flaps: vi.fn(), fieldPointer: vi.fn(), phase: 'RUNNING', runtimeError: '' }));
-vi.mock('./GameCanvas', async () => {
-  const React = await import('react');
-  return { GameCanvas: () => {
-    React.useEffect(() => { integration.canvasMounts += 1; }, []);
-    return <canvas data-testid="game-canvas" />;
-  } };
-});
-vi.mock('./useGameRun', () => ({ useGameRun: () => ({
-  phase: integration.phase, score: 7, runtimeError: integration.runtimeError, rendererReady: true,
-  getState: () => ({ phase: 'RUNNING', tick: 42 }), getFeedback: () => null,
-  acceptRenderer: vi.fn(), start: integration.starts, restart: vi.fn(), pause: vi.fn(),
-  onFieldPointerDown: integration.fieldPointer, onFieldPointerUp: vi.fn(),
-}) }));
-vi.mock('./useGameProgress', () => ({ useGameProgress: () => ({
-  canPlay: true, walletSessionStatus: 'ready', set: vi.fn(), refreshBest: vi.fn(), settleRun: vi.fn(),
-  best: 12, wallet: { FEATHER: 3, GAME_STAR: 2 }, walletPersistent: true,
-}) }));
-vi.mock('./useGameAudio', () => ({ useGameAudio: () => ({
-  unlockFromGesture: vi.fn(), flap: integration.flaps, pickup: vi.fn(), setPhase: vi.fn(),
-  preferences: { sound: true, music: true }, toggle: vi.fn(),
-}) }));
 
 let root: ReturnType<typeof createRoot>;
 let host: HTMLDivElement;
@@ -55,9 +31,6 @@ function LocaleProbe() {
 beforeEach(() => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   localStorage.clear();
-  integration.fieldPointer.mockClear();
-  integration.phase = 'RUNNING';
-  integration.runtimeError = '';
   host = document.createElement('div');
   root = createRoot(host);
 });
@@ -121,53 +94,21 @@ describe('count wording', () => {
 });
 
 describe('LocaleProvider', () => {
-  it('keeps settings hidden until the menu is opened', () => {
-    const storage = MemoryStorage() as unknown as Storage;
-    act(() => root.render(<LocaleProvider storage={storage}><Game /></LocaleProvider>));
-    expect(host.querySelector('.locale-controls')).toBeNull();
-    expect(host.querySelector('.audio-controls')).toBeNull();
-    const menu = [...host.querySelectorAll('button')].find((button) => ['Меню', 'Menu'].includes(button.getAttribute('aria-label') ?? ''));
-    expect(menu).toBeDefined();
-    act(() => menu!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    expect(host.querySelector('[role="dialog"] .locale-controls')).toBeTruthy();
-    expect(host.querySelector('[role="dialog"] .audio-controls')).toBeTruthy();
+  it('provides localized single-game lobby and retry copy in both catalogs', () => {
+    expect(russian.greeting).toBe('Привет,');
+    expect(english.greeting).toBe('Hello,');
+    expect(russian.accountRetry).toBeTruthy();
+    expect(english.accountRetry).toBeTruthy();
+    expect(russian.accountStart).toBeTruthy();
+    expect(english.accountStart).toBeTruthy();
   });
 
-  it('keeps only the field and HUD in the bounded game frame', () => {
-    const storage = MemoryStorage() as unknown as Storage;
-    act(() => root.render(<LocaleProvider storage={storage}><Game /></LocaleProvider>));
-    const field = host.querySelector('.stage')!;
-    const frame = field.parentElement!;
-    expect(frame).not.toBe(host.querySelector('main'));
-    for (const selector of ['.hud', '.wallet-strip']) {
-      expect(frame.contains(host.querySelector(selector))).toBe(true);
-    }
-  });
-
-  it('translates completed-run scores and earnings without duplicate units', () => {
-    integration.phase = 'DEAD';
-    const storage = MemoryStorage() as unknown as Storage;
-    act(() => root.render(<LocaleProvider storage={storage}><Game /></LocaleProvider>));
-    expect(host.querySelector('.result-score')?.textContent).toBe('7 очков');
-    expect(host.querySelector('.earnings-summary')?.textContent).toContain('0 монет');
-    act(() => host.querySelector<HTMLButtonElement>('[aria-label="Меню"], [aria-label="Menu"]')!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    act(() => host.querySelector<HTMLButtonElement>('[data-testid="language-dropdown-trigger"]')!.click());
-    act(() => host.querySelector<HTMLElement>('[role="option"][data-value="en"]')!.click());
-    expect(host.querySelector('.result-score')?.textContent).toBe('7 points');
-    expect(host.querySelector('.earnings-summary')?.textContent).toContain('0 coins');
-    expect(host.querySelector('.earnings-summary')?.textContent).toContain('0 in-game Stars');
-  });
-
-  it('translates an existing runtime error after switching language', () => {
-    integration.phase = 'PAUSED';
-    integration.runtimeError = 'graphicsStartupError';
-    const storage = MemoryStorage() as unknown as Storage;
-    act(() => root.render(<LocaleProvider storage={storage}><Game /></LocaleProvider>));
-    expect(host.querySelector('[role="alert"]')?.textContent).toBe(russian.graphicsStartupError);
-    act(() => host.querySelector<HTMLButtonElement>('[aria-label="Меню"], [aria-label="Menu"]')!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    act(() => host.querySelector<HTMLButtonElement>('[data-testid="language-dropdown-trigger"]')!.click());
-    act(() => host.querySelector<HTMLElement>('[role="option"][data-value="en"]')!.click());
-    expect(host.querySelector('[role="alert"]')?.textContent).toBe(english.graphicsStartupError);
+  it('formats verified run results with locale-appropriate score and currency units', () => {
+    expect(formatCount('ru', 'score', 7)).toBe('7 очков');
+    expect(formatCount('en', 'score', 7)).toBe('7 points');
+    expect(formatCount('ru', 'coin', 0)).toBe('0 монет');
+    expect(formatCount('en', 'coin', 0)).toBe('0 coins');
+    expect(formatCount('en', 'gameStar', 0)).toBe('0 in-game Stars');
   });
 
   it('keeps the startup error fallback translated when its child fails', () => {
@@ -202,37 +143,14 @@ describe('LocaleProvider', () => {
     expect(storage.setItem).toHaveBeenCalledWith('doofy-duck:locale:v1', 'en');
   });
 
-  it('switches language during a live run without restarting input or remounting the canvas', () => {
+  it('updates account-facing catalog metadata when the locale changes', () => {
     const storage = MemoryStorage() as unknown as Storage;
-    integration.canvasMounts = 0;
-    integration.starts.mockClear();
-    integration.flaps.mockClear();
-    act(() => root.render(<LocaleProvider storage={storage}><Game /></LocaleProvider>));
-    expect(integration.canvasMounts).toBe(1);
-    const canvas = host.querySelector('[data-testid="game-canvas"]');
-    expect(host.textContent).toContain('7');
-
-    const menu = host.querySelector<HTMLButtonElement>('[aria-label="Меню"], [aria-label="Menu"]');
-    expect(menu).toBeDefined();
-    act(() => menu!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    const language = host.querySelector<HTMLButtonElement>('[data-testid="language-dropdown-trigger"]');
-    expect(language).toBeDefined();
-    act(() => {
-      language!.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
-    });
-    act(() => language!.click());
-    const english = host.querySelector<HTMLElement>('[role="option"][data-value="en"]');
-    expect(english).toBeDefined();
-    act(() => english!.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true })));
-    act(() => english!.click());
-    expect(integration.fieldPointer).not.toHaveBeenCalled();
+    act(() => root.render(<LocaleProvider storage={storage}><LocaleProbe /></LocaleProvider>));
+    expect(host.querySelector('[data-testid="greeting"]')?.textContent).toBe('Привет,');
+    act(() => host.querySelector('button')!.click());
+    expect(host.querySelector('[data-testid="greeting"]')?.textContent).toBe('Hello,');
     expect(document.documentElement.lang).toBe('en');
-    expect(host.textContent).toContain('Coins');
-    expect(host.querySelector('[data-testid="game-canvas"]')).toBe(canvas);
-    expect(integration.canvasMounts).toBe(1);
-    expect(integration.starts).not.toHaveBeenCalled();
-    expect(integration.flaps).not.toHaveBeenCalled();
-    expect(host.textContent).toContain('7');
+    expect(storage.setItem).toHaveBeenCalledWith('doofy-duck:locale:v1', 'en');
   });
 
   it('still changes locale when preference persistence fails', () => {

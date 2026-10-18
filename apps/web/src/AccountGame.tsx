@@ -15,6 +15,7 @@ import { DEFAULT_EQUIPMENT, type Equipment } from './wardrobe';
 import { loadTelegramWebApp, TelegramWebAppUnavailableError } from './telegram-web-app';
 import { CheckpointBackoff } from './checkpoint-backoff';
 import { finishAccountLogout } from './account-logout';
+import { localDevAccount } from './account-config';
 
 type Screen = 'signed-out' | 'idle' | 'loading' | 'active' | 'recovering' | 'takeover' | 'locked';
 type CompletionSettlement = { status: 'pending' | 'committed' | 'ineligible' | 'actionable_failure'; reason: string; credited: { FEATHER: string; GAME_STAR: string } };
@@ -54,7 +55,7 @@ function accountErrorCopy(reason: unknown, messages: ReturnType<typeof useLocale
   return messages.accountActionFailed;
 }
 
-export function AccountGame({ onBack }: { onBack(): void }) {
+export function AccountGame() {
   const frameRef = useRef<HTMLDivElement>(null);
   const canvasReady = useCallback(() => undefined, []);
   const [api] = useState(() => new AccountApi());
@@ -77,7 +78,8 @@ export function AccountGame({ onBack }: { onBack(): void }) {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [reauthRequired, setReauthRequired] = useState(false);
-  const [devUserId, setDevUserId] = useState('');
+  const [devUserId, setDevUserId] = useState(String(localDevAccount(import.meta.env).telegramUserId));
+  const localAccount = localDevAccount(import.meta.env);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [shopOpen, setShopOpen] = useState(false);
   const [equipment, setEquipment] = useState<Equipment>(DEFAULT_EQUIPMENT);
@@ -412,33 +414,36 @@ export function AccountGame({ onBack }: { onBack(): void }) {
     let cancelled = false;
     const bootstrapEpoch = sessionEpochRef.current;
     const isCurrentBootstrap = () => !cancelled && bootstrapEpoch === sessionEpochRef.current;
-    const telegramReady = telegramWebAppReady();
-    void telegramReady.catch(() => undefined);
-    restorePromiseRef.current ??= api.restore();
-    void restorePromiseRef.current.then(async (user) => {
-      if (isCurrentBootstrap()) await loadAccountRef.current(user);
-    }).catch(() => {
-      if (!isCurrentBootstrap()) return;
-      void telegramReady.then((webApp) => {
+    const authenticate = async () => {
+      try {
+        let initData = '';
+        try { initData = (await telegramWebAppReady()).initData?.trim() ?? ''; } catch { /* Browser may be outside Telegram. */ }
         if (!isCurrentBootstrap()) return;
-        const initData = webApp.initData?.trim() ?? '';
-        if (!initData) {
-          setError(messagesRef.current.accountAuthOutsideTelegram);
-          setScreen('signed-out');
-          return;
+        let user: AccountSummary;
+        if (initData) {
+          telegramLoginPromiseRef.current ??= api.login(initData);
+          user = await telegramLoginPromiseRef.current;
+        } else {
+          try {
+            restorePromiseRef.current ??= api.restore();
+            user = await restorePromiseRef.current;
+          } catch (restoreError) {
+            if (!isCurrentBootstrap()) return;
+            if (!localAccount.enabled) throw restoreError;
+            user = await api.loginDev(localAccount.telegramUserId);
+          }
         }
-        telegramLoginPromiseRef.current ??= api.login(initData);
-        void telegramLoginPromiseRef.current.then((user) => {
-          if (isCurrentBootstrap()) return loadAccountRef.current(user);
-        }).catch((reason: unknown) => {
-          if (isCurrentBootstrap()) { setError(accountErrorCopy(reason, messagesRef.current)); setScreen('signed-out'); }
-        });
-      }).catch((reason: unknown) => {
-        if (isCurrentBootstrap()) { setError(accountErrorCopy(reason, messagesRef.current)); setScreen('signed-out'); }
-      });
-    });
+        if (isCurrentBootstrap()) await loadAccountRef.current(user);
+      } catch (reason) {
+        if (isCurrentBootstrap()) {
+          setError(accountErrorCopy(reason, messagesRef.current));
+          setScreen('signed-out');
+        }
+      }
+    };
+    void authenticate();
     return () => { cancelled = true; };
-  }, [api]);
+  }, [api, localAccount.enabled, localAccount.telegramUserId]);
 
   useEffect(() => {
     const shouldPoll = snapshot?.status === 'completion_pending'
@@ -520,7 +525,9 @@ export function AccountGame({ onBack }: { onBack(): void }) {
     const epoch = ++sessionEpochRef.current;
     setBusy(true); setError('');
     try {
-      const user = dev ? await api.loginDev(Number(devUserId)) : await loginWithTelegram(api, () => epoch === sessionEpochRef.current);
+      const user = dev
+        ? localAccount.enabled ? await api.loginDev(Number(devUserId)) : undefined
+        : await loginWithTelegram(api, () => epoch === sessionEpochRef.current);
       if (epoch !== sessionEpochRef.current || !user) return;
       await loadAccountState(user);
       if (epoch !== sessionEpochRef.current) return;
@@ -532,26 +539,34 @@ export function AccountGame({ onBack }: { onBack(): void }) {
     } finally { if (epoch === sessionEpochRef.current) setBusy(false); }
   };
 
+  const retryAuthentication = () => {
+    void (async () => {
+      if (localAccount.enabled) {
+        try {
+          const webApp = await telegramWebAppReady();
+          if (webApp.initData?.trim()) { await login(false); return; }
+        } catch { /* Use the explicitly enabled local account when Telegram is unavailable. */ }
+        await login(true);
+      } else await login(false);
+    })();
+  };
+
   const reauthenticate = async () => {
     const epoch = ++sessionEpochRef.current;
     setBusy(true);
     setError('');
     try {
       let user: AccountSummary;
-      if (import.meta.env.DEV) {
-        try {
-          const webApp = await telegramWebAppReady();
-          if (epoch !== sessionEpochRef.current) return;
-          user = webApp.initData?.trim() ? await api.login(webApp.initData) : await api.loginDev(Number(devUserId));
-        } catch (reason) {
-          if (!(reason instanceof TelegramWebAppUnavailableError)) throw reason;
-          if (epoch !== sessionEpochRef.current) return;
-          user = await api.loginDev(Number(devUserId));
-        }
-      } else {
-        const telegramUser = await loginWithTelegram(api, () => epoch === sessionEpochRef.current);
-        if (!telegramUser) return;
-        user = telegramUser;
+      try {
+        const webApp = await telegramWebAppReady();
+        if (epoch !== sessionEpochRef.current) return;
+        user = webApp.initData?.trim()
+          ? await api.login(webApp.initData)
+          : localAccount.enabled ? await api.loginDev(Number(devUserId)) : await loginWithTelegram(api, () => epoch === sessionEpochRef.current) as AccountSummary;
+      } catch (reason) {
+        if (!(reason instanceof TelegramWebAppUnavailableError) || !localAccount.enabled) throw reason;
+        if (epoch !== sessionEpochRef.current) return;
+        user = await api.loginDev(Number(devUserId));
       }
       if (epoch !== sessionEpochRef.current) return;
       await loadAccountState(user);
@@ -752,7 +767,6 @@ export function AccountGame({ onBack }: { onBack(): void }) {
     onFinish={finishTrace}
     onReauthenticate={reauthenticate}
     reauthRequired={reauthRequired}
-    onBack={onBack}
     onAbandon={abandon}
     busy={busy}
     walletSlot={settingsWallet}
@@ -767,30 +781,34 @@ export function AccountGame({ onBack }: { onBack(): void }) {
 
   return <main className="game-shell" onPointerDown={() => undefined}>
     <div className="game-viewport"><div className="game-frame ready" ref={frameRef}>
-      <div className="stage" aria-label={messages.gameFieldLabel}><GameCanvas getState={() => snapshot?.state ?? EMPTY_STATE} onReady={canvasReady} /></div>
+      <div className="stage" aria-label={messages.gameFieldLabel}><GameCanvas getState={() => snapshot?.state ?? EMPTY_STATE} onReady={canvasReady} appearance={appearance} /></div>
       <header className="hud account-hud">
         <div className="brand"><span className="brand-mark">{messages.brandMark}</span><span>{messages.brandNameFirstLine}<br />{messages.brandNameSecondLine}</span></div>
-        <div className="account-toolbar">
-          <select aria-label={messages.languageSettingsLabel} value={locale} onChange={(event) => setLocale(event.target.value as 'ru' | 'en')}><option value="ru">Русский</option><option value="en">English</option></select>
-          <GameButton variant="control" aria-pressed={audio.preferences.sound} onClick={() => audio.toggle('sound')}>{messages.soundLabel}</GameButton>
-          <GameButton variant="control" aria-pressed={audio.preferences.music} onClick={() => audio.toggle('music')}>{messages.musicLabel}</GameButton>
+        <div className="hud-actions">
+          <GameSettings open={settingsOpen} onOpenChange={setSettingsOpen} locale={locale} setLocale={setLocale} messages={messages}
+            preferences={audio.preferences} toggle={audio.toggle} wallet={{ FEATHER: 0, GAME_STAR: 0 }} walletPersistent walletStatus="" walletBlocked={false}
+            portalContainer={frameRef} walletHeading={messages.accountHeading} walletSlot={settingsWallet} />
         </div>
       </header>
       <section className="screen-card" aria-live="polite"><div className="screen-panel account-panel">
-        <p className="eyebrow">{messages.accountHeading}</p>
-        <h1>{messages.accountHeading}</h1>
-        <p className="instruction">{messages.accountDescription}</p>
+        {screen !== 'idle' && <>
+          <p className="eyebrow">{messages.accountHeading}</p>
+          <h1>{messages.accountHeading}</h1>
+          <p className="instruction">{messages.accountDescription}</p>
+        </>}
         {screen === 'signed-out' && <>
-          {!import.meta.env.DEV && <GameButton variant="primary" onClick={() => void login(false)} disabled={busy}>{messages.accountLogin}</GameButton>}
-          {import.meta.env.DEV && <>
-            <label className="account-dev-label">{messages.accountUserIdLabel}<input inputMode="numeric" value={devUserId} onChange={(event) => setDevUserId(event.target.value)} /></label>
-            <GameButton variant="primary" onClick={() => void login(true)} disabled={busy || !devUserId}>{messages.accountDevLogin}</GameButton>
-            <GameButton variant="control" className="account-mode-button" onClick={() => void login(false)} disabled={busy}>{messages.accountLogin}</GameButton>
-          </>}
+          {localAccount.enabled && <label className="account-dev-label">{messages.accountUserIdLabel}<input inputMode="numeric" value={devUserId} onChange={(event) => setDevUserId(event.target.value)} /></label>}
+          {localAccount.enabled
+            ? <GameButton variant="primary" onClick={() => void login(true)} disabled={busy || !devUserId}>{messages.accountDevLogin}</GameButton>
+            : <GameButton variant="primary" onClick={() => void login(false)} disabled={busy}>{messages.accountLogin}</GameButton>}
+          {error && <GameButton variant="control" onClick={retryAuthentication} disabled={busy}>{messages.accountRetry}</GameButton>}
         </>}
         {screen === 'loading' && <p role="status">{messages.accountLoading}</p>}
         {screen === 'recovering' && <><p role="status">{error || notice || messages.accountConnectionRestoring}</p>{snapshot && account && <GameButton variant="control" onClick={() => void reconcile(snapshot, account)} disabled={busy}>{messages.accountStatusRetry}</GameButton>}{snapshot?.status === 'active' && trace && <GameButton variant="control" className="account-mode-button" onClick={() => void abandon()} disabled={busy}>{messages.accountAbandon}</GameButton>}</>}
       {screen === 'idle' && account && <>
+          <p className="eyebrow">{messages.smallFlightEyebrow}</p>
+          <h1>{messages.greeting}<br />{messages.traveler}</h1>
+          <p className="instruction">{messages.readyInstructionFirstLine}<br />{messages.readyInstructionSecondLine}</p>
           {bestScore !== null && <p className="account-best-score"><span>{messages.bestScoreLabel}</span> <strong>{formatNumber(locale, bestScore)}</strong></p>}
           {statusMessage && <p role="status">{statusMessage}</p>}
           {verifiedRun && <>
@@ -822,7 +840,6 @@ export function AccountGame({ onBack }: { onBack(): void }) {
         {storage.persistent === false && <p className="wallet-access-error" role="status">{messages.accountStorageWarning}</p>}
         {account && <GameButton variant="control" className="account-mode-button" onClick={() => void logout()} disabled={busy}>{messages.accountLogout}</GameButton>}
         {account && <AccountShop api={api} accountId={account.account_id} sessionEpoch={sessionEpochRef.current} locale={locale} messages={messages} portalContainer={frameRef} open={shopOpen} onOpenChange={setShopOpen} equipment={equipment} onEquipment={setEquipment} />}
-        <GameButton variant="control" className="account-mode-button" onClick={onBack}>{messages.accountModeBack}</GameButton>
       </div></section>
       <footer className="wallet-status-strip"><p className="wallet-storage">{messages.accountRewardsNotSpendable}</p></footer>
     </div></div>
@@ -836,7 +853,7 @@ type FlightProps = {
   audio: ReturnType<typeof useGameAudio>; frameRef: React.RefObject<HTMLDivElement | null>; settingsOpen: boolean; setSettingsOpen(open: boolean): void;
   shopOpen: boolean; setShopOpen(open: boolean): void; equipment: Equipment; setEquipment(next: Equipment): void;
   appearance: ReturnType<typeof accountEquipmentAppearance>; storageWarning: boolean; api: AccountApi; accountId: string; sessionEpoch: number;
-  notice: string; error: string; onTick(state: RunState, inputs: readonly { sequence: number; action: 'FLAP' }[]): void; onFinish(): void; onReauthenticate(): void; reauthRequired: boolean; onBack(): void; onAbandon(): void; busy: boolean; walletSlot: React.ReactNode;
+  notice: string; error: string; onTick(state: RunState, inputs: readonly { sequence: number; action: 'FLAP' }[]): void; onFinish(): void; onReauthenticate(): void; reauthRequired: boolean; onAbandon(): void; busy: boolean; walletSlot: React.ReactNode;
 };
 
 function AccountFlight(props: FlightProps) {
@@ -870,13 +887,12 @@ function AccountFlight(props: FlightProps) {
             preferences={audio.preferences} toggle={audio.toggle} wallet={{ FEATHER: 0, GAME_STAR: 0 }} walletPersistent walletStatus="" walletBlocked={false}
             portalContainer={frameRef} walletHeading={messages.accountHeading} walletSlot={props.walletSlot} />
           {run.phase !== 'RUNNING' && <AccountShop api={props.api} accountId={props.accountId} sessionEpoch={props.sessionEpoch} locale={locale} messages={messages} portalContainer={frameRef} open={props.shopOpen} onOpenChange={props.setShopOpen} equipment={props.equipment} onEquipment={props.setEquipment} />}
-          <GameButton variant="control" className="account-mode-button" onClick={props.onBack}>{messages.accountModeBack}</GameButton>
         </div>
       </header>
       <footer className="wallet-status-strip"><p className="wallet-storage">{props.error || props.notice || (props.storageWarning ? messages.accountStorageWarning : messages.accountRewardsLabel)}</p>{props.reauthRequired && <GameButton variant="control" onClick={props.onReauthenticate} disabled={props.busy}>{messages.accountLogin}</GameButton>}</footer>
       {run.phase !== 'RUNNING' && <section className="screen-card" aria-live="polite"><div className="screen-panel account-panel">
         {run.runtimeError ? <><p role="alert" className="error-copy">{messages[run.runtimeError]}</p><GameButton variant="primary" onClick={() => window.location.reload()}>{messages.reloadPageButton}</GameButton></> : <>
-          {run.phase === 'READY' && <><p className="eyebrow">{messages.accountHeading}</p><h1>{messages.accountHeading}</h1><p className="instruction">{messages.accountDescription}</p><GameButton variant="primary" onClick={start} disabled={!run.rendererReady || props.busy}>{messages.startFlightButton} <span>{messages.forwardGlyph}</span></GameButton></>}
+          {run.phase === 'READY' && <><p className="eyebrow">{messages.smallFlightEyebrow}</p><h1>{messages.greeting}<br />{messages.traveler}</h1><p className="instruction">{messages.readyInstructionFirstLine}<br />{messages.readyInstructionSecondLine}</p><GameButton variant="primary" onClick={start} disabled={!run.rendererReady || props.busy}>{messages.startFlightButton} <span>{messages.forwardGlyph}</span></GameButton></>}
           {run.phase === 'PAUSED' && <><p className="eyebrow">{messages.pauseEyebrow}</p><h1>{run.flightCapReached ? messages.accountPendingVerification : messages.pausedHeading}</h1><GameButton variant="primary" onClick={run.flightCapReached ? props.onFinish : start} disabled={!run.rendererReady || props.busy}>{run.flightCapReached ? messages.accountStatusRetry : messages.accountResume}</GameButton><GameButton variant="control" className="account-mode-button" onClick={props.onAbandon} disabled={props.busy}>{messages.accountAbandon}</GameButton></>}
           {run.phase === 'DEAD' && <><p className="eyebrow">{messages.completedFlightEyebrow}</p><h1>{messages.completedHeading}</h1><p className="result-score">{formatNumber(locale, run.score)} <span>{formatCountUnit(locale, 'score', run.score)}</span></p><p className="earnings-summary"><span>{messages.accountRewardsLabel}</span><strong>{formatNumber(locale, feathers)} {messages.feathersShortLabel}</strong><strong>{formatNumber(locale, stars)} {messages.gameStarsShortLabel}</strong></p><p className="wallet-disclaimer">{messages.accountRewardsNotSpendable}</p><GameButton variant="primary" onClick={props.onFinish} disabled={props.busy}>{messages.accountStatusRetry}</GameButton></>}
           {props.error && <p className="wallet-access-error" role="alert">{props.error}</p>}

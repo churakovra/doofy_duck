@@ -1,6 +1,9 @@
 import { test, expect } from '@playwright/test';
 import { buildSync } from 'esbuild';
 import { resolve } from 'node:path';
+import { installAccountBackend, prepareAccountFlight } from './account-backend.fixture';
+
+test.beforeEach(async ({ page }) => installAccountBackend(page));
 
 const moduleFile = resolve(process.cwd(), 'apps/web/src/audio.ts');
 const audioBundle = buildSync({ entryPoints: [moduleFile], bundle: true, format: 'iife', globalName: 'AudioExports', write: false, platform: 'browser', target: 'es2020' }).outputFiles[0]!.text;
@@ -24,10 +27,9 @@ test('game UI stays silent at boot and unlocks native audio from its start butto
     };
   });
   await page.goto('/');
-  const start = page.getByRole('button', { name: /Начать полёт/ });
-  await expect(start).toBeEnabled();
+  await prepareAccountFlight(page);
   expect(await page.evaluate(() => (window as typeof window & { __audioContexts: AudioContext[] }).__audioContexts.length)).toBe(0);
-  await start.click();
+  await page.locator('.screen-panel .primary-button').click();
   await expect.poll(() => page.evaluate(() => (window as typeof window & { __audioContexts: AudioContext[] }).__audioContexts[0]?.state)).toBe('running');
   await expect.poll(() => page.evaluate(() => (window as typeof window & { __oscillatorCount: number }).__oscillatorCount)).toBeGreaterThan(0);
 });

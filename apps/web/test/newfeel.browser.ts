@@ -1,4 +1,7 @@
 import { expect, test } from '@playwright/test';
+import { installAccountBackend, prepareAccountFlight } from './account-backend.fixture';
+
+test.beforeEach(async ({ page }) => installAccountBackend(page));
 
 test('flight presentation animates inside the existing canvas', async ({ page }) => {
   await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') });
@@ -20,7 +23,8 @@ test('flight presentation animates inside the existing canvas', async ({ page })
   await page.goto('/');
   const canvas = page.locator('canvas[aria-label="Игровое поле Doofy Duck"]');
   await expect(canvas).toBeVisible();
-  await page.getByRole('button', { name: /Начать полёт/ }).click();
+  await prepareAccountFlight(page);
+  await page.locator('.screen-panel .primary-button').click();
   await page.clock.runFor(70);
   await expect(page.locator('.running-score')).toBeVisible();
   await expect(page.getByRole('button', { name: /Пауза|Pause/ })).toHaveCount(0);
@@ -38,7 +42,8 @@ test('reduced motion keeps the playable duck and canvas available', async ({ pag
   await page.goto('/');
   const canvas = page.locator('canvas[aria-label="Игровое поле Doofy Duck"]');
   await expect(canvas).toBeVisible();
-  await page.keyboard.press('Space');
+  await prepareAccountFlight(page);
+  await page.locator('.screen-panel .primary-button').click();
   await expect(page.locator('.running-score')).toBeVisible();
   await expect(canvas).toBeVisible();
   await expect(page.locator('canvas')).toHaveCount(1);

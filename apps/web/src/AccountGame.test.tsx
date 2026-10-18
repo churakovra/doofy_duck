@@ -7,7 +7,9 @@ import { AccountGame } from './AccountGame';
 import { TelegramWebAppUnavailableError } from './telegram-web-app';
 import { LocaleProvider } from './locale';
 import { DEFAULT_APPEARANCE } from './appearance';
+import { accountEquipmentAppearance } from './account-shop-assets';
 import { messages as messagesEn } from './messages.en';
+import { messages as messagesRu } from './messages.ru';
 
 const harness = vi.hoisted(() => ({
   restore: vi.fn(), loadTelegramWebApp: vi.fn(), currentRun: vi.fn(), latestRun: vi.fn(), createRun: vi.fn(), getRun: vi.fn(), submitCheckpoint: vi.fn(),
@@ -15,6 +17,7 @@ const harness = vi.hoisted(() => ({
   shopEquipment: vi.fn(), completion: vi.fn(),
   clearAccount: vi.fn(),
   gameAppearance: null as unknown,
+  runCanPlay: null as null | (() => boolean), runRuntimeError: '', runScore: 0,
   traceRecords: new Map<string, unknown>(), save: vi.fn(), runPhase: 'READY', runOptions: null as null | { onTick(state: unknown, inputs: readonly unknown[]): void },
 }));
 
@@ -63,16 +66,21 @@ vi.mock('./account-trace', async () => {
 });
 
 vi.mock('./GameCanvas', () => ({ GameCanvas: (props: { appearance: unknown }) => { harness.gameAppearance = props.appearance; return <canvas />; } }));
-vi.mock('./GameSettings', () => ({ GameSettings: () => null }));
+vi.mock('./GameSettings', () => ({ GameSettings: (props: { open?: boolean; onOpenChange?(open: boolean): void; setLocale(locale: 'ru' | 'en'): void }) => <>
+  <button aria-label="Меню" onClick={() => props.onOpenChange?.(!props.open)}>Menu</button>
+  {props.open && <div role="dialog"><button data-testid="switch-locale" onClick={() => props.setLocale('en')}>English</button></div>}
+</> }));
+vi.mock('./AccountShop', () => ({ AccountShop: (props: { open?: boolean; onOpenChange?(open: boolean): void }) => <button className="account-shop-trigger" onClick={() => props.onOpenChange?.(!props.open)}>Shop</button> }));
 vi.mock('./GameWardrobe', () => ({ GameWardrobe: () => null }));
 vi.mock('./useGameAudio', () => ({ useGameAudio: () => ({
   unlockFromGesture: vi.fn(), flap: vi.fn(), pickup: vi.fn(), setPhase: vi.fn(),
   preferences: { sound: true, music: true }, toggle: vi.fn(),
 }) }));
-vi.mock('./useGameRun', () => ({ useGameRun: (_canPlay: unknown, _callbacks: unknown, options: typeof harness.runOptions) => {
+vi.mock('./useGameRun', () => ({ useGameRun: (canPlay: () => boolean, _callbacks: unknown, options: typeof harness.runOptions) => {
+  harness.runCanPlay = canPlay;
   harness.runOptions = options;
   return {
-    phase: harness.runPhase, score: 0, runtimeError: '', rendererReady: true, flightCapReached: false,
+    phase: harness.runPhase, score: harness.runScore, runtimeError: harness.runRuntimeError, rendererReady: true, flightCapReached: false,
     getState: () => ({ phase: harness.runPhase, tick: 1, totals: {} }), getFeedback: () => ({}),
     acceptRenderer: vi.fn(), start: vi.fn(), pause: vi.fn(), restart: vi.fn(),
     onFieldPointerDown: vi.fn(), onFieldPointerUp: vi.fn(),
@@ -93,8 +101,10 @@ let host: HTMLDivElement;
 let restoreLocks = () => undefined;
 
 beforeEach(async () => {
+  vi.stubEnv('VITE_DD_DEV_AUTH_ENABLED', 'true');
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
-  harness.traceRecords.clear(); harness.runPhase = 'READY'; harness.runOptions = null;
+  localStorage.clear();
+  harness.traceRecords.clear(); harness.runPhase = 'READY'; harness.runOptions = null; harness.runCanPlay = null; harness.runScore = 0; harness.runRuntimeError = '';
   harness.restore.mockResolvedValue(account);
   harness.loadTelegramWebApp.mockResolvedValue({ initData: '', ready: vi.fn() });
   harness.progress.mockResolvedValue({ bestScore: 0 });
@@ -111,7 +121,8 @@ beforeEach(async () => {
   harness.getRun.mockResolvedValue(runSnapshot());
   harness.save.mockClear();
   host = document.createElement('div'); document.body.append(host); root = createRoot(host);
-  await act(async () => { root.render(<LocaleProvider><AccountGame onBack={vi.fn()} /></LocaleProvider>); });
+  await act(async () => { root.render(<LocaleProvider><AccountGame /></LocaleProvider>); });
+  await vi.waitFor(() => expect(host.querySelector('.account-id')).toBeTruthy());
 });
 
 afterEach(() => {
@@ -122,6 +133,128 @@ afterEach(() => {
 });
 
 describe('account run transport', () => {
+  it('applies the account equipment appearance in the idle lobby and keeps one greeting heading', async () => {
+    const equipment = { skinId: 'royal', backgroundId: 'winter' };
+    harness.shopEquipment.mockResolvedValue({ equipment: [
+      { item_type: 'skin', item_id: equipment.skinId, revision: 2 },
+      { item_type: 'background', item_id: equipment.backgroundId, revision: 3 },
+    ] });
+    await act(async () => { root.unmount(); root = createRoot(host); root.render(<LocaleProvider><AccountGame key="equipped-idle" /></LocaleProvider>); });
+    await vi.waitFor(() => expect(harness.gameAppearance).toEqual(accountEquipmentAppearance(equipment)));
+    expect(host.querySelectorAll('.account-panel h1')).toHaveLength(1);
+    expect(host.querySelector('.account-panel h1')?.textContent).toContain('Привет');
+  });
+
+  it('passes the same equipped appearance into the active flight canvas', async () => {
+    const equipment = { skinId: 'rose', backgroundId: 'dusk' };
+    harness.shopEquipment.mockResolvedValue({ equipment: [
+      { item_type: 'skin', item_id: equipment.skinId, revision: 2 },
+      { item_type: 'background', item_id: equipment.backgroundId, revision: 3 },
+    ] });
+    await act(async () => { root.unmount(); root = createRoot(host); root.render(<LocaleProvider><AccountGame key="equipped-flight" /></LocaleProvider>); });
+    await vi.waitFor(() => expect(harness.gameAppearance).toEqual(accountEquipmentAppearance(equipment)));
+    await act(async () => {
+      [...host.querySelectorAll<HTMLButtonElement>('.account-panel button')]
+        .find((button) => button.textContent?.includes('Начать'))?.click();
+    });
+    await vi.waitFor(() => expect(harness.createRun).toHaveBeenCalled());
+    expect(harness.gameAppearance).toEqual(accountEquipmentAppearance(equipment));
+    harness.runPhase = 'DEAD';
+    await act(async () => { root.render(<LocaleProvider><AccountGame key="equipped-flight" /></LocaleProvider>); });
+    expect(host.querySelector('.account-panel h1')?.textContent).toContain(messagesRu.completedHeading);
+    expect(harness.gameAppearance).toEqual(accountEquipmentAppearance(equipment));
+  });
+
+  it('wires the account HUD, settings and shop gates through a translated live flight', async () => {
+    await act(async () => {
+      [...host.querySelectorAll<HTMLButtonElement>('.account-panel button')]
+        .find((button) => button.textContent?.includes('Начать'))?.click();
+    });
+    await vi.waitFor(() => expect(harness.createRun).toHaveBeenCalled());
+    harness.runPhase = 'RUNNING';
+    await act(async () => { root.render(<LocaleProvider><AccountGame /></LocaleProvider>); });
+
+    const canvas = host.querySelector('canvas');
+    expect(host.querySelector('.hud.account-hud')).not.toBeNull();
+    expect(host.querySelector('.running-score')?.tagName).toBe('OUTPUT');
+    expect(host.querySelector('.running-score')?.textContent).toBe('0');
+    expect(host.querySelector('.wallet-strip, .practice-mode, .mode-selector')).toBeNull();
+    expect(harness.runCanPlay?.()).toBe(true);
+
+    await act(async () => { host.querySelector<HTMLButtonElement>('[aria-label="Меню"]')?.click(); });
+    expect(host.querySelector('[role="dialog"]')).not.toBeNull();
+    expect(harness.runCanPlay?.()).toBe(false);
+    await act(async () => { host.querySelector<HTMLButtonElement>('[data-testid="switch-locale"]')?.click(); });
+    expect(document.documentElement.lang).toBe('en');
+    expect(host.querySelector('canvas')).toBe(canvas);
+    expect(harness.runCanPlay?.()).toBe(false);
+    await act(async () => { host.querySelector<HTMLButtonElement>('[aria-label="Меню"]')?.click(); });
+    expect(host.querySelector('[role="dialog"]')).toBeNull();
+    expect(harness.runCanPlay?.()).toBe(true);
+  });
+
+  it('gates ready-flight input while the account shop is open and translates runtime errors', async () => {
+    await act(async () => {
+      [...host.querySelectorAll<HTMLButtonElement>('.account-panel button')]
+        .find((button) => button.textContent?.includes('Начать'))?.click();
+    });
+    await vi.waitFor(() => expect(harness.createRun).toHaveBeenCalled());
+    await act(async () => { root.render(<LocaleProvider><AccountGame /></LocaleProvider>); });
+    expect(harness.runCanPlay?.()).toBe(true);
+    await act(async () => { host.querySelector<HTMLButtonElement>('.account-shop-trigger')?.click(); });
+    expect(harness.runCanPlay?.()).toBe(false);
+    await act(async () => { host.querySelector<HTMLButtonElement>('.account-shop-trigger')?.click(); });
+    expect(harness.runCanPlay?.()).toBe(true);
+
+    harness.runRuntimeError = 'graphicsStartupError';
+    await act(async () => { root.render(<LocaleProvider><AccountGame /></LocaleProvider>); });
+    expect(host.querySelector('[role="alert"]')?.textContent).toBe(messagesRu.graphicsStartupError);
+    await act(async () => { host.querySelector<HTMLButtonElement>('[aria-label="Меню"]')?.click(); });
+    await act(async () => { host.querySelector<HTMLButtonElement>('[data-testid="switch-locale"]')?.click(); });
+    expect(host.querySelector('[role="alert"]')?.textContent).toBe(messagesEn.graphicsStartupError);
+  });
+
+  it('automatically connects the configured local identity and keeps logout fenced', async () => {
+    harness.restore.mockRejectedValueOnce(new Error('no saved session'));
+    harness.loginDev.mockResolvedValueOnce(account);
+    await act(async () => { root.unmount(); root = createRoot(host); root.render(<LocaleProvider><AccountGame key="local-auto-login" /></LocaleProvider>); });
+
+    await vi.waitFor(() => expect(host.querySelector('.account-id')?.textContent).toBe('7'));
+    expect(harness.loginDev).toHaveBeenCalledWith(100000001);
+    expect(host.querySelector('.account-dev-label')).toBeNull();
+
+    await act(async () => {
+      [...host.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.includes('Выйти'))?.click();
+    });
+    await vi.waitFor(() => expect(host.querySelector('.account-dev-label input')).toBeTruthy());
+    const attemptsAfterLogout = harness.loginDev.mock.calls.length;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(harness.loginDev).toHaveBeenCalledTimes(attemptsAfterLogout);
+  });
+
+  it('shows a retry after local authentication cannot reach the backend', async () => {
+    harness.restore.mockRejectedValueOnce(new Error('no saved session'));
+    harness.loginDev.mockRejectedValueOnce(Object.assign(new Error('offline'), { status: 503, code: 'unavailable' }));
+    await act(async () => { root.unmount(); root = createRoot(host); root.render(<LocaleProvider><AccountGame key="local-login-retry" /></LocaleProvider>); });
+    await vi.waitFor(() => expect(host.querySelector('.account-panel')?.textContent).toContain('Повторить подключение'));
+    harness.loginDev.mockResolvedValueOnce(account);
+    await act(async () => {
+      [...host.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.includes('Повторить подключение'))?.click();
+    });
+    await vi.waitFor(() => expect(host.querySelector('.account-id')?.textContent).toBe('7'));
+  });
+
+  it('uses Telegram init data before a restored development session', async () => {
+    await act(async () => { root.unmount(); });
+    harness.restore.mockClear().mockResolvedValue(account);
+    harness.login.mockClear().mockResolvedValue(account);
+    harness.loadTelegramWebApp.mockResolvedValue({ initData: 'signed-telegram-init-data', ready: vi.fn() });
+    root = createRoot(host);
+    await act(async () => { root.render(<LocaleProvider><AccountGame key="telegram-priority" /></LocaleProvider>); });
+    await vi.waitFor(() => expect(harness.login).toHaveBeenCalledWith('signed-telegram-init-data'));
+    expect(harness.restore).not.toHaveBeenCalled();
+  });
+
   it('uses default account equipment after logout when the next account equipment read fails', async () => {
     const nextAccount = { account_id: 'account-b', telegram_user_id: 8, created_at: 'later' };
     await act(async () => { root.unmount(); });
@@ -131,7 +264,7 @@ describe('account run transport', () => {
       .mockResolvedValueOnce({ equipment: [{ item_type: 'skin', item_id: 'royal', revision: 1 }, { item_type: 'background', item_id: 'meadow', revision: 1 }] })
       .mockRejectedValueOnce(new Error('shop unavailable'));
     root = createRoot(host);
-    await act(async () => { root.render(<LocaleProvider><AccountGame onBack={vi.fn()} /></LocaleProvider>); });
+    await act(async () => { root.render(<LocaleProvider><AccountGame /></LocaleProvider>); });
     await vi.waitFor(() => expect(host.textContent).toContain('7'));
     expect(harness.shopEquipment).toHaveBeenCalledTimes(1);
 
@@ -153,7 +286,7 @@ describe('account run transport', () => {
   it('shows a verified delivery-pending result and allows the next flight', async () => {
     harness.latestRun.mockResolvedValue(runSnapshot({ status: 'completed', verificationStatus: 'verified', deliveryStatus: 'pending' }));
     await act(async () => {
-      root.render(<LocaleProvider><AccountGame key="verified-delivery-pending" onBack={vi.fn()} /></LocaleProvider>);
+      root.render(<LocaleProvider><AccountGame key="verified-delivery-pending" /></LocaleProvider>);
     });
 
     expect(host.textContent).toContain('Полёт проверен. Запись в аккаунт ожидает подтверждения.');
@@ -170,7 +303,7 @@ describe('account run transport', () => {
     harness.currentRun.mockResolvedValue(pending);
     harness.getRun.mockResolvedValueOnce(delivered);
     await act(async () => {
-      root.render(<LocaleProvider><AccountGame key="delivery-poll-delivered" onBack={vi.fn()} /></LocaleProvider>);
+      root.render(<LocaleProvider><AccountGame key="delivery-poll-delivered" /></LocaleProvider>);
     });
     expect(host.textContent).toContain('Полёт проверен. Запись в аккаунт ожидает подтверждения.');
 
@@ -189,7 +322,7 @@ describe('account run transport', () => {
     harness.currentRun.mockResolvedValue(pending);
     harness.getRun.mockResolvedValueOnce(rejected);
     await act(async () => {
-      root.render(<LocaleProvider><AccountGame key="delivery-poll-rejected" onBack={vi.fn()} /></LocaleProvider>);
+      root.render(<LocaleProvider><AccountGame key="delivery-poll-rejected" /></LocaleProvider>);
     });
 
     await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
@@ -203,7 +336,7 @@ describe('account run transport', () => {
   it('shows delivery rejection separately from gameplay and still allows another flight', async () => {
     harness.latestRun.mockResolvedValue(runSnapshot({ status: 'completed', verificationStatus: 'verified', deliveryStatus: 'rejected' }));
     await act(async () => {
-      root.render(<LocaleProvider><AccountGame key="verified-delivery-rejected" onBack={vi.fn()} /></LocaleProvider>);
+      root.render(<LocaleProvider><AccountGame key="verified-delivery-rejected" /></LocaleProvider>);
     });
 
     expect(host.textContent).toContain('Полёт проверен, но запись в аккаунт отклонена. Награда не начислена.');
@@ -220,7 +353,7 @@ describe('account run transport', () => {
     harness.login.mockResolvedValue(account);
     harness.loadTelegramWebApp.mockImplementationOnce(() => new Promise((resolve) => { resolveTelegram = resolve; }));
     await act(async () => {
-      root.render(<LocaleProvider><AccountGame key="delayed-telegram-sdk" onBack={vi.fn()} /></LocaleProvider>);
+      root.render(<LocaleProvider><AccountGame key="delayed-telegram-sdk" /></LocaleProvider>);
     });
     await vi.waitFor(() => expect(harness.loadTelegramWebApp).toHaveBeenCalled());
     expect(harness.login).not.toHaveBeenCalled();
@@ -239,7 +372,7 @@ describe('account run transport', () => {
     harness.login.mockResolvedValue(account);
 
     await act(async () => {
-      root.render(<LocaleProvider><AccountGame key="manual-login-before-sdk" onBack={vi.fn()} /></LocaleProvider>);
+      root.render(<LocaleProvider><AccountGame key="manual-login-before-sdk" /></LocaleProvider>);
     });
     await vi.waitFor(() => expect(harness.loadTelegramWebApp).toHaveBeenCalled());
     const input = host.querySelector<HTMLInputElement>('.account-dev-label input')!;
@@ -256,25 +389,19 @@ describe('account run transport', () => {
     expect(host.textContent).not.toContain('7');
   });
 
-  it('does not submit delayed explicit Telegram credentials after the account screen unmounts', async () => {
-    let resolveAutomatic!: (value: { initData: string; ready: () => void }) => void;
-    let resolveExplicit!: (value: { initData: string; ready: () => void }) => void;
+  it('does not submit delayed Telegram bootstrap credentials after the account screen unmounts', async () => {
+    let resolveInitial!: (value: { initData: string; ready: () => void }) => void;
     harness.restore.mockRejectedValue(new Error('no saved session'));
-    harness.loadTelegramWebApp
-      .mockImplementationOnce(() => new Promise((resolve) => { resolveAutomatic = resolve; }))
-      .mockImplementationOnce(() => new Promise((resolve) => { resolveExplicit = resolve; }));
+    harness.loadTelegramWebApp.mockImplementationOnce(() => new Promise((resolve) => { resolveInitial = resolve; }));
     harness.login.mockResolvedValue(account);
 
     await act(async () => {
-      root.render(<LocaleProvider><AccountGame key="delayed-explicit-login" onBack={vi.fn()} /></LocaleProvider>);
+      root.render(<LocaleProvider><AccountGame key="delayed-explicit-login" /></LocaleProvider>);
     });
-    await vi.waitFor(() => expect(harness.loadTelegramWebApp).toHaveBeenCalledTimes(2));
-    await act(async () => { host.querySelector<HTMLButtonElement>('.account-mode-button')?.click(); });
-    await vi.waitFor(() => expect(harness.loadTelegramWebApp).toHaveBeenCalledTimes(3));
+    await vi.waitFor(() => expect(harness.loadTelegramWebApp).toHaveBeenCalled());
     await act(async () => { root.render(<div />); });
 
-    await act(async () => { resolveExplicit({ initData: 'stale-explicit-init-data', ready: vi.fn() }); });
-    await act(async () => { resolveAutomatic({ initData: 'stale-bootstrap-init-data', ready: vi.fn() }); });
+    await act(async () => { resolveInitial({ initData: 'stale-initial-init-data', ready: vi.fn() }); });
 
     expect(harness.login).not.toHaveBeenCalled();
   });
@@ -307,7 +434,7 @@ describe('account run transport', () => {
     harness.loginDev.mockResolvedValue(manualAccount);
 
     await act(async () => {
-      root.render(<LocaleProvider><AccountGame key="logout-before-sdk-reject" onBack={vi.fn()} /></LocaleProvider>);
+      root.render(<LocaleProvider><AccountGame key="logout-before-sdk-reject" /></LocaleProvider>);
     });
     await vi.waitFor(() => expect(harness.loadTelegramWebApp).toHaveBeenCalled());
     const input = host.querySelector<HTMLInputElement>('.account-dev-label input')!;
@@ -327,20 +454,21 @@ describe('account run transport', () => {
     expect(host.textContent).not.toContain('Проверьте соединение и попробуйте ещё раз');
   });
 
-  it('shows an unavailable message after SDK failure and clears it on a sign-in retry', async () => {
+  it('shows a retry after local sign-in fails and clears the error on retry', async () => {
     harness.restore.mockRejectedValue(new Error('no saved session'));
     harness.loadTelegramWebApp.mockRejectedValueOnce(new TelegramWebAppUnavailableError());
+    harness.loginDev.mockRejectedValueOnce(Object.assign(new Error('offline'), { status: 503, code: 'unavailable' }));
     await act(async () => {
-      root.render(<LocaleProvider><AccountGame key="telegram-unavailable" onBack={vi.fn()} /></LocaleProvider>);
+      root.render(<LocaleProvider><AccountGame key="telegram-unavailable" /></LocaleProvider>);
     });
-    await vi.waitFor(() => expect(host.textContent).toContain('Проверьте соединение и попробуйте ещё раз'));
+    await vi.waitFor(() => expect(host.textContent).toContain('Проверьте соединение и повторите попытку'));
     expect(harness.login).not.toHaveBeenCalled();
 
-    harness.loadTelegramWebApp.mockResolvedValueOnce({ initData: '', ready: vi.fn() });
-    await act(async () => { host.querySelector<HTMLButtonElement>('.account-panel .account-mode-button')?.click(); });
+    harness.loginDev.mockResolvedValueOnce(account);
+    await act(async () => { host.querySelector<HTMLButtonElement>('.account-panel .account-dev-label + .primary-button')?.click(); });
 
-    expect(host.textContent).not.toContain('Проверьте соединение и попробуйте ещё раз');
-    expect(host.textContent).toContain('Открой игру в Telegram');
+    expect(host.textContent).not.toContain('Проверьте соединение и повторите попытку');
+    expect(host.textContent).toContain('Начать полёт');
   });
 
   it('restores the last verified result when a signed-in account has no current run', async () => {
@@ -349,7 +477,7 @@ describe('account run transport', () => {
     harness.latestRun.mockResolvedValue(runSnapshot({ state, status: 'completed', verificationStatus: 'verified', deliveryStatus: 'delivered' }));
     harness.completion.mockResolvedValueOnce({ status: 'committed', reason: 'credited', credited: { FEATHER: '40', GAME_STAR: '5' } });
     await act(async () => {
-      root.render(<LocaleProvider><AccountGame key="restored-result" onBack={vi.fn()} /></LocaleProvider>);
+      root.render(<LocaleProvider><AccountGame key="restored-result" /></LocaleProvider>);
     });
 
     expect(harness.currentRun.mock.invocationCallOrder[0]).toBeLessThan(harness.latestRun.mock.invocationCallOrder[0]!);
@@ -358,12 +486,12 @@ describe('account run transport', () => {
     expect(host.querySelector('.earnings-summary')?.textContent).toContain('2');
     await vi.waitFor(() => expect(host.querySelector('.account-settlement')?.textContent).toContain('40'));
     expect(host.querySelector('.account-settlement')?.textContent).toContain('5');
-    expect(host.textContent).toContain('можно тратить только после проверки и зачисления на баланс аккаунта');
+    expect(host.textContent).toContain('Тратить можно только суммы, зачисленные на баланс аккаунта.');
     expect(messagesEn.accountDescription).toContain('verification and account credit');
     expect(messagesEn.accountRewardsNotSpendable).toBe('Only credited account-wallet balances can be spent.');
     expect(host.textContent).toContain('РЕКОРД');
     expect(host.textContent).toContain('зачисленные на баланс аккаунта');
-    expect(host.textContent).toContain('Начать полёт с аккаунтом');
+    expect(host.textContent).toContain('Начать полёт');
   });
 
   it('refreshes pending settlement after delivery completes', async () => {
@@ -374,7 +502,7 @@ describe('account run transport', () => {
       ? { status: 'committed', reason: 'credited', credited: { FEATHER: '40', GAME_STAR: '5' } }
       : { status: 'pending', reason: 'awaiting_delivery', credited: { FEATHER: '0', GAME_STAR: '0' } });
     harness.getRun.mockResolvedValue(runSnapshot({ status: 'completed', verificationStatus: 'verified', deliveryStatus: 'delivered' }));
-    await act(async () => { root.render(<LocaleProvider><AccountGame key="settlement-after-delivery" onBack={vi.fn()} /></LocaleProvider>); });
+    await act(async () => { root.render(<LocaleProvider><AccountGame key="settlement-after-delivery" /></LocaleProvider>); });
     await vi.waitFor(() => expect(harness.completion).toHaveBeenCalledTimes(1));
     delivered = true;
     await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
@@ -410,7 +538,7 @@ describe('account run transport', () => {
     await vi.waitFor(() => expect(host.querySelector('.account-dev-label input')).toBeTruthy());
     harness.latestRun.mockImplementationOnce(() => new Promise((resolve) => { resolveOldLatest = resolve; }));
     await act(async () => {
-      root.render(<LocaleProvider><AccountGame key="restore-pending-result" onBack={vi.fn()} /></LocaleProvider>);
+      root.render(<LocaleProvider><AccountGame key="restore-pending-result" /></LocaleProvider>);
     });
     await vi.waitFor(() => expect(harness.latestRun).toHaveBeenCalled());
 
@@ -565,10 +693,10 @@ describe('account run transport', () => {
   it('retains a locally completed flight through an outage and replays ordered checkpoints after recovery', async () => {
     vi.useFakeTimers();
     let networkAvailable = false;
-    const attempts: Array<{ checkpointSequence: number; ticks: unknown[] }> = [];
+    const attempts: Array<{ checkpointSequence: number; idempotencyKey: string; ticks: unknown[] }> = [];
     harness.submitCheckpoint.mockImplementation(async (_runId, input) => {
-      const checkpoint = input as { checkpointSequence: number; ticks: unknown[] };
-      attempts.push({ checkpointSequence: checkpoint.checkpointSequence, ticks: checkpoint.ticks.map((tick) => tick) });
+      const checkpoint = input as { checkpointSequence: number; idempotencyKey: string; ticks: unknown[] };
+      attempts.push({ checkpointSequence: checkpoint.checkpointSequence, idempotencyKey: checkpoint.idempotencyKey, ticks: checkpoint.ticks.map((tick) => tick) });
       if (!networkAvailable) throw Object.assign(new Error('temporarily_unavailable'), { status: 503, code: 'temporarily_unavailable' });
       if (checkpoint.checkpointSequence === 0) {
         return runSnapshot({ checkpointSequence: 0, activeTicks: 120 });
@@ -594,20 +722,24 @@ describe('account run transport', () => {
     expect(trace).toMatchObject({ accountId: account.account_id, activeTicks: 128, unsentTicks: [], pending: [{ sequence: 0 }, { sequence: 1 }] });
     expect(trace.pending.map((checkpoint) => checkpoint.ticks.length)).toEqual([120, 8]);
     expect(host.textContent).toContain('ожидает проверки');
-    expect(host.textContent).toContain('отправка повторится');
-    expect(host.querySelector('.account-panel .primary-button')?.textContent).not.toContain('Начать полёт с аккаунтом');
+    expect(host.textContent).toContain('повторите попытку');
+    expect(host.querySelector('.account-panel .primary-button')?.textContent).not.toContain('Начать полёт');
     expect(harness.createRun).toHaveBeenCalledTimes(1);
 
     networkAvailable = true;
     await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
 
-    expect(attempts.map((request) => request.checkpointSequence)).toEqual([0, 0, 1]);
-    expect(attempts[0]?.ticks).toEqual(trace.pending[0]?.ticks);
-    expect(attempts[1]?.ticks).toEqual(attempts[0]?.ticks);
-    expect(attempts[2]?.ticks).toEqual(trace.pending[1]?.ticks);
+    const retries = attempts.filter((request) => request.checkpointSequence === 0);
+    expect(retries.length).toBeGreaterThan(1);
+    expect(retries.length).toBeLessThanOrEqual(3);
+    expect(attempts.at(-1)?.checkpointSequence).toBe(1);
+    expect(attempts.slice(0, -1).every((request) => request.checkpointSequence === 0)).toBe(true);
+    expect(retries.map((request) => request.ticks)).toEqual(retries.map(() => trace.pending[0]?.ticks));
+    expect(new Set(retries.map((request) => request.idempotencyKey)).size).toBe(1);
+    expect(attempts.at(-1)?.ticks).toEqual(trace.pending[1]?.ticks);
     expect(host.textContent).toContain('Полёт проверен и записан в аккаунт.');
     const nextStart = [...host.querySelectorAll<HTMLButtonElement>('.account-panel button')]
-      .find((button) => button.textContent?.includes('Начать полёт с аккаунтом'));
+      .find((button) => button.textContent?.includes('Начать полёт'));
     expect(nextStart).toBeTruthy();
 
     harness.createRun.mockResolvedValueOnce(runSnapshot({ runId: 'next-flight', writerToken: 'next-writer' }));
@@ -628,7 +760,7 @@ describe('account run transport', () => {
     harness.takeover.mockResolvedValue(runSnapshot({ writerGeneration: 2, writerToken: 'new-writer' }));
     harness.submitCheckpoint.mockResolvedValue(runSnapshot({ checkpointSequence: 0, activeTicks: 1, writerGeneration: 2 }));
     await act(async () => {
-      root.render(<LocaleProvider><AccountGame key="restored-account-flight" onBack={vi.fn()} /></LocaleProvider>);
+      root.render(<LocaleProvider><AccountGame key="restored-account-flight" /></LocaleProvider>);
     });
     await vi.waitFor(() => expect(host.textContent).toContain('явное подтверждение'));
 
@@ -668,7 +800,7 @@ describe('account run transport', () => {
     })
       .mockResolvedValueOnce(runSnapshot({ checkpointSequence: 0, activeTicks: 1 }));
     root = createRoot(host);
-    await act(async () => { root.render(<LocaleProvider><AccountGame key="retry-reconcile-deadline" onBack={vi.fn()} /></LocaleProvider>); });
+    await act(async () => { root.render(<LocaleProvider><AccountGame key="retry-reconcile-deadline" /></LocaleProvider>); });
     await act(async () => { await vi.waitFor(() => expect(harness.submitCheckpoint).toHaveBeenCalledTimes(1)); });
     const checkpointKey = (harness.submitCheckpoint.mock.calls[0]?.[1] as { idempotencyKey: string }).idempotencyKey;
     expect(checkpointKey).toBe('recovery-checkpoint-key');
@@ -699,7 +831,7 @@ describe('account run transport', () => {
     let finishPoll!: (snapshot: ReturnType<typeof runSnapshot>) => void;
     harness.getRun.mockImplementationOnce(() => new Promise((resolve) => { finishPoll = resolve; }));
     await act(async () => {
-      root.render(<LocaleProvider><AccountGame key="completion-pending-flight" onBack={vi.fn()} /></LocaleProvider>);
+      root.render(<LocaleProvider><AccountGame key="completion-pending-flight" /></LocaleProvider>);
     });
     await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
     expect(harness.getRun).toHaveBeenCalledTimes(1);
@@ -734,12 +866,12 @@ describe('account run transport', () => {
     harness.getRun.mockImplementationOnce(() => new Promise((resolve) => { finishOlderPoll = resolve; }));
     harness.getRun.mockResolvedValueOnce(completedA);
     await act(async () => {
-      root.render(<LocaleProvider><AccountGame key="same-account-completion-poll" onBack={vi.fn()} /></LocaleProvider>);
+      root.render(<LocaleProvider><AccountGame key="same-account-completion-poll" /></LocaleProvider>);
     });
 
     await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
     await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
-    expect(host.textContent).toContain('Начать полёт с аккаунтом');
+    expect(host.textContent).toContain('Начать полёт');
 
     harness.createRun.mockResolvedValueOnce(runSnapshot({ runId: 'run-b', writerToken: 'writer-b' }));
     await act(async () => { host.querySelector<HTMLButtonElement>('.account-panel .primary-button')?.click(); });
@@ -750,6 +882,6 @@ describe('account run transport', () => {
 
     expect(harness.traceRecords.has(`${account.account_id}:run-b`)).toBe(true);
     expect(host.textContent).toContain('Начать полёт');
-    expect(host.textContent).not.toContain('Начать полёт с аккаунтом');
+    expect(harness.createRun).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,4 +1,7 @@
 import { expect, test } from '@playwright/test';
+import { installAccountBackend, prepareAccountFlight } from './account-backend.fixture';
+
+test.beforeEach(async ({ page }) => installAccountBackend(page));
 
 const viewports = [
   { width: 320, height: 640 },
@@ -16,18 +19,11 @@ async function changeVisibility(page: import('@playwright/test').Page, hidden: b
 }
 
 test('phone layouts keep controls readable and clear of the ready card and wallet', async ({ page }, testInfo) => {
-  await page.addInitScript(() => {
-    localStorage.setItem('doofy-duck:wallet:v1', JSON.stringify({
-      version: 1,
-      balances: { FEATHER: 1234567, GAME_STAR: 9876543 },
-      settledRunIds: ['mobile-layout'],
-    }));
-  });
   for (const viewport of viewports) {
     await page.setViewportSize(viewport);
     await page.goto('/');
-    await expect(page.getByRole('button', { name: /Начать полёт/ })).toBeVisible();
-    await expect(page.locator('.wallet-storage')).toHaveText('Кошелёк на этом устройстве');
+    await prepareAccountFlight(page);
+    await expect(page.locator('.account-id')).toHaveCount(0);
     await page.locator('.screen-panel .primary-button').scrollIntoViewIfNeeded();
     const layout = await page.evaluate(() => {
       const box = (selector: string) => {
@@ -44,15 +40,8 @@ test('phone layouts keep controls readable and clear of the ready card and walle
         hud: box('.hud'),
         card: box('.screen-card'),
         panel: box('.screen-panel'),
-        wallet: box('.wallet-strip'),
+        wallet: box('.wallet-status-strip'),
         action: box('.screen-panel .primary-button'),
-        balances: [...document.querySelectorAll<HTMLElement>('.wallet-total')].map((item) => {
-          const surface = item.getBoundingClientRect();
-          return [...item.querySelectorAll<HTMLElement>('.token, strong')].map((part) => {
-            const rect = part.getBoundingClientRect();
-            return { surfaceLeft: surface.left, surfaceRight: surface.right, left: rect.left, right: rect.right };
-          });
-        }),
         controls: [...document.querySelectorAll<HTMLElement>('.hud button, .screen-card button')].map((button) => {
           const rect = button.getBoundingClientRect();
           return { width: rect.width, height: rect.height };
@@ -69,9 +58,6 @@ test('phone layouts keep controls readable and clear of the ready card and walle
     expect(intersects(layout.card, layout.wallet)).toBe(false);
     expect(layout.action.top).toBeGreaterThanOrEqual(layout.frame.top);
     expect(layout.action.bottom).toBeLessThanOrEqual(layout.frame.bottom);
-    expect(layout.balances.flat().every(({ left, right, surfaceLeft, surfaceRight }) => left >= surfaceLeft && right <= surfaceRight)).toBe(true);
-    expect((await page.locator('.wallet-total').nth(0).locator('strong').textContent())?.replace(/\D/g, '')).toBe('1234567');
-    expect((await page.locator('.wallet-total').nth(1).locator('strong').textContent())?.replace(/\D/g, '')).toBe('9876543');
     if (viewport.width === 320 && viewport.height === 568) {
       await page.screenshot({ path: testInfo.outputPath('mobile-ready-320x568.png') });
     }
@@ -80,6 +66,7 @@ test('phone layouts keep controls readable and clear of the ready card and walle
     }
     await page.locator('.screen-panel .primary-button').click();
     await expect(page.locator('.running-score')).toBeVisible();
+    await page.evaluate(() => fetch('/api/v1/runs/current/abandon', { method: 'POST' }));
   }
 });
 
@@ -90,8 +77,9 @@ test('touch layouts hide keyboard-only instructions', async ({ browser }) => {
     hasTouch: true,
   });
   const page = await context.newPage();
+  await installAccountBackend(context);
   await page.goto('/');
-  await expect(page.getByRole('button', { name: /Начать полёт/ })).toBeVisible();
+  await prepareAccountFlight(page);
   await expect(page.locator('.keyboard-hint')).toBeHidden();
   await context.close();
 });
@@ -99,17 +87,17 @@ test('touch layouts hide keyboard-only instructions', async ({ browser }) => {
 test('running game shows only the score; backgrounding reveals the paused controls', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
-  await expect(page.getByRole('button', { name: /Начать полёт/ })).toBeEnabled();
-  await page.getByRole('button', { name: /Начать полёт/ }).click();
+  await prepareAccountFlight(page);
+  await page.locator('.screen-panel .primary-button').click();
   await expect(page.locator('.running-score')).toBeVisible();
   await expect(page.locator('.running-score')).toContainText(/^\d+$/);
   await expect(page.getByRole('button', { name: /Пауза|Pause/ })).toHaveCount(0);
-  for (const selector of ['.brand', '.best-card', '.menu-trigger', '.wallet-strip', '.screen-card', '.tap-hint']) {
+  for (const selector of ['.brand', '.score-card', '.menu-trigger', '.wallet-status-strip', '.screen-card']) {
     await expect(page.locator(selector)).toBeHidden();
   }
   await changeVisibility(page, true);
   await expect(page.getByRole('heading', { name: 'На паузе' })).toBeVisible();
-  for (const selector of ['.brand', '.best-card', '.menu-trigger', '.wallet-strip']) await expect(page.locator(selector)).toBeVisible();
+  for (const selector of ['.brand', '.score-card', '.menu-trigger', '.wallet-status-strip']) await expect(page.locator(selector)).toBeVisible();
 });
 
 test('game frame stays fixed while the running state shows only the score', async ({ page }, testInfo) => {
@@ -117,21 +105,21 @@ test('game frame stays fixed while the running state shows only the score', asyn
   await page.clock.pauseAt(new Date('2026-01-01T00:00:01Z'));
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
-  await expect(page.getByRole('button', { name: /Начать полёт/ })).toBeEnabled();
+  await prepareAccountFlight(page);
   const frame = page.locator('.game-frame');
   const size = async () => frame.boundingBox();
   const readySize = await size();
   expect(readySize).not.toBeNull();
   expect(await page.locator('.hud').evaluate((node) => node.closest('.game-frame') !== null)).toBe(true);
-  expect(await page.locator('.wallet-strip').evaluate((node) => node.closest('.game-frame') !== null)).toBe(true);
+  expect(await page.locator('.wallet-status-strip').evaluate((node) => node.closest('.game-frame') !== null)).toBe(true);
   expect(await page.locator('.screen-card').evaluate((node) => node.closest('.game-frame') !== null)).toBe(true);
-  await page.getByRole('button', { name: /Начать полёт/ }).click();
+  await page.locator('.screen-panel .primary-button').click();
   await page.clock.runFor(70);
   const score = page.locator('.running-score');
   await expect(score).toBeVisible();
   await expect(score).toContainText(/^\d+$/);
   await expect(page.getByRole('button', { name: /Пауза|Pause/ })).toHaveCount(0);
-  for (const selector of ['.brand', '.best-card', '.menu-trigger', '.wallet-strip', '.screen-card', '.tap-hint']) {
+  for (const selector of ['.brand', '.score-card', '.menu-trigger', '.wallet-status-strip', '.screen-card']) {
     await expect(page.locator(selector)).toBeHidden();
   }
   await page.screenshot({ path: testInfo.outputPath('running-score.png') });
@@ -151,7 +139,7 @@ test('game frame stays fixed while the running state shows only the score', asyn
   expect(canvasInside.inside).toBe(true);
   await changeVisibility(page, true);
   await expect(page.getByRole('heading', { name: 'На паузе' })).toBeVisible();
-  for (const selector of ['.brand', '.best-card', '.menu-trigger', '.wallet-strip']) await expect(page.locator(selector)).toBeVisible();
+  for (const selector of ['.brand', '.score-card', '.menu-trigger', '.wallet-status-strip']) await expect(page.locator(selector)).toBeVisible();
   const pauseSize = await size();
   expect(pauseSize?.width).toBeCloseTo(readySize!.width, 0);
   expect(pauseSize?.height).toBeCloseTo(readySize!.height, 0);
@@ -159,12 +147,13 @@ test('game frame stays fixed while the running state shows only the score', asyn
   await page.getByRole('button', { name: /Продолжить/ }).click();
   await expect(score).toBeVisible();
   await page.clock.runFor(8_000);
-  await expect(page.getByRole('heading', { name: 'Хороший заход!' })).toBeVisible({ timeout: 8_000 });
-  for (const selector of ['.brand', '.best-card', '.menu-trigger', '.wallet-strip']) await expect(page.locator(selector)).toBeVisible();
-  const deadSize = await size();
-  expect(deadSize?.width).toBeCloseTo(readySize!.width, 0);
-  expect(deadSize?.height).toBeCloseTo(readySize!.height, 0);
-  await page.screenshot({ path: testInfo.outputPath('dead-result.png') });
+  await expect(page.locator('.account-settlement')).toContainText(/Зачислено|credited/);
+  for (const selector of ['.brand', '.menu-trigger', '.wallet-status-strip']) await expect(page.locator(selector)).toBeVisible();
+  await expect(page.locator('.score-card')).toHaveCount(0);
+  const accountSize = await size();
+  expect(accountSize?.width).toBeCloseTo(readySize!.width, 0);
+  expect(accountSize?.height).toBeCloseTo(readySize!.height, 0);
+  await page.screenshot({ path: testInfo.outputPath('account-summary.png') });
 });
 
 test('Telegram viewport and content safe-area insets shape the app shell', async ({ page }) => {
@@ -198,7 +187,7 @@ test('Telegram viewport and content safe-area insets shape the app shell', async
       return { left: rect.left, right: rect.right };
     })(),
     wallet: (() => {
-      const rect = document.querySelector('.wallet-strip')!.getBoundingClientRect();
+      const rect = document.querySelector('.wallet-status-strip')!.getBoundingClientRect();
       return { left: rect.left, right: rect.right };
     })(),
     panel: (() => {
@@ -226,10 +215,10 @@ test('Telegram viewport and content safe-area insets shape the app shell', async
 });
 
 test('side safe areas and a short stable Telegram viewport preserve canvas ratio and the primary action', async ({ page }) => {
+  await page.goto('/');
+  await prepareAccountFlight(page);
   for (const viewport of [{ width: 390, height: 844 }, { width: 320, height: 280 }]) {
     await page.setViewportSize(viewport);
-    await page.goto('/');
-    await expect(page.getByRole('button', { name: /Начать полёт/ })).toBeVisible();
     await page.evaluate((shortHeight) => {
       const style = document.documentElement.style;
       style.setProperty('--tg-safe-area-inset-left', '24px');
@@ -254,28 +243,24 @@ test('side safe areas and a short stable Telegram viewport preserve canvas ratio
     expect(layout.actionHeight).toBeGreaterThanOrEqual(44);
     expect(layout.actionTop).toBeGreaterThanOrEqual(layout.frameTop);
     expect(layout.actionBottom).toBeLessThanOrEqual(layout.frameBottom);
-    await page.locator('.screen-panel .primary-button').click();
-    await expect(page.locator('.running-score')).toBeVisible();
   }
 });
 
-test('memory-only wallet status fits below the ready action on a small phone', async ({ browser }) => {
+test('account status fits below the ready action on a small phone', async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 320, height: 568 }, isMobile: true, hasTouch: true });
-  await context.addInitScript(() => {
-    Object.defineProperty(window, 'localStorage', { configurable: true, get() { throw new DOMException('Storage blocked by test policy', 'SecurityError'); } });
-  });
+  await installAccountBackend(context);
   const page = await context.newPage();
   await page.goto('/');
-  await expect(page.locator('.wallet-storage')).toHaveText('Только в памяти · кошелёк не сохраняется на этом устройстве');
+  await prepareAccountFlight(page);
   const layout = await page.evaluate(() => {
     const bounds = (selector: string) => {
       const rect = document.querySelector(selector)!.getBoundingClientRect();
       return { top: rect.top, bottom: rect.bottom };
     };
-    return { frame: bounds('.game-frame'), wallet: bounds('.wallet-strip'), card: bounds('.screen-card'), action: bounds('.screen-panel .primary-button') };
+    return { frame: bounds('.game-frame'), status: bounds('.wallet-status-strip'), card: bounds('.screen-card'), action: bounds('.screen-panel .primary-button') };
   });
-  expect(layout.wallet.top).toBeGreaterThanOrEqual(layout.frame.top);
-  expect(layout.wallet.bottom).toBeLessThanOrEqual(layout.frame.bottom);
+  expect(layout.status.top).toBeGreaterThanOrEqual(layout.frame.top);
+  expect(layout.status.bottom).toBeLessThanOrEqual(layout.frame.bottom);
   expect(layout.action.bottom).toBeLessThanOrEqual(layout.card.bottom);
   await context.close();
 });
