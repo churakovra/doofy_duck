@@ -15,7 +15,7 @@ import { messages as messagesRu } from './messages.ru';
 const harness = vi.hoisted(() => ({
   restore: vi.fn(), loadTelegramWebApp: vi.fn(), currentRun: vi.fn(), latestRun: vi.fn(), createRun: vi.fn(), getRun: vi.fn(), submitCheckpoint: vi.fn(),
   takeover: vi.fn(), abandon: vi.fn(), login: vi.fn(), loginDev: vi.fn(), logout: vi.fn(), progress: vi.fn(),
-  shopEquipment: vi.fn(), completion: vi.fn(),
+  shopEquipment: vi.fn(), walletBalances: vi.fn(), completion: vi.fn(),
   clearAccount: vi.fn(),
   gameAppearance: null as unknown,
   runCanPlay: null as null | (() => boolean), runRuntimeError: '', runScore: 0,
@@ -43,6 +43,7 @@ vi.mock('./account-api', () => ({
     logout = harness.logout;
     progress = harness.progress;
     shopEquipment = harness.shopEquipment;
+    walletBalances = harness.walletBalances;
     completion = harness.completion;
   },
   AccountApiError: class AccountApiError extends Error {
@@ -112,6 +113,7 @@ beforeEach(async () => {
   harness.loadTelegramWebApp.mockResolvedValue({ initData: '', ready: vi.fn() });
   harness.progress.mockResolvedValue({ bestScore: 0 });
   harness.shopEquipment.mockResolvedValue({ equipment: [{ item_type: 'skin', item_id: 'classic', revision: 1 }, { item_type: 'background', item_id: 'meadow', revision: 1 }] });
+  harness.walletBalances.mockReset().mockResolvedValue({ balances: [{ currency: 'FEATHER', balance: '0' }, { currency: 'GAME_STAR', balance: '0' }] });
   harness.completion.mockResolvedValue({ status: 'pending', reason: 'settlement_disabled', credited: { FEATHER: '0', GAME_STAR: '0' } });
   harness.clearAccount.mockImplementation(async (accountId: string) => {
     for (const key of harness.traceRecords.keys()) if (key.startsWith(`${accountId}:`)) harness.traceRecords.delete(key);
@@ -125,7 +127,7 @@ beforeEach(async () => {
   harness.save.mockClear();
   host = document.createElement('div'); document.body.append(host); root = createRoot(host);
   await act(async () => { root.render(<LocaleProvider><AccountGame /></LocaleProvider>); });
-  await vi.waitFor(() => expect(host.querySelector('.account-id')).toBeTruthy());
+  await vi.waitFor(() => expect(host.querySelector('.account-shop-trigger')).toBeTruthy());
 });
 
 afterEach(() => {
@@ -136,7 +138,18 @@ afterEach(() => {
 });
 
 describe('account run transport', () => {
-  it('applies the account equipment appearance in the idle lobby and keeps one greeting heading', async () => {
+  it('orders the compact top row as wallet, record, shop, then menu', () => {
+    const header = host.querySelector<HTMLElement>('.account-hud')!;
+    expect(header.querySelector('.brand')).toBeNull();
+    expect([...header.children].map((child) => child.classList.contains('account-wallet') ? 'wallet'
+      : child.classList.contains('score-group') ? 'record'
+        : child.classList.contains('hud-actions') ? 'actions' : 'other')).toEqual(['wallet', 'record', 'actions']);
+    const actions = header.querySelector('.hud-actions')!;
+    expect([...actions.querySelectorAll('button')].map((button) => button.classList.contains('account-shop-trigger') ? 'shop' : 'menu')).toEqual(['shop', 'menu']);
+    expect(header.querySelector('.score-group')?.textContent).toContain(messagesRu.bestScoreLabel);
+  });
+
+  it('applies account equipment in a compact branded idle lobby', async () => {
     const equipment = { skinId: 'royal', backgroundId: 'winter' };
     harness.shopEquipment.mockResolvedValue({ equipment: [
       { item_type: 'skin', item_id: equipment.skinId, revision: 2 },
@@ -145,7 +158,10 @@ describe('account run transport', () => {
     await act(async () => { root.unmount(); root = createRoot(host); root.render(<LocaleProvider><AccountGame key="equipped-idle" /></LocaleProvider>); });
     await vi.waitFor(() => expect(harness.gameAppearance).toEqual(accountEquipmentAppearance(equipment)));
     expect(host.querySelectorAll('.account-panel h1')).toHaveLength(1);
-    expect(host.querySelector('.account-panel h1')?.textContent).toContain('Привет');
+    expect(host.querySelector('.account-panel h1')?.textContent).toContain('Утёнок');
+    expect(host.querySelector('.account-panel .instruction')).toBeNull();
+    expect(host.querySelector('.wallet-status-strip')).toBeNull();
+    expect(host.querySelector('.account-id')).toBeNull();
   });
 
   it('passes the same equipped appearance into the active flight canvas', async () => {
@@ -158,20 +174,25 @@ describe('account run transport', () => {
     await vi.waitFor(() => expect(harness.gameAppearance).toEqual(accountEquipmentAppearance(equipment)));
     await act(async () => {
       [...host.querySelectorAll<HTMLButtonElement>('.account-panel button')]
-        .find((button) => button.textContent?.includes('Начать'))?.click();
+        .find((button) => button.textContent?.includes('Играть'))?.click();
     });
     await vi.waitFor(() => expect(harness.createRun).toHaveBeenCalled());
     expect(harness.gameAppearance).toEqual(accountEquipmentAppearance(equipment));
     harness.runPhase = 'DEAD';
     await act(async () => { root.render(<LocaleProvider><AccountGame key="equipped-flight" /></LocaleProvider>); });
     expect(host.querySelector('.account-panel h1')?.textContent).toContain(messagesRu.completedHeading);
+    expect(host.querySelector('.game-frame.result-screen')).not.toBeNull();
+    expect(host.querySelector('.account-hud .account-shop-trigger')).toBeTruthy();
+    expect(host.querySelector('.account-panel .wallet-disclaimer')).toBeNull();
+    expect(host.querySelector('.earnings-summary span')?.textContent).toBe('Находки');
+    expect(host.querySelector('.account-panel')?.textContent).not.toContain('ожидает проверки');
     expect(harness.gameAppearance).toEqual(accountEquipmentAppearance(equipment));
   });
 
   it('wires the account HUD, settings and shop gates through a translated live flight', async () => {
     await act(async () => {
       [...host.querySelectorAll<HTMLButtonElement>('.account-panel button')]
-        .find((button) => button.textContent?.includes('Начать'))?.click();
+        .find((button) => button.textContent?.includes('Играть'))?.click();
     });
     await vi.waitFor(() => expect(harness.createRun).toHaveBeenCalled());
     harness.runPhase = 'RUNNING';
@@ -199,7 +220,7 @@ describe('account run transport', () => {
   it('gates ready-flight input while the account shop is open and translates runtime errors', async () => {
     await act(async () => {
       [...host.querySelectorAll<HTMLButtonElement>('.account-panel button')]
-        .find((button) => button.textContent?.includes('Начать'))?.click();
+        .find((button) => button.textContent?.includes('Играть'))?.click();
     });
     await vi.waitFor(() => expect(harness.createRun).toHaveBeenCalled());
     await act(async () => { root.render(<LocaleProvider><AccountGame /></LocaleProvider>); });
@@ -217,13 +238,20 @@ describe('account run transport', () => {
     expect(host.querySelector('[role="alert"]')?.textContent).toBe(messagesEn.graphicsStartupError);
   });
 
+  it('refreshes authoritative wallet totals when the shop closes', async () => {
+    const readsBeforeShop = harness.walletBalances.mock.calls.length;
+    await act(async () => { host.querySelector<HTMLButtonElement>('.account-shop-trigger')?.click(); });
+    await act(async () => { host.querySelector<HTMLButtonElement>('.account-shop-trigger')?.click(); });
+    await vi.waitFor(() => expect(harness.walletBalances.mock.calls.length).toBeGreaterThan(readsBeforeShop));
+  });
+
   it('automatically uses only the configured development identity and exposes no account controls', async () => {
     const foreignAccount = { account_id: 'foreign-cookie-account', telegram_user_id: 88, created_at: 'now' };
     harness.restore.mockResolvedValue(foreignAccount);
     harness.loginDev.mockResolvedValueOnce(account);
     await act(async () => { root.unmount(); root = createRoot(host); root.render(<LocaleProvider><AccountGame key="configured-launch-identity" /></LocaleProvider>); });
 
-    await vi.waitFor(() => expect(host.querySelector('.account-id')?.textContent).toBe('7'));
+    await vi.waitFor(() => expect(host.querySelector('.account-shop-trigger')).toBeTruthy());
     expect(harness.restore).not.toHaveBeenCalled();
     expect(harness.loginDev).toHaveBeenCalledWith(100000001);
     expect(host.querySelector('input')).toBeNull();
@@ -239,7 +267,7 @@ describe('account run transport', () => {
     await act(async () => { root.render(<LocaleProvider><AccountGame key="production-no-launch-data" /></LocaleProvider>); });
 
     await vi.waitFor(() => expect(host.textContent).toContain('Открой игру из Telegram'));
-    expect(host.querySelector('.account-id')).toBeNull();
+    expect(host.querySelector('.account-shop-trigger')).toBeNull();
     expect(harness.restore).not.toHaveBeenCalled();
     expect([...host.querySelectorAll('button')].some((button) => /войти|telegram/i.test(button.textContent ?? ''))).toBe(false);
     expect([...host.querySelectorAll('button')].some((button) => button.textContent?.includes('Повторить подключение'))).toBe(true);
@@ -258,7 +286,7 @@ describe('account run transport', () => {
     await act(async () => {
       [...host.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.includes('Повторить подключение'))?.click();
     });
-    await vi.waitFor(() => expect(host.querySelector('.account-id')?.textContent).toBe('7'));
+    await vi.waitFor(() => expect(host.querySelector('.account-shop-trigger')).toBeTruthy());
     expect(harness.login).toHaveBeenNthCalledWith(1, 'first-launch-identity');
     expect(harness.login).toHaveBeenNthCalledWith(2, 'first-launch-identity');
   });
@@ -272,7 +300,7 @@ describe('account run transport', () => {
     await act(async () => {
       [...host.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.includes('Повторить подключение'))?.click();
     });
-    await vi.waitFor(() => expect(host.querySelector('.account-id')?.textContent).toBe('7'));
+    await vi.waitFor(() => expect(host.querySelector('.account-shop-trigger')).toBeTruthy());
   });
 
   it('uses Telegram init data before a restored development session', async () => {
@@ -297,13 +325,13 @@ describe('account run transport', () => {
       .mockRejectedValueOnce(new Error('shop unavailable'));
     root = createRoot(host);
     await act(async () => { root.unmount(); root = createRoot(host); root.render(<LocaleProvider><AccountGame key="equipment-account-a" /></LocaleProvider>); });
-    await vi.waitFor(() => expect(host.textContent).toContain('7'));
+    await vi.waitFor(() => expect(host.querySelector('.account-shop-trigger')).toBeTruthy());
     expect(harness.shopEquipment).toHaveBeenCalledTimes(1);
 
     harness.loadTelegramWebApp.mockResolvedValueOnce({ initData: 'account-b-launch', ready: vi.fn() });
     harness.login.mockResolvedValueOnce(nextAccount);
     await act(async () => { root.render(<LocaleProvider><AccountGame key="equipment-account-b" /></LocaleProvider>); });
-    await vi.waitFor(() => expect(host.textContent).toContain('8'));
+    await vi.waitFor(() => expect(host.querySelector('.account-shop-trigger')).toBeTruthy());
     harness.createRun.mockResolvedValueOnce(runSnapshot({ accountId: nextAccount.account_id, runId: 'default-flight' }));
     await act(async () => { host.querySelector<HTMLButtonElement>('.account-panel .primary-button')?.click(); });
     await vi.waitFor(() => expect(harness.traceRecords.has(`${nextAccount.account_id}:default-flight`)).toBe(true));
@@ -317,7 +345,7 @@ describe('account run transport', () => {
       root.render(<LocaleProvider><AccountGame key="verified-delivery-pending" /></LocaleProvider>);
     });
 
-    expect(host.textContent).toContain('Полёт проверен. Запись в аккаунт ожидает подтверждения.');
+    expect(host.textContent).toContain(messagesRu.accountPendingVerification);
     harness.createRun.mockResolvedValueOnce(runSnapshot({ runId: 'next-flight', writerToken: 'next-writer' }));
     await act(async () => { host.querySelector<HTMLButtonElement>('.account-panel .primary-button')?.click(); });
 
@@ -333,12 +361,12 @@ describe('account run transport', () => {
     await act(async () => {
       root.render(<LocaleProvider><AccountGame key="delivery-poll-delivered" /></LocaleProvider>);
     });
-    expect(host.textContent).toContain('Полёт проверен. Запись в аккаунт ожидает подтверждения.');
+    expect(host.textContent).toContain(messagesRu.accountPendingVerification);
 
     await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
 
-    expect(host.textContent).toContain('Полёт проверен и записан в аккаунт.');
-    expect(host.textContent).not.toContain('Запись в аккаунт ожидает подтверждения.');
+    expect(host.textContent).not.toContain('Проверено');
+    expect(host.textContent).not.toContain(messagesRu.accountPendingVerification);
     await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
     expect(harness.getRun).toHaveBeenCalledTimes(1);
   });
@@ -355,8 +383,8 @@ describe('account run transport', () => {
 
     await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
 
-    expect(host.textContent).toContain('Полёт проверен, но запись в аккаунт отклонена. Награда не начислена.');
-    expect(host.textContent).not.toContain('Сервер не смог подтвердить этот полёт.');
+    expect(host.textContent).toContain(messagesRu.accountDeliveryRejected);
+    expect(host.textContent).not.toContain('подтвердить');
     await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
     expect(harness.getRun).toHaveBeenCalledTimes(1);
   });
@@ -367,7 +395,7 @@ describe('account run transport', () => {
       root.render(<LocaleProvider><AccountGame key="verified-delivery-rejected" /></LocaleProvider>);
     });
 
-    expect(host.textContent).toContain('Полёт проверен, но запись в аккаунт отклонена. Награда не начислена.');
+    expect(host.textContent).toContain(messagesRu.accountDeliveryRejected);
     expect(host.textContent).not.toContain('Сервер не смог подтвердить этот полёт.');
     harness.createRun.mockResolvedValueOnce(runSnapshot({ runId: 'flight-after-delivery-rejection', writerToken: 'next-writer' }));
     await act(async () => { host.querySelector<HTMLButtonElement>('.account-panel .primary-button')?.click(); });
@@ -407,7 +435,7 @@ describe('account run transport', () => {
 
     expect(harness.login).toHaveBeenCalledWith('delayed-authoritative-launch');
     expect(harness.loginDev).not.toHaveBeenCalled();
-    expect(host.textContent).toContain('7');
+    expect(host.querySelector('.account-shop-trigger')).toBeTruthy();
   });
 
   it('does not submit delayed Telegram bootstrap credentials after the account screen unmounts', async () => {
@@ -444,7 +472,7 @@ describe('account run transport', () => {
     expect(reauthenticateButton).toBeDefined();
     await act(async () => { reauthenticateButton!.click(); });
 
-    await vi.waitFor(() => expect(host.textContent).toContain('7'));
+    await vi.waitFor(() => expect(host.querySelector('.account-shop-trigger')).toBeTruthy());
     expect(harness.login).toHaveBeenNthCalledWith(2, 'same-launch-identity');
     expect(harness.traceRecords.has(`${account.account_id}:${initialState.descriptor.runId}`)).toBe(true);
     const start = host.querySelector<HTMLButtonElement>('.account-panel .primary-button');
@@ -483,30 +511,50 @@ describe('account run transport', () => {
     await act(async () => { host.querySelector<HTMLButtonElement>('.account-panel button')?.click(); });
 
     expect(host.textContent).not.toContain('Проверьте соединение и повторите попытку');
-    expect(host.textContent).toContain('Начать полёт');
+    expect(host.textContent).toContain('Играть');
   });
 
-  it('restores the last verified result when a signed-in account has no current run', async () => {
+  it('keeps the verified result compact and shows authoritative wallet totals outside the result card', async () => {
     const state = { ...initialState, score: 23, totals: { FEATHER: 4, GAME_STAR: 2 } };
     harness.currentRun.mockResolvedValue(undefined);
     harness.latestRun.mockResolvedValue(runSnapshot({ state, status: 'completed', verificationStatus: 'verified', deliveryStatus: 'delivered' }));
     harness.completion.mockResolvedValueOnce({ status: 'committed', reason: 'credited', credited: { FEATHER: '40', GAME_STAR: '5' } });
+    harness.walletBalances.mockResolvedValue({ balances: [{ currency: 'FEATHER', balance: '40' }, { currency: 'GAME_STAR', balance: '5' }] });
     await act(async () => {
       root.render(<LocaleProvider><AccountGame key="restored-result" /></LocaleProvider>);
     });
+
+    expect(host.querySelector('.game-frame.result-screen')).not.toBeNull();
 
     expect(harness.currentRun.mock.invocationCallOrder[0]).toBeLessThan(harness.latestRun.mock.invocationCallOrder[0]!);
     expect(host.querySelector('.result-score')?.textContent).toContain('23');
     expect(host.querySelector('.earnings-summary')?.textContent).toContain('4');
     expect(host.querySelector('.earnings-summary')?.textContent).toContain('2');
-    await vi.waitFor(() => expect(host.querySelector('.account-settlement')?.textContent).toContain('40'));
-    expect(host.querySelector('.account-settlement')?.textContent).toContain('5');
-    expect(host.textContent).toContain('Тратить можно только суммы, зачисленные на баланс аккаунта.');
-    expect(messagesEn.accountDescription).toContain('verification and account credit');
-    expect(messagesEn.accountRewardsNotSpendable).toBe('Only credited account-wallet balances can be spent.');
+    await vi.waitFor(() => expect(host.querySelector('.wallet-summary-button')?.textContent).toContain('40'));
+    expect(host.querySelector('.wallet-summary-button')?.textContent).toContain('5');
+    expect(host.querySelector('.account-panel .account-shop-trigger')).toBeNull();
+    expect(host.querySelector('.account-panel .account-settlement-details')).toBeNull();
+    expect(host.querySelector('.account-panel .wallet-disclaimer, .account-panel .account-reward-note')).toBeNull();
+    expect(host.querySelector('.earnings-summary span')?.textContent).toBe('Находки');
+    expect(host.querySelector('.account-panel')?.textContent).not.toContain('Проверено');
+    expect(host.querySelector('.account-panel')?.textContent).not.toContain('ожидает проверки');
+    expect(host.querySelector('.account-wallet')).not.toBeNull();
+    expect(host.querySelector('.account-hud .account-shop-trigger')).toBeTruthy();
     expect(host.textContent).toContain('РЕКОРД');
-    expect(host.textContent).toContain('зачисленные на баланс аккаунта');
-    expect(host.textContent).toContain('Начать полёт');
+    expect(host.textContent).toContain('Ещё раз');
+  });
+
+  it('routes settlement failures to the wallet popup outside the centered result card', async () => {
+    harness.currentRun.mockResolvedValue(undefined);
+    harness.latestRun.mockResolvedValue(runSnapshot({ status: 'completed', verificationStatus: 'verified', deliveryStatus: 'delivered' }));
+    harness.completion.mockRejectedValueOnce(new Error('wallet unavailable'));
+    await act(async () => { root.render(<LocaleProvider><AccountGame key="wallet-settlement-failure" /></LocaleProvider>); });
+
+    await vi.waitFor(() => expect(host.querySelector('.wallet-popup [role="alert"]')).not.toBeNull());
+    expect(host.querySelector('.wallet-popup')?.textContent).toContain(messagesRu.accountShopSettlementUnavailable);
+    expect(host.querySelector('.result-screen .account-panel')?.textContent).not.toContain('кошелёк');
+    expect(host.querySelector('.account-panel .account-shop-trigger')).toBeNull();
+    expect(host.querySelector('.account-hud .account-shop-trigger')).toBeTruthy();
   });
 
   it('refreshes pending settlement after delivery completes', async () => {
@@ -519,9 +567,13 @@ describe('account run transport', () => {
     harness.getRun.mockResolvedValue(runSnapshot({ status: 'completed', verificationStatus: 'verified', deliveryStatus: 'delivered' }));
     await act(async () => { root.render(<LocaleProvider><AccountGame key="settlement-after-delivery" /></LocaleProvider>); });
     await vi.waitFor(() => expect(harness.completion).toHaveBeenCalledTimes(1));
+    const readsBeforeCommit = harness.walletBalances.mock.calls.length;
+    harness.walletBalances.mockResolvedValue({ balances: [{ currency: 'FEATHER', balance: '40' }, { currency: 'GAME_STAR', balance: '5' }] });
     delivered = true;
     await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
-    await vi.waitFor(() => expect(host.querySelector('.account-settlement')?.textContent).toContain('40'));
+    await vi.waitFor(() => expect(host.querySelector('.wallet-summary-button')?.textContent).toContain('40'));
+    expect(host.querySelector('.wallet-summary-button')?.textContent).toContain('5');
+    expect(harness.walletBalances.mock.calls.length).toBeGreaterThan(readsBeforeCommit);
     expect(harness.completion.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 
@@ -548,14 +600,14 @@ describe('account run transport', () => {
     harness.login.mockResolvedValueOnce(otherAccount);
     harness.latestRun.mockResolvedValue(undefined);
     await act(async () => { root.render(<LocaleProvider><AccountGame key="restore-pending-result-new-launch" /></LocaleProvider>); });
-    await vi.waitFor(() => expect(host.textContent).toContain('8'));
+    await vi.waitFor(() => expect(host.querySelector('.account-shop-trigger')).toBeTruthy());
     await act(async () => {
       resolveOldLatest(runSnapshot({ state: { ...initialState, score: 99 }, status: 'completed', verificationStatus: 'verified' }));
     });
 
     expect(host.querySelector('.result-score')).toBeNull();
     expect(host.textContent).not.toContain('99');
-    expect(host.textContent).toContain('8');
+    expect(host.querySelector('.account-shop-trigger')).toBeTruthy();
   });
 
   it('shows the account best score from the server across new runs', async () => {
@@ -585,9 +637,9 @@ describe('account run transport', () => {
     });
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
 
-    expect(host.textContent).toContain('Сервер не смог подтвердить');
+    expect(host.textContent).toContain(messagesRu.accountGameplayRejected);
     const startButton = [...host.querySelectorAll<HTMLButtonElement>('.account-panel button')]
-      .find((button) => button.textContent?.includes('Начать полёт'));
+      .find((button) => button.textContent?.includes('Играть'));
     expect(startButton).toBeTruthy();
     await act(async () => { startButton?.click(); });
     expect(harness.createRun).toHaveBeenCalledTimes(2);
@@ -713,9 +765,9 @@ describe('account run transport', () => {
     };
     expect(trace).toMatchObject({ accountId: account.account_id, activeTicks: 128, unsentTicks: [], pending: [{ sequence: 0 }, { sequence: 1 }] });
     expect(trace.pending.map((checkpoint) => checkpoint.ticks.length)).toEqual([120, 8]);
-    expect(host.textContent).toContain('ожидает проверки');
-    expect(host.textContent).toContain('повторите попытку');
-    expect(host.querySelector('.account-panel .primary-button')?.textContent).not.toContain('Начать полёт');
+    expect(host.textContent).toContain(messagesRu.accountServiceUnavailable);
+    expect(host.querySelector('[role="alert"], [role="status"]')?.textContent).toContain(messagesRu.accountServiceUnavailable);
+    expect(host.querySelector('.account-panel .primary-button')?.textContent).not.toContain('Играть');
     expect(harness.createRun).toHaveBeenCalledTimes(1);
 
     networkAvailable = true;
@@ -729,9 +781,9 @@ describe('account run transport', () => {
     expect(retries.map((request) => request.ticks)).toEqual(retries.map(() => trace.pending[0]?.ticks));
     expect(new Set(retries.map((request) => request.idempotencyKey)).size).toBe(1);
     expect(attempts.at(-1)?.ticks).toEqual(trace.pending[1]?.ticks);
-    expect(host.textContent).toContain('Полёт проверен и записан в аккаунт.');
+    expect(host.textContent).not.toContain('Проверено');
     const nextStart = [...host.querySelectorAll<HTMLButtonElement>('.account-panel button')]
-      .find((button) => button.textContent?.includes('Начать полёт'));
+      .find((button) => button.textContent?.includes('Ещё раз'));
     expect(nextStart).toBeTruthy();
 
     harness.createRun.mockResolvedValueOnce(runSnapshot({ runId: 'next-flight', writerToken: 'next-writer' }));
@@ -796,10 +848,10 @@ describe('account run transport', () => {
     const checkpointKey = (harness.submitCheckpoint.mock.calls[0]?.[1] as { idempotencyKey: string }).idempotencyKey;
     expect(checkpointKey).toBe('recovery-checkpoint-key');
     await act(async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); });
-    expect(host.textContent).toContain('Связь прервана.');
+    expect(host.textContent).toContain(messagesRu.accountConnectionRestoring);
 
     const retryButton = () => [...host.querySelectorAll<HTMLButtonElement>('.account-panel button')]
-      .find((button) => button.textContent?.toLowerCase().includes('статус'))!;
+      .find((button) => button.textContent?.toLowerCase().includes('снова'))!;
     await act(async () => { retryButton().click(); retryButton().click(); });
     expect(harness.submitCheckpoint).toHaveBeenCalledTimes(1);
     const remainingBeforeDeadline = Math.max(0, 59_000 - (Date.now() - rejectedAt));
@@ -833,7 +885,7 @@ describe('account run transport', () => {
     harness.currentRun.mockResolvedValue(undefined);
     root = createRoot(host);
     await act(async () => { root.render(<LocaleProvider><AccountGame key="different-launch-account" /></LocaleProvider>); });
-    await vi.waitFor(() => expect(host.textContent).toContain('8'));
+    await vi.waitFor(() => expect(host.querySelector('.account-shop-trigger')).toBeTruthy());
     harness.createRun.mockResolvedValue(runSnapshot({ runId: 'run-b', accountId: nextAccount.account_id, writerToken: 'writer-b' }));
     await act(async () => { host.querySelector<HTMLButtonElement>('.account-panel .primary-button')?.click(); });
     await vi.waitFor(() => expect(harness.traceRecords.has(`${nextAccount.account_id}:run-b`)).toBe(true));
@@ -858,17 +910,17 @@ describe('account run transport', () => {
 
     await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
     await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
-    expect(host.textContent).toContain('Начать полёт');
+    expect(host.textContent).toContain('Ещё раз');
 
     harness.createRun.mockResolvedValueOnce(runSnapshot({ runId: 'run-b', writerToken: 'writer-b' }));
     await act(async () => { host.querySelector<HTMLButtonElement>('.account-panel .primary-button')?.click(); });
     await vi.waitFor(() => expect(harness.traceRecords.has(`${account.account_id}:run-b`)).toBe(true));
-    expect(host.textContent).toContain('Начать полёт');
+    expect(host.textContent).toContain('Играть');
 
     await act(async () => { finishOlderPoll(runA); });
 
     expect(harness.traceRecords.has(`${account.account_id}:run-b`)).toBe(true);
-    expect(host.textContent).toContain('Начать полёт');
+    expect(host.textContent).toContain('Играть');
     expect(harness.createRun).toHaveBeenCalledTimes(1);
   });
 });

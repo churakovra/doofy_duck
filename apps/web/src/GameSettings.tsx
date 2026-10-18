@@ -18,6 +18,7 @@ type Props = {
   open?: boolean;
   onOpenChange?(open: boolean): void;
   disabled?: boolean;
+  hideWallet?: boolean;
   walletSlot?: ReactNode;
   walletHeading?: string;
 };
@@ -146,7 +147,7 @@ function LanguageDropdown({ locale, setLocale, messages, dialogRef }: LanguageDr
   </div>;
 }
 
-export function GameSettings({ locale, setLocale, messages, preferences, toggle, wallet, walletPersistent, walletStatus, walletBlocked, portalContainer, open: controlledOpen, onOpenChange, disabled = false, walletSlot, walletHeading }: Props) {
+export function GameSettings({ locale, setLocale, messages, preferences, toggle, wallet, walletPersistent, walletStatus, walletBlocked, portalContainer, open: controlledOpen, onOpenChange, disabled = false, hideWallet = false, walletSlot, walletHeading }: Props) {
   const [internalOpen, setInternalOpen] = useState(false);
   const open = controlledOpen ?? internalOpen;
   const setOpen = (next: boolean) => { setInternalOpen(next); onOpenChange?.(next); };
@@ -239,7 +240,7 @@ export function GameSettings({ locale, setLocale, messages, preferences, toggle,
             onClick={() => toggle('music')}
           >{messages.musicLabel}</GameButton>
         </div>
-        <section className="settings-wallet" aria-labelledby="settings-wallet-heading">
+        {!hideWallet && <section className="settings-wallet" aria-labelledby="settings-wallet-heading">
           <h3 id="settings-wallet-heading">{walletHeading ?? messages.walletLabel}</h3>
           {walletSlot ?? <>
           <div className="settings-wallet-values">
@@ -249,7 +250,7 @@ export function GameSettings({ locale, setLocale, messages, preferences, toggle,
           <p className={`settings-wallet-status ${walletPersistent ? '' : 'not-saved'}`} role={walletBlocked ? 'status' : undefined}>{walletStatus}</p>
           <p className="settings-wallet-note">{messages.walletLocalUnitsNote}</p>
           </>}
-        </section>
+        </section>}
       </section>
     </div>, portalContainer.current)}
   </>;

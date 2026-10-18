@@ -316,13 +316,16 @@ button { font: inherit; }
 .account-shop-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
 .account-shop-tabs button { min-height: 42px; border: 1px solid var(--line); border-radius: 10px; color: var(--ink); background: var(--paper); font: inherit; font-weight: 650; cursor: pointer; }
 .account-shop-tabs button[aria-selected="true"] { border-color: var(--green); color: var(--green-dark); background: var(--green-pale); }
-.account-shop-items { display: grid; grid-template-columns: repeat(auto-fit, minmax(112px, 1fr)); gap: 7px; max-height: 126px; overflow-y: auto; overscroll-behavior: contain; }
-.account-shop-item { display: flex; min-height: 58px; flex-direction: column; justify-content: center; gap: 3px; padding: 7px; border: 1px solid var(--line); border-radius: 10px; color: var(--ink); background: var(--paper); text-align: left; cursor: pointer; }
+.account-shop-items { display: flex; min-width: 0; gap: 8px; padding: 2px 2px 8px; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scrollbar-color: #829582 #e7e8db; scrollbar-width: thin; scroll-snap-type: x proximity; }
+.account-shop-items::-webkit-scrollbar { height: 7px; }
+.account-shop-items::-webkit-scrollbar-track { border-radius: 8px; background: #e7e8db; }
+.account-shop-items::-webkit-scrollbar-thumb { border-radius: 8px; background: #829582; }
+.account-shop-item { display: flex; flex: 0 0 128px; min-height: 64px; flex-direction: column; justify-content: center; gap: 3px; padding: 8px; border: 1px solid var(--line); border-radius: 10px; color: var(--ink); background: var(--paper); text-align: left; cursor: pointer; scroll-snap-align: start; }
 .account-shop-item.selected { border-color: var(--green); background: var(--green-pale); box-shadow: inset 0 0 0 1px var(--green); }
 .account-shop-item-title { font-size: 13px; font-weight: 700; }
 .account-shop-item-price { color: #59695f; font-size: 11px; }
-.account-shop-actions { display: flex; justify-content: flex-end; }
-.account-shop-actions .game-button { min-height: 44px; }
+.account-shop-actions { display: flex; }
+.account-shop-actions .game-button { width: 100%; min-height: 48px; }
 .account-shop-confirmation, .account-shop-pending { display: grid; gap: 7px; padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: #f5f3eb; }
 .account-shop-confirmation p, .account-shop-pending p { margin: 0; font-size: 13px; line-height: 1.4; }
 .account-shop-confirmation button { min-height: 42px; }
@@ -423,3 +426,70 @@ button { font: inherit; }
   .game-frame { box-shadow: 0 18px 70px rgb(46 67 54 / 12%); }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; scroll-behavior: auto !important; } }
+
+/* Arcade lobby and result panels stay compact around the original playfield. */
+:root { --ink: #20382c; --muted: #496352; --paper: #fffdf4; --green: #386348; --green-dark: #294d39; --green-pale: #e4efe2; --gold: #e0aa3e; --line: #d8dfd0; --button-primary: #e0aa3e; }
+:focus-visible { outline: 3px solid #8b5a09; outline-offset: 3px; }
+.game-frame { border-radius: 12px; background: #d9e8df; }
+.account-hud { display: flex; flex-wrap: nowrap; justify-content: flex-start; gap: 4px; min-height: 44px; }
+.game-frame:not(.running) .account-hud { z-index: 4; top: 18px; }
+.account-hud .brand { display: none; }
+.account-hud .account-wallet { order: 1; flex: 0 1 104px; min-width: 0; justify-content: flex-start; }
+.account-hud .score-group { order: 2; width: auto; min-width: 0; min-height: 44px; flex: 1 1 0; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.account-hud .score-card { min-width: 0; padding: 0 4px; }
+.account-hud .score-card span { text-align: center; }
+.account-hud .score-card strong { overflow: hidden; font-size: clamp(26px, 7.8cqw, 31.2px); line-height: 1; text-overflow: ellipsis; white-space: nowrap; }
+.account-hud .hud-actions { order: 3; flex: 0 0 auto; gap: 4px; margin-left: 0; }
+.account-hud .hud-actions .menu-trigger { width: 44px; height: 44px; min-width: 44px; min-height: 44px; }
+.account-wallet { position: relative; z-index: 6; display: flex; min-width: 0; justify-content: flex-end; pointer-events: auto; }
+.wallet-summary-button { position: relative; display: flex; width: 100%; min-width: 0; min-height: 44px; align-items: center; justify-content: space-around; gap: 3px; padding: 3px 4px; border: 1px solid var(--line); border-radius: 13px; color: var(--ink); background: rgb(255 253 247 / 95%); box-shadow: 0 2px 8px rgb(43 66 51 / 9%); font: inherit; cursor: pointer; }
+.wallet-total { display: inline-flex; min-width: 0; flex: 1 1 0; align-items: center; justify-content: center; gap: 3px; overflow: hidden; color: var(--muted); font-size: 11px; font-weight: 700; white-space: nowrap; }
+.wallet-total strong { max-width: calc(100% - 18px); overflow: hidden; color: var(--ink); font-size: 13px; font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
+.wallet-token { width: 16px; height: 16px; flex: 0 0 auto; font-size: 15px; line-height: 1; }
+.coin-token { color: #c18a22; }
+.star-token { color: #c18a22; }
+.wallet-summary-button:focus-visible, .wallet-refresh-button:focus-visible { outline: 3px solid #8b5a09; outline-offset: 2px; }
+.wallet-summary-button:hover { border-color: #b6c3b5; }
+.wallet-sync-indicator { position: absolute; top: -3px; right: -3px; width: 9px; height: 9px; border: 1px solid white; border-radius: 50%; background: #c18a22; }
+.account-wallet.has-sync-issue .wallet-sync-indicator { background: #a43d33; }
+.wallet-popup { position: absolute; z-index: 8; top: calc(100% + 7px); right: auto; left: 0; display: grid; width: min(310px, calc(100vw - 48px)); gap: 8px; padding: 14px; border: 1px solid var(--line); border-radius: 15px; color: var(--ink); background: var(--paper); box-shadow: 0 12px 34px rgb(28 50 37 / 25%); text-align: left; }
+.wallet-popup > strong { font-size: 14px; }
+.wallet-popup p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.35; }
+.wallet-popup p.wallet-popup-error { color: var(--danger); }
+.wallet-popup .wallet-refresh-button { min-height: 44px; padding: 0 12px; border: 1px solid var(--line); border-radius: 11px; color: var(--ink); background: #f4f4ea; font: inherit; font-weight: 700; cursor: pointer; }
+.wallet-refresh-button:disabled { opacity: .6; cursor: default; }
+.game-frame.running .account-wallet { display: none; }
+.game-frame:not(.running) .screen-card { inset: 0; align-items: center; justify-content: center; overflow: hidden; padding: 48px 10px; }
+.game-frame:not(.running) .screen-panel { width: min(100%, 328px); max-height: 100%; overflow: auto; padding: 15px 17px 13px; border: 1px solid rgb(255 255 255 / 78%); border-radius: 20px; background: rgb(255 253 244 / 95%); box-shadow: 0 10px 30px rgb(32 56 44 / 18%); backdrop-filter: blur(8px); }
+.game-frame:not(.running) .screen-panel h1, .settings-dialog-header h2 { color: var(--ink); font-family: ui-rounded, "Trebuchet MS", system-ui, sans-serif; font-weight: 850; letter-spacing: -.045em; }
+.game-frame:not(.running) .screen-panel h1 { margin: 0 0 8px; font-size: clamp(25px, 7cqw, 32px); line-height: 1.02; }
+.game-frame:not(.running) .eyebrow { display: none; }
+.game-frame:not(.running) .primary-button { position: sticky; bottom: 0; justify-content: center; width: 100%; min-height: 52px; margin: 8px 0 0; border: 1px solid #c88d20; border-radius: 15px; color: #233528; background: var(--gold); box-shadow: 0 3px 0 #bd8420, 0 7px 16px rgb(124 83 12 / 16%); font-size: 17px; font-weight: 800; }
+.game-frame:not(.running) .primary-button:hover:not(:disabled) { background: #edbd5b; }
+.game-frame:not(.running) .primary-button:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 1px 0 #bd8420; }
+.account-settlement-details { margin-top: 7px; text-align: left; }
+.account-settlement-details summary { min-height: 36px; padding: 9px 2px 0; border-top: 1px solid var(--line); color: var(--green-dark); font-size: 13px; font-weight: 750; cursor: pointer; }
+.account-settlement-details .account-settlement { margin: 7px 0 4px; }
+.account-reward-note { margin: 4px 0 0; color: var(--muted); font-size: 12px; line-height: 1.35; }
+.game-frame:not(.running) .result-score { margin: 3px 0 5px; color: var(--ink); font-family: ui-rounded, "Trebuchet MS", system-ui, sans-serif; font-size: 44px; font-weight: 850; }
+.game-frame:not(.running) .earnings-summary { margin-top: 4px; }
+.game-frame:not(.running) .account-panel [role="status"] { margin: 4px 0; color: var(--green-dark); font-size: 13px; line-height: 1.35; }
+.account-panel .wallet-access-error { margin-inline: auto; }
+.hud-actions { gap: 8px; }
+.menu-trigger { border-radius: 14px; }
+.account-shop-trigger { padding-inline: 13px; border-radius: 14px; font-weight: 700; }
+.settings-dialog, .account-shop-dialog { border-color: #d8dfd0; border-radius: 20px; background: #fffdf4; box-shadow: 0 20px 60px rgb(28 50 37 / 26%); }
+.settings-dialog-header h2 { font-size: 27px; }
+.account-shop-dialog { gap: 12px; }
+.account-shop-dialog .wardrobe-preview-art { height: clamp(86px, 14cqh, 100px); }
+.account-shop-items { flex: 0 0 auto; min-height: 0; max-height: none; }
+.account-shop-item, .account-shop-tabs button { min-height: 48px; border-radius: 13px; }
+.account-shop-item.selected, .wardrobe-option.selected { border-color: var(--green); background: #e4efe2; }
+.account-shop-selected { margin: 0; }
+.account-shop-selected span { display: none; }
+.account-shop-wallet { border-color: var(--line); }
+.settings-dialog-header .settings-close { min-width: 44px; min-height: 44px; }
+.account-shop-dialog > .control-button { min-height: 44px; }
+@media (max-height: 620px) { .game-frame:not(.running) .screen-panel { padding: 9px 12px; } .game-frame:not(.running) .screen-panel h1 { margin-bottom: 5px; font-size: 24px; } .game-frame:not(.running) .primary-button { min-height: 46px; } }
+@media (max-width: 390px) { .game-frame:not(.running) .screen-card { inset-inline: 7px; } .game-frame:not(.running) .screen-panel { padding-inline: 13px; } }
+@media (prefers-reduced-motion: reduce) { .game-frame:not(.running) .primary-button:active:not(:disabled) { transform: none; } }

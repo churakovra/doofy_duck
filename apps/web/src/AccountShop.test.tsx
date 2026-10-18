@@ -44,7 +44,7 @@ describe('account cosmetic shop', () => {
   const equipment = { skinId: 'classic', backgroundId: 'meadow' };
   const onEquipment = vi.fn();
   const onOpenChange = vi.fn();
-  const render = (open = true, accountId = 'account-a', sessionEpoch = 0) => act(() => root.render(<AccountShop api={api} accountId={accountId} sessionEpoch={sessionEpoch} locale="en" messages={en} portalContainer={{ current: host }} open={open} onOpenChange={onOpenChange} equipment={equipment} onEquipment={onEquipment} />));
+  const render = (open = true, accountId = 'account-a', sessionEpoch = 0, equipped = equipment) => act(() => root.render(<AccountShop api={api} accountId={accountId} sessionEpoch={sessionEpoch} locale="en" messages={en} portalContainer={{ current: host }} open={open} onOpenChange={onOpenChange} equipment={equipped} onEquipment={onEquipment} />));
   const click = (selector: string) => act(() => { host.querySelector<HTMLElement>(selector)!.click(); });
 
   beforeEach(() => {
@@ -69,6 +69,39 @@ describe('account cosmetic shop', () => {
 
     expect(api.shopPurchase).toHaveBeenCalledWith('quote-1', expect.any(String));
     expect(host.textContent).toContain('Purchase confirmed. The item is now owned.');
+  });
+
+  it('hides equip when the selected skin is already equipped', async () => {
+    await act(async () => { render(); await Promise.resolve(); await Promise.resolve(); });
+    expect(host.querySelector('.account-shop-item.selected')?.textContent).toContain('Classic');
+    expect(host.querySelector('.account-shop-actions')).toBeNull();
+  });
+
+  it('hides equip when the selected world is already equipped', async () => {
+    await act(async () => { render(true, 'account-a', 0, { ...equipment, backgroundId: 'nebula' }); await Promise.resolve(); await Promise.resolve(); });
+    click('.account-shop-tabs button:nth-child(2)');
+    expect(host.querySelector('.account-shop-item.selected')?.textContent).toContain('Nebula');
+    expect(host.querySelector('.account-shop-actions')).toBeNull();
+  });
+
+  it('brings the first selected item into view when switching shop categories', async () => {
+    await act(async () => { render(); await Promise.resolve(); await Promise.resolve(); });
+    const skinItems = host.querySelector<HTMLElement>('.account-shop-items')!;
+    skinItems.scrollLeft = 180;
+
+    click('.account-shop-tabs button:nth-child(2)');
+
+    const worldItems = host.querySelector<HTMLElement>('.account-shop-items')!;
+    expect(worldItems.scrollLeft).toBe(0);
+    expect(host.querySelector('.account-shop-item.selected')?.textContent).toContain('Nebula');
+  });
+
+  it('keeps equip visible for an owned item that is not equipped', async () => {
+    api = buildApi({ shopInventory: vi.fn().mockResolvedValue({ items: [{ item_type: 'skin', item_id: 'classic' }, { item_type: 'skin', item_id: 'mint' }], next_cursor: null }) });
+    await act(async () => { render(); await Promise.resolve(); await Promise.resolve(); });
+    click('.account-shop-item:nth-child(2)');
+    expect(host.querySelector('.account-shop-actions button')?.textContent).toContain('Equip');
+    expect(host.querySelector<HTMLButtonElement>('.account-shop-actions button')?.disabled).toBe(false);
   });
 
   it('does not present a malformed server quote as a purchase price', async () => {
@@ -188,7 +221,7 @@ describe('account cosmetic shop', () => {
     click('button.account-shop-item');
 
     expect(host.textContent).toContain('Purchases and equipment changes are temporarily disabled.');
-    expect(host.querySelector<HTMLButtonElement>('.account-shop-actions button')?.disabled).toBe(true);
+    expect(host.querySelector('.account-shop-actions')).toBeNull();
   });
 
   it('shows a missing balance as unavailable and never formats it as zero', async () => {

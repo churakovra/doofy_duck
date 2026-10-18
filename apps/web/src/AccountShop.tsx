@@ -2,7 +2,7 @@ import { createPortal } from 'react-dom';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { AccountApi, AccountApiError } from './account-api';
 import { accountShopAppearance } from './account-shop-assets';
-import { createPurchaseRecovery, formatDecimalBalance, isValidShopQuote, type PurchaseIntent, type ShopCatalog, type ShopCatalogItem, type ShopCurrency, type ShopItemType, type ShopQuote } from './account-shop';
+import { createPurchaseRecovery, formatDecimalBalance, isValidShopQuote, parseWalletBalances, type PurchaseIntent, type ShopCatalog, type ShopCatalogItem, type ShopCurrency, type ShopItemType, type ShopQuote, type WalletBalances } from './account-shop';
 import { GameButton } from './GameButton';
 import { GameWardrobePreview } from './GameWardrobePreview';
 import type { Locale } from './locale';
@@ -14,24 +14,11 @@ type Props = {
   portalContainer: RefObject<HTMLElement | null>; open: boolean; onOpenChange(open: boolean): void;
   equipment: Equipment; onEquipment(equipment: Equipment): void;
 };
-type WalletBalances = Readonly<Record<ShopCurrency, string>>;
 type InventoryPage = { items: readonly { item_type: ShopItemType; item_id: string }[]; next_cursor: string | null };
 type EquipmentRow = { item_type: ShopItemType; item_id: string; revision: number };
 
 function validDecimal(value: unknown): value is string { return typeof value === 'string' && /^(0|[1-9]\d{0,39})$/.test(value); }
 function validType(value: unknown): value is ShopItemType { return value === 'skin' || value === 'background'; }
-function parseWallet(value: unknown): WalletBalances {
-  const rows = (value as { balances?: unknown } | null)?.balances;
-  if (!Array.isArray(rows)) throw new Error('wallet_balance_invalid');
-  const balances: Partial<Record<ShopCurrency, string>> = {};
-  for (const row of rows) {
-    if (!row || typeof row !== 'object') continue;
-    const entry = row as { currency?: unknown; balance?: unknown };
-    if ((entry.currency === 'FEATHER' || entry.currency === 'GAME_STAR') && validDecimal(entry.balance)) balances[entry.currency] = entry.balance;
-  }
-  if (!balances.FEATHER || !balances.GAME_STAR) throw new Error('wallet_balance_invalid');
-  return { FEATHER: balances.FEATHER, GAME_STAR: balances.GAME_STAR };
-}
 function parseCatalog(value: unknown): ShopCatalog {
   const catalog = value as Partial<ShopCatalog> | null;
   if (!catalog || typeof catalog.catalog_version !== 'string' || typeof catalog.enabled !== 'boolean' || !Array.isArray(catalog.items)) throw new Error('shop_catalog_invalid');
@@ -118,7 +105,7 @@ export function AccountShop({ api, accountId, sessionEpoch, locale, messages, po
       const [catalogValue, walletValue, equipmentValue] = await Promise.all([api.shopCatalog(), api.walletBalances(), api.shopEquipment()]);
       if (!isCurrentScope(requestedAccount, requestEpoch)) return;
       const parsedCatalog = parseCatalog(catalogValue);
-      const balances = parseWallet(walletValue);
+      const balances = parseWalletBalances(walletValue);
       const rows = parseEquipment(equipmentValue);
       const inventory = new Set<string>();
       let cursor: string | undefined;
@@ -183,6 +170,12 @@ export function AccountShop({ api, accountId, sessionEpoch, locale, messages, po
     : undefined;
   const keyFor = (item: ShopCatalogItem) => `${item.item_type}:${item.item_id}`;
   const isSelectedOwned = selected ? owned.has(keyFor(selected)) : false;
+  const isSelectedEquipped = Boolean(selected && (selected.item_type === 'skin'
+    ? equipment.skinId === selected.item_id
+    : equipment.backgroundId === selected.item_id));
+  const canEquipSelected = Boolean(selected && isSelectedOwned && !isSelectedEquipped && catalog?.enabled);
+  const canBuySelected = Boolean(selected && !isSelectedOwned && !isSelectedEquipped && selected.available && selected.price
+    && catalog?.enabled && recovery.canRetain && !pending);
 
   const equip = async (item: ShopCatalogItem) => {
     if (!catalog?.enabled || !owned.has(keyFor(item))) return;
@@ -295,18 +288,18 @@ export function AccountShop({ api, accountId, sessionEpoch, locale, messages, po
           <p><span>{messages.accountShopCurrencyStar}</span><strong>{wallet ? balance('GAME_STAR') : '—'}</strong></p>
           <small>{messages.accountShopStarNote}</small>
         </div>
-        {recovery.canRetain ? <p className="account-shop-recovery-note">{messages.accountShopStorageWarningSaved}</p> : <p className="wallet-access-error" role="alert">{messages.accountShopStorageWarning}</p>}
+        {!recovery.canRetain && <p className="wallet-access-error" role="alert">{messages.accountShopStorageWarning}</p>}
         {loadedAccount === accountId && catalog && !catalog.enabled && <p className="wallet-access-error" role="status">{messages.accountShopDisabled}</p>}
         {busy && loadedAccount !== accountId && <p role="status">{messages.accountShopLoading}</p>}
         {previewAppearance && selected && <>
           <GameWardrobePreview appearance={previewAppearance} label={messages.accountShopHeading} />
-          <p className="account-shop-selected"><strong>{selected.display_name[locale]}</strong><span>{messages.accountShopTestVisual}</span></p>
+          <p className="account-shop-selected"><strong>{selected.display_name[locale]}</strong></p>
         </>}
         <div className="account-shop-tabs" role="tablist" aria-label={messages.accountShopHeading}>
           <button type="button" role="tab" aria-selected={tab === 'skin'} data-dialog-initial-focus onClick={() => { quoteRequestRef.current += 1; setQuote(null); setTab('skin'); setSelected(catalog?.items.find((item) => item.item_type === 'skin') ?? null); }}>{messages.accountShopSkins}</button>
           <button type="button" role="tab" aria-selected={tab === 'background'} onClick={() => { quoteRequestRef.current += 1; setQuote(null); setTab('background'); setSelected(catalog?.items.find((item) => item.item_type === 'background') ?? null); }}>{messages.accountShopWorlds}</button>
         </div>
-        <div className="account-shop-items" role="tabpanel">
+        <div key={tab} className="account-shop-items" role="tabpanel" aria-label={tab === 'skin' ? messages.accountShopSkins : messages.accountShopWorlds}>
           {loadedAccount === accountId && items.map((item) => {
             const isOwned = owned.has(keyFor(item));
             const isEquipped = item.item_type === 'skin' ? equipment.skinId === item.item_id : equipment.backgroundId === item.item_id;
@@ -319,10 +312,10 @@ export function AccountShop({ api, accountId, sessionEpoch, locale, messages, po
           })}
           {!items.length && catalog && <p>{messages.accountShopUnavailable}</p>}
         </div>
-        {loadedAccount === accountId && selected && <div className="account-shop-actions">
-          {isSelectedOwned
-            ? <GameButton variant={selected && ((selected.item_type === 'skin' && equipment.skinId === selected.item_id) || (selected.item_type === 'background' && equipment.backgroundId === selected.item_id)) ? 'control' : 'primary'} onClick={() => void equip(selected)} disabled={busy || !catalog?.enabled || (selected.item_type === 'skin' ? equipment.skinId === selected.item_id : equipment.backgroundId === selected.item_id)}>{messages.accountShopEquip}</GameButton>
-            : <GameButton variant="primary" onClick={() => void requestQuote(selected)} disabled={busy || !catalog?.enabled || !selected.available || !selected.price || !recovery.canRetain || Boolean(pending)}>{messages.accountShopBuy}</GameButton>}
+        {loadedAccount === accountId && selected && (canEquipSelected || canBuySelected) && <div className="account-shop-actions">
+          {canEquipSelected
+            ? <GameButton variant="primary" onClick={() => void equip(selected)} disabled={busy}>{messages.accountShopEquip}</GameButton>
+            : <GameButton variant="primary" onClick={() => void requestQuote(selected)} disabled={busy}>{messages.accountShopBuy}</GameButton>}
         </div>}
         {quote && <section className="account-shop-confirmation" aria-label={messages.accountShopQuote}>
           <p><strong>{quotedItem?.display_name[locale] ?? quote.item_id}</strong></p>

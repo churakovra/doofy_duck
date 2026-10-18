@@ -2,6 +2,7 @@ import type { Locale } from './locale';
 
 export type ShopItemType = 'skin' | 'background';
 export type ShopCurrency = 'FEATHER' | 'GAME_STAR';
+export type WalletBalances = Readonly<Record<ShopCurrency, string>>;
 export type ShopPrice = Readonly<{ currency: ShopCurrency; amount: string }>;
 export type ShopCatalogItem = Readonly<{
   item_type: ShopItemType;
@@ -30,6 +31,18 @@ type RecoveryStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 function isShopType(value: unknown): value is ShopItemType { return value === 'skin' || value === 'background'; }
 function isCurrency(value: unknown): value is ShopCurrency { return value === 'FEATHER' || value === 'GAME_STAR'; }
 function isDecimal(value: unknown): value is string { return typeof value === 'string' && /^(0|[1-9]\d{0,39})$/.test(value); }
+export function parseWalletBalances(value: unknown): WalletBalances {
+  const rows = (value as { balances?: unknown } | null)?.balances;
+  if (!Array.isArray(rows)) throw new Error('wallet_balance_invalid');
+  const balances: Partial<Record<ShopCurrency, string>> = {};
+  for (const row of rows) {
+    if (!row || typeof row !== 'object') continue;
+    const entry = row as { currency?: unknown; balance?: unknown };
+    if (isCurrency(entry.currency) && isDecimal(entry.balance)) balances[entry.currency] = entry.balance;
+  }
+  if (balances.FEATHER === undefined || balances.GAME_STAR === undefined) throw new Error('wallet_balance_invalid');
+  return { FEATHER: balances.FEATHER, GAME_STAR: balances.GAME_STAR };
+}
 export function isValidShopQuote(value: unknown): value is ShopQuote {
   if (!value || typeof value !== 'object') return false;
   const quote = value as Partial<ShopQuote>;

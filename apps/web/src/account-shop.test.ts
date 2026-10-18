@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createPurchaseRecovery, formatDecimalBalance, type PurchaseIntent } from './account-shop';
+import { createPurchaseRecovery, formatDecimalBalance, parseWalletBalances, type PurchaseIntent } from './account-shop';
 
 const intent: PurchaseIntent = {
   accountId: 'account-a',
@@ -57,6 +57,13 @@ describe('account shop purchase recovery', () => {
 });
 
 describe('account wallet values', () => {
+  it('accepts only successful authoritative reads containing both exact currency balances', () => {
+    expect(parseWalletBalances({ balances: [{ currency: 'FEATHER', balance: '0' }, { currency: 'GAME_STAR', balance: '900719925474099312345' }] }))
+      .toEqual({ FEATHER: '0', GAME_STAR: '900719925474099312345' });
+    expect(() => parseWalletBalances({ balances: [] })).toThrow('wallet_balance_invalid');
+    expect(() => parseWalletBalances(undefined)).toThrow('wallet_balance_invalid');
+  });
+
   it('formats decimal balances with BigInt and keeps huge values exact', () => {
     expect(formatDecimalBalance('900719925474099312345', 'en')).toBe('900,719,925,474,099,312,345');
     expect(formatDecimalBalance('42', 'ru')).toBe('42');

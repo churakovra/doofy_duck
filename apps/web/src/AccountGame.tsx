@@ -6,8 +6,8 @@ import { GameButton } from './GameButton';
 import { GameCanvas } from './GameCanvas';
 import { GameSettings } from './GameSettings';
 import { AccountShop } from './AccountShop';
+import { AccountWallet, type WalletSettlementStatus } from './AccountWallet';
 import { accountEquipmentAppearance } from './account-shop-assets';
-import { formatDecimalBalance } from './account-shop';
 import { formatCountUnit, formatNumber, useLocale } from './locale';
 import { useGameAudio } from './useGameAudio';
 import { useGameRun } from './useGameRun';
@@ -26,6 +26,11 @@ function parseCompletionSettlement(value: unknown): CompletionSettlement {
     || !result.credited || !/^(0|[1-9]\d{0,39})$/.test(result.credited.FEATHER)
     || !/^(0|[1-9]\d{0,39})$/.test(result.credited.GAME_STAR)) throw new Error('completion_status_invalid');
   return result as CompletionSettlement;
+}
+
+function walletSettlementStatus(value: CompletionSettlement | 'loading' | 'unavailable' | null): WalletSettlementStatus {
+  if (value === 'unavailable') return 'unavailable';
+  return value && typeof value === 'object' ? value.status : null;
 }
 
 async function telegramWebAppReady() {
@@ -72,6 +77,8 @@ export function AccountGame() {
   const localAccount = localDevAccount(import.meta.env);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [shopOpen, setShopOpen] = useState(false);
+  const [walletRefreshKey, setWalletRefreshKey] = useState(0);
+  const [settlementRetryKey, setSettlementRetryKey] = useState(0);
   const [equipment, setEquipment] = useState<Equipment>(DEFAULT_EQUIPMENT);
   const writeChainRef = useRef(Promise.resolve());
   const pumpRef = useRef(false);
@@ -83,6 +90,10 @@ export function AccountGame() {
   const loadAccountRef = useRef<(user: AccountSummary) => Promise<void>>(() => Promise.resolve());
   const sessionEpochRef = useRef(0);
   const appearance = useMemo(() => accountEquipmentAppearance(equipment), [equipment]);
+  const onShopOpenChange = useCallback((open: boolean) => {
+    setShopOpen(open);
+    if (!open) setWalletRefreshKey((key) => key + 1);
+  }, []);
 
   const authenticateLaunch = useCallback(async (isCurrent: () => boolean = () => true): Promise<AccountSummary | undefined> => {
     if (launchInitDataRef.current === null) {
@@ -169,7 +180,7 @@ export function AccountGame() {
         const current = traceRef.current;
         submittedTrace = current;
         const checkpoint = current.pending[0]!;
-        setNotice(messages.accountConnectionReady);
+        setNotice('');
         const response = await api.submitCheckpoint(current.runId, {
           checkpointSequence: checkpoint.sequence,
           writerGeneration: current.writerGeneration,
@@ -501,6 +512,7 @@ export function AccountGame() {
         const result = parseCompletionSettlement(await api.completion(runId, lifeIndex));
         if (!isCurrent()) return;
         setSettlement(result);
+        if (result.status === 'committed') setWalletRefreshKey((key) => key + 1);
         retry = result.status === 'pending';
       } catch {
         if (isCurrent()) setSettlement('unavailable');
@@ -515,7 +527,7 @@ export function AccountGame() {
     };
     void refresh();
     return () => { current = false; if (timer !== undefined) window.clearTimeout(timer); };
-  }, [account?.account_id, api, snapshot?.deliveryStatus, snapshot?.lifeIndex, snapshot?.runId, snapshot?.status, snapshot?.verificationStatus]);
+  }, [account?.account_id, api, settlementRetryKey, snapshot?.deliveryStatus, snapshot?.lifeIndex, snapshot?.runId, snapshot?.status, snapshot?.verificationStatus]);
 
   const retryAuthentication = async () => {
     const epoch = ++sessionEpochRef.current;
@@ -684,7 +696,6 @@ export function AccountGame() {
     } finally { if (epoch === sessionEpochRef.current) setBusy(false); }
   };
 
-  const settingsWallet = <div><p>{messages.accountDescription}</p><p>{messages.accountRewardsNotSpendable}</p></div>;
   const activeSnapshot = snapshot?.status === 'active' && screen === 'active' && trace ? snapshot : null;
   if (activeSnapshot && account) return <AccountFlight
     key={activeSnapshot.runId}
@@ -698,7 +709,10 @@ export function AccountGame() {
     settingsOpen={settingsOpen}
     setSettingsOpen={setSettingsOpen}
     shopOpen={shopOpen}
-    setShopOpen={setShopOpen}
+    onShopOpenChange={onShopOpenChange}
+    walletRefreshKey={walletRefreshKey}
+    settlement={walletSettlementStatus(settlement)}
+    onRetrySettlement={() => setSettlementRetryKey((key) => key + 1)}
     equipment={equipment}
     setEquipment={setEquipment}
     appearance={appearance}
@@ -714,62 +728,42 @@ export function AccountGame() {
     reauthRequired={reauthRequired}
     onAbandon={abandon}
     busy={busy}
-    walletSlot={settingsWallet}
   />;
 
   const statusMessage = snapshot?.verificationStatus === 'verified'
-    ? snapshot.deliveryStatus === 'pending' ? messages.accountDeliveryPending
-      : snapshot.deliveryStatus === 'rejected' ? messages.accountDeliveryRejected : messages.accountVerified
+    ? snapshot.deliveryStatus === 'pending' ? messages.accountPendingVerification
+      : snapshot.deliveryStatus === 'rejected' ? messages.accountDeliveryRejected : ''
     : snapshot?.status === 'completion_pending' ? messages.accountPendingVerification
       : snapshot?.status === 'rejected' ? messages.accountGameplayRejected : '';
   const verifiedRun = snapshot && snapshot.verificationStatus === 'verified' ? snapshot.state : null;
-
   return <main className="game-shell" onPointerDown={() => undefined}>
-    <div className="game-viewport"><div className="game-frame ready" ref={frameRef}>
+    <div className="game-viewport"><div className={`game-frame ready${verifiedRun ? ' result-screen' : ''}`} ref={frameRef}>
       <div className="stage" aria-label={messages.gameFieldLabel}><GameCanvas getState={() => snapshot?.state ?? EMPTY_STATE} onReady={canvasReady} appearance={appearance} /></div>
       <header className="hud account-hud">
-        <div className="brand"><span className="brand-mark">{messages.brandMark}</span><span>{messages.brandNameFirstLine}<br />{messages.brandNameSecondLine}</span></div>
+        {account && <AccountWallet api={api} accountId={account.account_id} sessionEpoch={sessionEpochRef.current} locale={locale} messages={messages} refreshKey={walletRefreshKey} suspended={false} settlement={walletSettlementStatus(settlement)} onRetrySettlement={() => setSettlementRetryKey((key) => key + 1)} />}
+        <div className="score-group record-group"><div className="score-card"><span>{messages.bestScoreLabel}</span><strong>{bestScore === null ? '—' : formatNumber(locale, bestScore)}</strong></div></div>
         <div className="hud-actions">
+          {account && <AccountShop api={api} accountId={account.account_id} sessionEpoch={sessionEpochRef.current} locale={locale} messages={messages} portalContainer={frameRef} open={shopOpen} onOpenChange={onShopOpenChange} equipment={equipment} onEquipment={setEquipment} />}
           <GameSettings open={settingsOpen} onOpenChange={setSettingsOpen} locale={locale} setLocale={setLocale} messages={messages}
             preferences={audio.preferences} toggle={audio.toggle} wallet={{ FEATHER: 0, GAME_STAR: 0 }} walletPersistent walletStatus="" walletBlocked={false}
-            portalContainer={frameRef} walletHeading={messages.accountHeading} walletSlot={settingsWallet} />
+            portalContainer={frameRef} hideWallet />
         </div>
       </header>
       <section className="screen-card" aria-live="polite"><div className="screen-panel account-panel">
-        {screen !== 'idle' && <>
-          <p className="eyebrow">{messages.accountHeading}</p>
-          <h1>{messages.accountHeading}</h1>
-          <p className="instruction">{messages.accountDescription}</p>
-        </>}
         {screen === 'signed-out' && <>
           {error && <GameButton variant="control" onClick={() => void retryAuthentication()} disabled={busy}>{messages.accountRetry}</GameButton>}
         </>}
         {screen === 'loading' && <p role="status">{messages.accountLoading}</p>}
         {screen === 'recovering' && <><p role="status">{error || notice || messages.accountConnectionRestoring}</p>{snapshot && account && <GameButton variant="control" onClick={() => void reconcile(snapshot, account)} disabled={busy}>{messages.accountStatusRetry}</GameButton>}{snapshot?.status === 'active' && trace && <GameButton variant="control" className="account-mode-button" onClick={() => void abandon()} disabled={busy}>{messages.accountAbandon}</GameButton>}</>}
       {screen === 'idle' && account && <>
-          <p className="eyebrow">{messages.smallFlightEyebrow}</p>
-          <h1>{messages.greeting}<br />{messages.traveler}</h1>
-          <p className="instruction">{messages.readyInstructionFirstLine}<br />{messages.readyInstructionSecondLine}</p>
-          {bestScore !== null && <p className="account-best-score"><span>{messages.bestScoreLabel}</span> <strong>{formatNumber(locale, bestScore)}</strong></p>}
+          <h1>{verifiedRun ? messages.completedHeading : messages.lobbyHeading}</h1>
           {statusMessage && <p role="status">{statusMessage}</p>}
           {verifiedRun && <>
             <p className="result-score">{formatNumber(locale, verifiedRun.score)} <span>{formatCountUnit(locale, 'score', verifiedRun.score)}</span></p>
             <p className="earnings-summary"><span>{messages.accountVerifiedPickupsLabel}</span><strong>{formatNumber(locale, verifiedRun.totals.FEATHER ?? 0)} {messages.feathersShortLabel}</strong><strong>{formatNumber(locale, verifiedRun.totals.GAME_STAR ?? 0)} {messages.gameStarsShortLabel}</strong></p>
-            <section className="account-settlement" aria-label={messages.accountSettlementStatus}>
-              <strong>{messages.accountSettlementStatus}</strong>
-              {settlement === 'loading' && <p role="status">{messages.accountLoading}</p>}
-              {settlement === 'unavailable' && <p role="status">{messages.accountShopSettlementUnavailable}</p>}
-              {settlement === null && <p>{messages.accountSettlementPending}</p>}
-              {settlement && typeof settlement === 'object' && settlement.status === 'committed' && <><p>{messages.accountSettlementCommitted}</p><p>{formatDecimalBalance(settlement.credited.FEATHER, locale)} {messages.feathersShortLabel} · {formatDecimalBalance(settlement.credited.GAME_STAR, locale)} {messages.gameStarsShortLabel}</p></>}
-              {settlement && typeof settlement === 'object' && settlement.status === 'pending' && <p>{messages.accountSettlementPending}</p>}
-              {settlement && typeof settlement === 'object' && settlement.status === 'ineligible' && <p>{messages.accountSettlementIneligible}</p>}
-              {settlement && typeof settlement === 'object' && settlement.status === 'actionable_failure' && <p>{messages.accountSettlementActionableFailure}</p>}
-            </section>
-            <p className="account-reward-note">{messages.accountRewardsNotSpendable}</p>
           </>}
           {(snapshot?.status === 'rejected' || snapshot?.status === 'completion_pending') && <GameButton variant="control" onClick={() => void checkStatus()} disabled={busy}>{messages.accountStatusRetry}</GameButton>}
-          {!snapshot || snapshot.status === 'completed' || snapshot.status === 'rejected' || snapshot.status === 'abandoned' || snapshot.verificationStatus === 'verified' ? <GameButton variant="primary" onClick={() => void createRun()} disabled={busy}>{messages.accountStart}</GameButton> : null}
-          <p className="account-id">{account.telegram_user_id}</p>
+          {!snapshot || snapshot.status === 'completed' || snapshot.status === 'rejected' || snapshot.status === 'abandoned' || snapshot.verificationStatus === 'verified' ? <GameButton variant="primary" onClick={() => void createRun()} disabled={busy}>{verifiedRun ? messages.accountPlayAgain : messages.accountStart}</GameButton> : null}
         </>}
         {screen === 'takeover' && <>
           <p className="wallet-access-error" role="alert">{error || messages.accountNeedTakeover}</p>
@@ -778,10 +772,8 @@ export function AccountGame() {
         {screen === 'locked' && <p role="alert">{error || messages.accountWriterBusy}</p>}
         {error && screen !== 'takeover' && <p className="wallet-access-error" role="alert">{error}</p>}
         {notice && <p role="status">{notice}</p>}
-        {storage.persistent === false && <p className="wallet-access-error" role="status">{messages.accountStorageWarning}</p>}
-        {account && <AccountShop api={api} accountId={account.account_id} sessionEpoch={sessionEpochRef.current} locale={locale} messages={messages} portalContainer={frameRef} open={shopOpen} onOpenChange={setShopOpen} equipment={equipment} onEquipment={setEquipment} />}
       </div></section>
-      <footer className="wallet-status-strip"><p className="wallet-storage">{messages.accountRewardsNotSpendable}</p></footer>
+      {storage.persistent === false && <footer className="wallet-status-strip"><p className="wallet-storage not-saved">{messages.accountStorageWarning}</p></footer>}
     </div></div>
   </main>;
 }
@@ -791,9 +783,10 @@ const EMPTY_STATE = createRun(createRunDescriptor({ runId: '00000000-0000-4000-8
 type FlightProps = {
   snapshot: AccountRunSnapshot; bestScore: number | null; messages: ReturnType<typeof useLocale>['messages']; locale: 'ru' | 'en'; setLocale(locale: 'ru' | 'en'): void;
   audio: ReturnType<typeof useGameAudio>; frameRef: React.RefObject<HTMLDivElement | null>; settingsOpen: boolean; setSettingsOpen(open: boolean): void;
-  shopOpen: boolean; setShopOpen(open: boolean): void; equipment: Equipment; setEquipment(next: Equipment): void;
+  shopOpen: boolean; onShopOpenChange(open: boolean): void; walletRefreshKey: number; settlement: WalletSettlementStatus;
+  onRetrySettlement(): void; equipment: Equipment; setEquipment(next: Equipment): void;
   appearance: ReturnType<typeof accountEquipmentAppearance>; storageWarning: boolean; api: AccountApi; accountId: string; sessionEpoch: number;
-  notice: string; error: string; onTick(state: RunState, inputs: readonly { sequence: number; action: 'FLAP' }[]): void; onFinish(): void; onReauthenticate(): void; reauthRequired: boolean; onAbandon(): void; busy: boolean; walletSlot: React.ReactNode;
+  notice: string; error: string; onTick(state: RunState, inputs: readonly { sequence: number; action: 'FLAP' }[]): void; onFinish(): void; onReauthenticate(): void; reauthRequired: boolean; onAbandon(): void; busy: boolean;
 };
 
 function AccountFlight(props: FlightProps) {
@@ -815,30 +808,26 @@ function AccountFlight(props: FlightProps) {
   const start = () => { audio.unlockFromGesture(); run.start(); };
 
   return <main className="game-shell" onPointerDown={run.onFieldPointerDown} onPointerUp={run.onFieldPointerUp}>
-    <div className="game-viewport"><div className={`game-frame ${run.phase.toLowerCase()}`} ref={frameRef}>
+    <div className="game-viewport"><div className={`game-frame ${run.phase.toLowerCase()}${run.phase === 'DEAD' ? ' result-screen' : ''}`} ref={frameRef}>
       <div className="stage" aria-label={messages.gameFieldLabel}><GameCanvas getState={run.getState} onReady={run.acceptRenderer} getFeedback={run.getFeedback} appearance={props.appearance} /></div>
       <header className="hud account-hud">
-        <div className="brand"><span className="brand-mark">{messages.brandMark}</span><span>{messages.brandNameFirstLine}<br />{messages.brandNameSecondLine}</span></div>
-        <div className="score-group"><div className="score-card"><span>{messages.scoreLabel}</span><strong>{formatNumber(locale, run.score)}</strong></div>{props.bestScore !== null && <div className="score-card"><span>{messages.bestScoreLabel}</span><strong>{formatNumber(locale, props.bestScore)}</strong></div>}</div>
+        <AccountWallet api={props.api} accountId={props.accountId} sessionEpoch={props.sessionEpoch} locale={locale} messages={messages} refreshKey={props.walletRefreshKey} suspended={run.phase === 'RUNNING'} settlement={props.settlement} onRetrySettlement={props.onRetrySettlement} />
+        <div className="score-group record-group"><div className="score-card"><span>{messages.bestScoreLabel}</span><strong>{props.bestScore === null ? '—' : formatNumber(locale, props.bestScore)}</strong></div></div>
         {run.phase === 'RUNNING' && <output className="running-score">{formatNumber(locale, run.score)}</output>}
         {props.reauthRequired && <GameButton variant="control" onClick={props.onReauthenticate} disabled={props.busy}>{messages.accountRetry}</GameButton>}
         <div className="hud-actions">
+          {run.phase !== 'RUNNING' && <AccountShop api={props.api} accountId={props.accountId} sessionEpoch={props.sessionEpoch} locale={locale} messages={messages} portalContainer={frameRef} open={props.shopOpen} onOpenChange={props.onShopOpenChange} equipment={props.equipment} onEquipment={props.setEquipment} />}
           <GameSettings open={settingsOpen} onOpenChange={setSettingsOpen} locale={locale} setLocale={setLocale} messages={messages}
             preferences={audio.preferences} toggle={audio.toggle} wallet={{ FEATHER: 0, GAME_STAR: 0 }} walletPersistent walletStatus="" walletBlocked={false}
-            portalContainer={frameRef} walletHeading={messages.accountHeading} walletSlot={props.walletSlot} />
-          {run.phase !== 'RUNNING' && <AccountShop api={props.api} accountId={props.accountId} sessionEpoch={props.sessionEpoch} locale={locale} messages={messages} portalContainer={frameRef} open={props.shopOpen} onOpenChange={props.setShopOpen} equipment={props.equipment} onEquipment={props.setEquipment} />}
+            portalContainer={frameRef} hideWallet />
         </div>
       </header>
-      <footer className="wallet-status-strip"><p className="wallet-storage">{props.error || props.notice || (props.storageWarning ? messages.accountStorageWarning : messages.accountRewardsLabel)}</p>{props.reauthRequired && <GameButton variant="control" onClick={props.onReauthenticate} disabled={props.busy}>{messages.accountRetry}</GameButton>}</footer>
+      {(props.error || props.notice || props.storageWarning || props.reauthRequired) && <footer className="wallet-status-strip"><p role={props.error ? 'alert' : 'status'} className={`wallet-storage${props.storageWarning ? ' not-saved' : ''}`}>{props.error || props.notice || (props.storageWarning ? messages.accountStorageWarning : '')}</p>{props.reauthRequired && <GameButton variant="control" onClick={props.onReauthenticate} disabled={props.busy}>{messages.accountRetry}</GameButton>}</footer>}
       {run.phase !== 'RUNNING' && <section className="screen-card" aria-live="polite"><div className="screen-panel account-panel">
         {run.runtimeError ? <><p role="alert" className="error-copy">{messages[run.runtimeError]}</p><GameButton variant="primary" onClick={() => window.location.reload()}>{messages.reloadPageButton}</GameButton></> : <>
-          {run.phase === 'READY' && <><p className="eyebrow">{messages.smallFlightEyebrow}</p><h1>{messages.greeting}<br />{messages.traveler}</h1><p className="instruction">{messages.readyInstructionFirstLine}<br />{messages.readyInstructionSecondLine}</p><GameButton variant="primary" onClick={start} disabled={!run.rendererReady || props.busy}>{messages.startFlightButton} <span>{messages.forwardGlyph}</span></GameButton></>}
+          {run.phase === 'READY' && <><h1>{messages.lobbyHeading}</h1><GameButton variant="primary" onClick={start} disabled={!run.rendererReady || props.busy}>{messages.startFlightButton} <span>{messages.forwardGlyph}</span></GameButton></>}
           {run.phase === 'PAUSED' && <><p className="eyebrow">{messages.pauseEyebrow}</p><h1>{run.flightCapReached ? messages.accountPendingVerification : messages.pausedHeading}</h1><GameButton variant="primary" onClick={run.flightCapReached ? props.onFinish : start} disabled={!run.rendererReady || props.busy}>{run.flightCapReached ? messages.accountStatusRetry : messages.accountResume}</GameButton><GameButton variant="control" className="account-mode-button" onClick={props.onAbandon} disabled={props.busy}>{messages.accountAbandon}</GameButton></>}
-          {run.phase === 'DEAD' && <><p className="eyebrow">{messages.completedFlightEyebrow}</p><h1>{messages.completedHeading}</h1><p className="result-score">{formatNumber(locale, run.score)} <span>{formatCountUnit(locale, 'score', run.score)}</span></p><p className="earnings-summary"><span>{messages.accountRewardsLabel}</span><strong>{formatNumber(locale, feathers)} {messages.feathersShortLabel}</strong><strong>{formatNumber(locale, stars)} {messages.gameStarsShortLabel}</strong></p><p className="wallet-disclaimer">{messages.accountRewardsNotSpendable}</p><GameButton variant="primary" onClick={props.onFinish} disabled={props.busy}>{messages.accountStatusRetry}</GameButton></>}
-          {props.error && <p className="wallet-access-error" role="alert">{props.error}</p>}
-          {props.reauthRequired && <GameButton variant="control" onClick={props.onReauthenticate} disabled={props.busy}>{messages.accountRetry}</GameButton>}
-          {props.notice && <p role="status">{props.notice}</p>}
-          {props.storageWarning && <p className="wallet-access-error" role="status">{messages.accountStorageWarning}</p>}
+          {run.phase === 'DEAD' && <><p className="eyebrow">{messages.completedFlightEyebrow}</p><h1>{messages.completedHeading}</h1><p className="result-score">{formatNumber(locale, run.score)} <span>{formatCountUnit(locale, 'score', run.score)}</span></p><p className="earnings-summary"><span>{messages.accountVerifiedPickupsLabel}</span><strong>{formatNumber(locale, feathers)} {messages.feathersShortLabel}</strong><strong>{formatNumber(locale, stars)} {messages.gameStarsShortLabel}</strong></p><GameButton variant="primary" onClick={props.onFinish} disabled={props.busy}>{messages.accountStatusRetry}</GameButton></>}
         </>}
       </div></section>}
     </div></div>
