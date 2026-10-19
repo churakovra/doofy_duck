@@ -13,6 +13,26 @@ Read before assigning implementation or delegated documentation.
   acceptance criteria for one coherent milestone, owned files, required checks,
   a reporting/stop bound and relevant instruction/doc paths. Reference shared
   instructions instead of copying them or the investigation history.
+- The chat coordinator owns user communication and final reporting. A separate
+  feature lead owns whole-feature planning, settled interfaces and acceptance,
+  dependencies, file ownership, decisions and the current checkpoint. Only the
+  coordinator and lead delegate. The lead may dispatch implementation workers
+  and reviewers; workers and reviewers do not delegate.
+- Settle observable behavior, interfaces, transitions, ownership, failure
+  behavior and acceptance before assignment. Resolve Medium or higher product,
+  UX, public-contract, dependency, scope and acceptance choices with the user.
+  Reversible implementation details remain with the owner. Workers ask through
+  the lead, which supplies approved facts or escalates missing decisions through
+  the coordinator; do not repeat approved questions or infer user approval. Pause
+  dependent work while a decision is pending; continue approved independent work.
+- Route implementation and ordinary independent reviews to Luna High. Use Sol
+  Medium, read-only, for simulation/contracts/parity, wallet
+  ownership/persistence/settlement/deduplication, security, broad lifecycle or
+  concurrency review, consequential feasibility uncertainty, and diagnosis
+  after two failed repairs of one acceptance case. Never assign Sol code edits.
+  Explain the model choice and do not silently substitute unavailable models.
+  Repository files cannot switch the active chat model: select Luna High
+  manually for coordinator and lead, then validate with a small pilot.
 - When feasibility is uncertain, first run a bounded investigation producing
   constraints, a minimal reproducible case and open decisions. Use read-only Sol
   analysis before production changes when that uncertainty controls the design.
@@ -23,27 +43,53 @@ Read before assigning implementation or delegated documentation.
   checks; do not defer all native integration until the end. Keep unfinished rules
   unavailable for issuance until their consumers and settlement support are ready.
 - Use the root model routing and `fork_turns="none"` with model overrides. Only
-  the main agent delegates; workers must not spawn agents. Respect concurrency
-  limits and do not fill slots merely because they exist.
+  the coordinator and lead delegate; workers must not spawn agents. Parallelize
+  independent work only after interfaces and ownership are settled. Queue
+  dependencies and respect actual runtime capacity; the current four-agent
+  limit is environmental, not a permanent hardcoded process rule.
 - Keep one implementation owner through understanding, TDD, implementation,
   focused checks, self-review and revisions. Add a second worker only for
   independent components with settled interfaces, separate ownership and a clear
   benefit. Do not split ordinary test writing from implementation.
 - Assign one owner per edited file. Workers request reassignment before editing
   outside scope; they must not change branches, stage, commit, reset, restore or
-  overwrite another person's or agent's work. Main coordinates Git operations.
+  overwrite another person's or agent's work. The chat coordinator coordinates Git operations.
 - Serialize overlapping files and shared generated artifacts. Use isolated
   worktrees when isolation materially helps, not automatically for every worker.
 - Request reports at completed milestones, not after each edit. Reports include
   changed behavior, checks/results and open acceptance gaps. Report blockers,
   ownership conflicts, scope changes and larger discoveries immediately.
-- During implementation, main resolves shared decisions and blockers without
+- During implementation, the lead resolves routine decisions and the coordinator resolves user choices and blockers without
   repeating the worker's investigation. Review the complete returned milestone;
   short coordination does not replace integration review.
 - The worker owns routine implementation decisions within the settled contract.
   Use one concise brief and one consolidated review per milestone, rather than
-  approvals after individual edits or a stream of main-agent algorithm patches.
+  approvals after individual edits or a stream of coordinator algorithm patches.
   Report scope changes, blockers and the reassessment threshold promptly.
+- Default milestone reports are about 500 words. Report blockers, choices,
+  completion and handoffs immediately; otherwise summarize changed state about
+  every five minutes while following host update guidance. Never create
+  scheduled follow-ups without user authorization.
+- Keep ignored per-feature observability in `.agent-workflow/` from the
+  [templates](agent-workflow/README.md): one current status, decisions, evidence
+  and event history. Include objective; branch/base and dirty state; file
+  ownership; agent IDs and models; milestones, dependencies, blockers and next
+  action; questions and approved source; exact commands, results, tested state
+  and superseded evidence. Events record dispatch rationale/model/ownership/done
+  criteria, blockers, choices, completions, handoffs, failures and escalations.
+  Fresh-context briefs preserve decisions and evidence without replaying full
+  history.
+- `scripts/agent_workflow_report.py` summarizes only explicitly selected local
+  JSONL paths. It reports the last cumulative token snapshot, latest input
+  context observation separately, compactions, delegation/wait calls, elapsed
+  time and output character counts. It does not sum snapshots or totals across
+  overlapping/forked runs. Fork counters may already include inherited history;
+  the reporter shows each selected run independently and reports parent/fork
+  source markers when present. Overlap remains unknown unless directly observed.
+  It does not estimate costs/allowances, inspect directories, or print
+  transcripts. Worker token telemetry coverage remains unknown; completion alone
+  does not establish it. Treat results as partial telemetry, never as an
+  automatic budget or scheduler.
 
 ## Test assumptions
 
@@ -75,15 +121,14 @@ bounded evidence, not universal reachability or proof of human playability.
 
 Read before integration review; also before sustained load testing.
 
-Main reviews the complete milestone against acceptance criteria. Require one
-batched independent review for simulation behavior, shared contracts or TS/Go
+The coordinator reviews the complete milestone against acceptance criteria. Require one
+batched independent Sol review for simulation behavior, shared contracts or TS/Go
 parity; wallet persistence, ownership, settlement or deduplication; security; and
-broad lifecycle/concurrency changes. Routine changes need worker and main review,
-without an additional reviewer. Documentation handled directly by main needs
-link/diff inspection.
-
-Give the reviewer requirements and the complete diff. Reviewers independently
-inspect callers, tests and failure paths. Consolidate findings into one revision
+broad lifecycle/concurrency changes. Routine changes need an implementation owner,
+independent Luna reviewer and coordinator integration review. Documentation-only
+coordinator review needs link/diff inspection. Give independent reviewers the
+requirements and complete diff. Reviewers inspect callers, tests and failure paths.
+Consolidate findings into one revision
 request to the existing Luna owner. Recheck changed paths and affected callers;
 reopen broad review only when scope or evidence warrants it. Apply the root
 verification requirements after integration and subsequent relevant edits.
@@ -115,7 +160,7 @@ Stop the repair loop and update the checkpoint with:
 
 Obtain an independent, read-only diagnosis from Sol using the failing requirement,
 minimal case and attempt evidence. No further implementation or controller tuning
-on that failure proceeds while the diagnosis is pending. Main records a materially
+on that failure proceeds while the diagnosis is pending. The coordinator records a materially
 revised approach, a narrower deliverable or a requirement decision, then returns
 implementation to Luna with one bounded discriminator. Another parameter change
 or newly named subproblem is not sufficient to restart the same repair loop.
@@ -126,9 +171,11 @@ Reassessment does not waive acceptance requirements or authorize Sol code writin
 
 Read when starting multi-stage work, preparing reassessment, or handing off.
 
-Maintain one task-specific Markdown checkpoint in the system temporary directory;
-record its absolute path in the chat. Keep one current document rather than an
-append-only transcript. Include:
+Maintain the canonical checkpoint at `.agent-workflow/<feature>/status.md`; the
+feature lead owns it and the coordinator reconciles final integration status.
+Keep one current document rather than an append-only transcript. If the checkout
+is unavailable or unwritable, use one task-specific Markdown file in the system
+temporary directory and record that fallback path. Include:
 
 - Task objective, worktree, branch and base revision; identify uncommitted edits
   and ownership so a clean HEAD is never mistaken for the complete tested state.
@@ -144,7 +191,8 @@ changed files, decisions, remaining work and check results. Keep credentials and
 private material out of checkpoints. Temporary files may be cleaned up: if lost,
 reconstruct state from Git, owners and logs before acting; never infer a pass.
 
-Main owns the current checkpoint; worker reports supply updates. At resume or a
+The feature lead owns the current checkpoint; worker reports supply updates and
+the coordinator reconciles it at integration. At resume or a
 checkout change, verify the actual worktree, branch or detached HEAD, dirty files,
 live worker IDs and running jobs. Replace stale status instead of appending
 contradictory histories. Stop the old owner before a fresh-context handoff; preserve

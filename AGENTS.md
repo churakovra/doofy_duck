@@ -53,15 +53,18 @@ Before expanding controller, simulation or load-test coverage, read
 - Commit coherent, reviewable milestones, separating distinct concerns. Keep
   related tests/implementation together and leave a coherent project state; do
   not split by edit or arbitrary size.
-- Only the main agent changes branches, stages intended files/hunks or commits.
+- Only the chat coordinator changes branches, stages intended files/hunks or commits.
   Preserve unrelated work; serialize overlapping edits and generated outputs.
 
 ## Verification
 
 Run from the repo root. Use focused tests and affected type/lint checks during
 implementation. After integration, run `npm run check` (types, lint, unit/fixture
-and Go tests, build); add Go race/vet for native behavior and real database checks
-for affected persistence paths. Component instructions select relevant checks.
+and Go tests, build) when application behavior is affected. Standalone workflow
+tooling uses focused tooling tests and documentation/link inspection; it does
+not require application suites. Add Go race/vet for native behavior and real
+database checks for affected persistence paths. Component instructions select
+relevant checks.
 
 Repeat full suites only for relevant edits or an unresolved failure; state why.
 Evidence belongs to the tested revision: rerun affected checks after edits/conflict
@@ -74,35 +77,42 @@ Browser suites require explicit request: `npm run check:browser` for both or
 
 ## Collaboration
 
-Main agent owns requirements, assignment, integration review and reporting; it
-must not edit application code, tests, scripts or tooling. It may edit docs.
-One implementation worker owns each coherent feature through TDD, focused checks
-and self-review, including revisions. Do not split ordinary tests/implementation.
+The chat coordinator owns user decisions, Git operations and final integration;
+it does not edit application code, tests, scripts or tooling.
+A separate feature lead plans each feature, settles its contract and acceptance,
+owns file assignments, sequencing, decisions and the canonical status
+checkpoint, and delegates implementation and review. Workers ask the lead;
+unresolved Medium+ product, UX, public-contract, dependency, scope or acceptance
+choices go to the user. Pause work dependent on a pending choice while approved,
+independent work may continue. Do not infer user approval or repeat settled
+questions. If the decision level is uncertain, escalate to the user; act
+autonomously only on reversible implementation details. Workers and reviewers do
+not delegate.
 
-| Task | Model | Reasoning effort |
+| Role or task | Model | Reasoning effort |
 | --- | --- | --- |
-| Code, tests, implementation fixes | `gpt-6-luna` | `high` |
-| Delegated documentation | `gpt-6-luna` | `medium` |
-| Planning, coordination, routine review | Main agent | Current setting |
-| Read-only feasibility analysis and escalated diagnosis | `gpt-6.1-sol` | `medium` |
-| Independent review | `gpt-6.1-sol` | `low`; `medium` for high-risk changes |
+| Coordinator and feature lead | `gpt-6-luna` | `high` |
+| Implementation worker and independent ordinary reviewer | `gpt-6-luna` | `high` |
+| Required high-risk review, feasibility analysis or escalated diagnosis | `gpt-6.1-sol` | `medium`, read-only |
 
-Do not delegate code writing to Sol. If Luna cannot finish, clarify/narrow the task
-or provide targeted analysis and return it to Luna. Report unavailable models;
-never silently substitute.
-
-Before delegation, read [delegation](docs/AGENT_WORKFLOW.md#delegation).
-Before integration review or sustained load tests, read
-[review](docs/AGENT_WORKFLOW.md#review).
-Use one worker by default; only main delegates. Assign one owner per edited file;
-workers request reassignment before leaving scope and never overwrite others.
+Settle observable behavior, interfaces, transitions, ownership, failure behavior
+and acceptance before assignment. Parallelize only independent work with settled
+ownership; respect actual runtime capacity. Give each worker a concise brief and
+each milestone one consolidated review. See [delegation](docs/AGENT_WORKFLOW.md#delegation),
+[review](docs/AGENT_WORKFLOW.md#review) and the [workflow templates and reporter](docs/agent-workflow/README.md).
+Repository instructions cannot change an active chat's model; select Luna High
+manually for coordinator and lead. Explain assignments and do not silently
+substitute unavailable models. Never assign Sol code edits. Keep the existing
+TDD, reassessment and simulation/backend acceptance safeguards below.
 
 Workers report at completed milestones after checks/self-review, or immediately
-for blockers, ownership conflicts or scope changes. Main reviews the complete
-milestone without duplicating ongoing implementation investigation.
-Independent review is mandatory for simulation/contracts/parity, wallet
+for blockers, ownership conflicts or scope changes. The coordinator reviews the
+complete milestone without duplicating ongoing implementation investigation.
+Independent Sol review is mandatory for simulation/contracts/parity, wallet
 persistence/ownership/settlement/deduplication, security, or broad lifecycle/
-concurrency changes. Routine work needs worker and main review only.
+concurrency changes. Routine work needs the owner, independent Luna reviewer and
+coordinator integration review. Documentation-only review by coordinator needs
+link and diff inspection.
 
 ## Recovery and reporting
 

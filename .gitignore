@@ -11,6 +11,7 @@ apps/web/playwright-report/
 !.env.example
 
 /local-docs/
+/.agent-workflow/
 
 # Python backend tooling and local credentials
 **/.venv/

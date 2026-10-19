@@ -10,6 +10,10 @@ review, test assumptions, recovery, checkpoints or long jobs, read the relevant
 section of the [agent workflow reference](AGENT_WORKFLOW.md); it is not required
 reading in full for every task.
 
+Per-feature collaboration-state templates and the selected-run telemetry tool
+are documented in [agent-workflow templates](agent-workflow/README.md). The
+`.agent-workflow/` runtime records are local and ignored by Git.
+
 ## Product and current implementation
 
 | Document | Use it for |
