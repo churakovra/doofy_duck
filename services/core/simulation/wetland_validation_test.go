@@ -9,6 +9,8 @@ import (
 type wetlandValidationCase struct {
 	Name            string `json:"name"`
 	Accepted        bool   `json:"accepted"`
+	Varied          bool   `json:"varied"`
+	WorldOffset     *int64 `json:"worldOffset"`
 	NoStars         bool   `json:"noStars"`
 	WithChallenges  bool   `json:"withChallenges"`
 	RemoveFeather   bool   `json:"removeFeather"`
@@ -36,10 +38,32 @@ type wetlandValidationCase struct {
 		XOffset *int64 `json:"xOffset"`
 		YOffset *int64 `json:"yOffset"`
 	} `json:"starRoute"`
+	RemoveGeometry bool `json:"removeGeometry"`
+	Geometry       *struct {
+		HalfPipeMinPercent  *int64 `json:"halfPipeMinPercent"`
+		HalfPipeMaxPercent  *int64 `json:"halfPipeMaxPercent"`
+		FloatingBarMinWidth *int64 `json:"floatingBarMinWidth"`
+		FloatingBarMaxWidth *int64 `json:"floatingBarMaxWidth"`
+		FloatingBarHeight   *int64 `json:"floatingBarHeight"`
+	} `json:"geometry"`
+	IntroLaneCenter *struct {
+		Index int   `json:"index"`
+		Value int64 `json:"value"`
+	} `json:"introLaneCenter"`
 }
 
 func TestSharedWetlandConfigurationValidationCorpus(t *testing.T) {
-	data, err := os.ReadFile("../../../contracts/simulation/wetland-config-validation.json")
+	t.Run("catalog-1", func(t *testing.T) {
+		testWetlandConfigurationValidationCorpus(t, "../../../contracts/simulation/wetland-config-validation.json")
+	})
+	t.Run("catalog-2", func(t *testing.T) {
+		testWetlandConfigurationValidationCorpus(t, "../../../contracts/simulation/wetland-v2-config-validation.json")
+	})
+}
+
+func testWetlandConfigurationValidationCorpus(t *testing.T, path string) {
+	t.Helper()
+	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,6 +76,9 @@ func TestSharedWetlandConfigurationValidationCorpus(t *testing.T) {
 	for _, testCase := range corpus.Cases {
 		t.Run(testCase.Name, func(t *testing.T) {
 			config := WetlandConfiguration()
+			if testCase.Varied {
+				config = VariedObstacleConfiguration()
+			}
 			if testCase.WithChallenges {
 				config.Challenges = PriorDefaultConfiguration().Challenges
 			}
@@ -69,6 +96,44 @@ func TestSharedWetlandConfigurationValidationCorpus(t *testing.T) {
 			}
 			if testCase.RecoverySpacing != nil {
 				config.Wetland.RecoverySpacing = *testCase.RecoverySpacing
+			}
+			if testCase.RemoveGeometry {
+				config.Wetland.Geometry = nil
+			}
+			if testCase.Geometry != nil && config.Wetland.Geometry != nil {
+				if testCase.Geometry.HalfPipeMinPercent != nil {
+					config.Wetland.Geometry.HalfPipeMinPercent = *testCase.Geometry.HalfPipeMinPercent
+				}
+				if testCase.Geometry.HalfPipeMaxPercent != nil {
+					config.Wetland.Geometry.HalfPipeMaxPercent = *testCase.Geometry.HalfPipeMaxPercent
+				}
+				if testCase.Geometry.FloatingBarMinWidth != nil {
+					config.Wetland.Geometry.FloatingBarMinWidth = *testCase.Geometry.FloatingBarMinWidth
+				}
+				if testCase.Geometry.FloatingBarMaxWidth != nil {
+					config.Wetland.Geometry.FloatingBarMaxWidth = *testCase.Geometry.FloatingBarMaxWidth
+				}
+				if testCase.Geometry.FloatingBarHeight != nil {
+					config.Wetland.Geometry.FloatingBarHeight = *testCase.Geometry.FloatingBarHeight
+				}
+			}
+			if testCase.IntroLaneCenter != nil && testCase.IntroLaneCenter.Index >= 0 && testCase.IntroLaneCenter.Index < len(config.Wetland.IntroLaneCenters) {
+				config.Wetland.IntroLaneCenters[testCase.IntroLaneCenter.Index] = testCase.IntroLaneCenter.Value
+			}
+			if testCase.WorldOffset != nil {
+				offset := *testCase.WorldOffset
+				config.Pipes.CeilingY += offset
+				config.Pipes.FloorY += offset
+				config.Pipes.GapMinCenter += offset
+				config.Pipes.GapMaxCenter += offset
+				for i := range config.Wetland.IntroLaneCenters {
+					config.Wetland.IntroLaneCenters[i] += offset
+				}
+				for i := range config.Wetland.Families {
+					for j := range config.Wetland.Families[i].GapCenters {
+						config.Wetland.Families[i].GapCenters[j] += offset
+					}
+				}
 			}
 			if testCase.Limits != nil {
 				if testCase.Limits.MaxActivePipes != nil {
@@ -133,7 +198,7 @@ func TestWetlandConfigDeepCloneOwnsNestedRoutePoints(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	state, err := CreateRun(Descriptor{RunID: "wetland-config-copy", Seed: 1, SimulationVersion: SimulationVersion, GeneratorVersion: GeneratorVersion, ConfigID: id}, config)
+	state, err := CreateRun(Descriptor{RunID: "wetland-config-copy", Seed: 1, SimulationVersion: WetlandSimulationVersion, GeneratorVersion: WetlandGeneratorVersion, ConfigID: id}, config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,7 +217,7 @@ func TestWetlandStationsUseConfiguredObstacleWidthAndRightEdge(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	state, err := CreateRun(Descriptor{RunID: "wetland-right-edge", Seed: 4, SimulationVersion: SimulationVersion, GeneratorVersion: GeneratorVersion, ConfigID: id}, config)
+	state, err := CreateRun(Descriptor{RunID: "wetland-right-edge", Seed: 4, SimulationVersion: WetlandSimulationVersion, GeneratorVersion: WetlandGeneratorVersion, ConfigID: id}, config)
 	if err != nil {
 		t.Fatal(err)
 	}

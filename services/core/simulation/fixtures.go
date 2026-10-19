@@ -174,49 +174,73 @@ func VerifyFoundationFixtures(path string) error {
 	return nil
 }
 
-// VerifyWetlandFixtures checks reviewed v2 state/event expectations independently
-// from the TypeScript producer and the frozen v1 fixture.
+// VerifyWetlandFixtures checks reviewed wetland state/event expectations
+// independently from the TypeScript producer and frozen fixtures.
 func VerifyWetlandFixtures(path string) error {
 	data, err := os.ReadFile(path)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	var fixture struct {
-		FixtureRevision string `json:"fixtureRevision"`
+		FixtureRevision   string `json:"fixtureRevision"`
 		SimulationVersion string `json:"simulationVersion"`
-		GeneratorVersion string `json:"generatorVersion"`
-		ConfigID string `json:"configId"`
-		Cases []struct {
-			Name string `json:"name"`
-			Synthetic bool `json:"syntheticInitialState"`
-			Initial json.RawMessage `json:"initialState"`
+		GeneratorVersion  string `json:"generatorVersion"`
+		ConfigID          string `json:"configId"`
+		Cases             []struct {
+			Name       string          `json:"name"`
+			Synthetic  bool            `json:"syntheticInitialState"`
+			Initial    json.RawMessage `json:"initialState"`
 			Operations []struct {
-				Kind string `json:"kind"`
-				Frames []Input `json:"frames"`
-				ExpectedState json.RawMessage `json:"expectedState"`
+				Kind           string          `json:"kind"`
+				Frames         []Input         `json:"frames"`
+				ExpectedState  json.RawMessage `json:"expectedState"`
 				ExpectedEvents json.RawMessage `json:"expectedEvents"`
 			} `json:"operations"`
 		} `json:"cases"`
 	}
-	if err := json.Unmarshal(data, &fixture); err != nil { return err }
-	if fixture.FixtureRevision != "wetland-stations-1" || fixture.SimulationVersion != SimulationVersion || fixture.GeneratorVersion != GeneratorVersion || fixture.ConfigID != DefaultConfigID || len(fixture.Cases) < 5 {
+	if err := json.Unmarshal(data, &fixture); err != nil {
+		return err
+	}
+	priorFixture := fixture.FixtureRevision == "wetland-stations-1" && fixture.SimulationVersion == WetlandSimulationVersion &&
+		fixture.GeneratorVersion == WetlandGeneratorVersion && fixture.ConfigID == WetlandDefaultConfigID && len(fixture.Cases) >= 5
+	variedFixture := fixture.FixtureRevision == "wetland-varied-stations-1" && fixture.SimulationVersion == SimulationVersion &&
+		fixture.GeneratorVersion == GeneratorVersion && fixture.ConfigID == DefaultConfigID && len(fixture.Cases) >= 3
+	if !priorFixture && !variedFixture {
 		return fmt.Errorf("unexpected wetland fixture identity/case count")
 	}
 	for _, example := range fixture.Cases {
 		var state State
-		if err := json.Unmarshal(example.Initial, &state); err != nil { return fmt.Errorf("%s initial: %w", example.Name, err) }
+		if err := json.Unmarshal(example.Initial, &state); err != nil {
+			return fmt.Errorf("%s initial: %w", example.Name, err)
+		}
 		if example.Synthetic {
-			if err := equalRaw(state, example.Initial); err != nil { return fmt.Errorf("%s initial state: %w", example.Name, err) }
+			if err := equalRaw(state, example.Initial); err != nil {
+				return fmt.Errorf("%s initial state: %w", example.Name, err)
+			}
 		} else {
 			created, err := CreateRun(state.Descriptor, state.Config)
-			if err != nil { return fmt.Errorf("%s create: %w", example.Name, err) }
-			if err := equalRaw(created, example.Initial); err != nil { return fmt.Errorf("%s initial state: %w", example.Name, err) }
+			if err != nil {
+				return fmt.Errorf("%s create: %w", example.Name, err)
+			}
+			if err := equalRaw(created, example.Initial); err != nil {
+				return fmt.Errorf("%s initial state: %w", example.Name, err)
+			}
 			state = created
 		}
 		for index, operation := range example.Operations {
-			if operation.Kind != "step" { return fmt.Errorf("%s op%d unsupported kind %q", example.Name, index, operation.Kind) }
+			if operation.Kind != "step" {
+				return fmt.Errorf("%s op%d unsupported kind %q", example.Name, index, operation.Kind)
+			}
 			result, err := Step(state, operation.Frames)
-			if err != nil { return fmt.Errorf("%s op%d: %w", example.Name, index, err) }
-			if err := equalRaw(result.State, operation.ExpectedState); err != nil { return fmt.Errorf("%s op%d state: %w", example.Name, index, err) }
-			if err := equalRaw(result.Events, operation.ExpectedEvents); err != nil { return fmt.Errorf("%s op%d events: %w", example.Name, index, err) }
+			if err != nil {
+				return fmt.Errorf("%s op%d: %w", example.Name, index, err)
+			}
+			if err := equalRaw(result.State, operation.ExpectedState); err != nil {
+				return fmt.Errorf("%s op%d state: %w", example.Name, index, err)
+			}
+			if err := equalRaw(result.Events, operation.ExpectedEvents); err != nil {
+				return fmt.Errorf("%s op%d events: %w", example.Name, index, err)
+			}
 			state = result.State
 		}
 	}

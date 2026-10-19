@@ -107,13 +107,15 @@ func ConfigIDFor(c Config) (string, error) {
 	if e := ValidateConfig(c); e != nil {
 		return "", e
 	}
-	def, _ := CanonicalJSON(WetlandConfiguration())
+	def, _ := CanonicalJSON(DefaultConfiguration())
 	cur, _ := CanonicalJSON(c)
 	if cur == def {
 		return DefaultConfigID, nil
 	}
-	prior, _ := CanonicalJSON(canonicalDefaultConfig)
-	if cur == prior { return PriorDefaultConfigID, nil }
+	prior, _ := CanonicalJSON(canonicalPriorDefaultConfig)
+	if cur == prior {
+		return PriorDefaultConfigID, nil
+	}
 	legacy, _ := CanonicalJSON(canonicalLegacyDefaultConfig)
 	if cur == legacy {
 		return LegacyDefaultConfigID, nil

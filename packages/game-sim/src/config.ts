@@ -108,8 +108,41 @@ export const WETLAND_DEFAULT_CONFIG: GameConfig = deepFreeze({
     ],
   },
 });
-export const DEFAULT_CONFIG = WETLAND_DEFAULT_CONFIG;
+export const VARIED_OBSTACLE_DEFAULT_CONFIG: GameConfig = deepFreeze({
+  ...WETLAND_DEFAULT_CONFIG,
+  pipes: {
+    ...WETLAND_DEFAULT_CONFIG.pipes,
+    gapMinCenter: 78_000,
+    gapMaxCenter: 483_000,
+    maxGapDelta: 120_000,
+  },
+  wetland: {
+    ...WETLAND_DEFAULT_CONFIG.wetland!,
+    catalogVersion: 2,
+    geometry: {
+      halfPipeMinPercent: 70,
+      halfPipeMaxPercent: 90,
+      floatingBarMinWidth: 90_000,
+      floatingBarMaxWidth: 216_000,
+      floatingBarHeight: 42_000,
+    },
+    introLaneCenters: [280_000, 340_000, 400_000, 483_000],
+    families: WETLAND_DEFAULT_CONFIG.wetland!.families.map(family => ({
+      ...family,
+      gapCenters: [480_000, 480_000, 480_000, 480_000],
+      ...(family.id === "steady" ? { obstacleTypes: ["pipes", "pipes", "pipes", "pipes"] } : {}),
+    })),
+  },
+});
+export const DEFAULT_CONFIG = VARIED_OBSTACLE_DEFAULT_CONFIG;
 const integer = (v: unknown): v is number => Number.isSafeInteger(v);
+function variedRecoveryCentersValid(p: PipeConfig): boolean {
+  const offset = p.gapMinCenter - 78_000;
+  return [[100_000, 220_000, 340_000, 460_000], [430_000, 310_000, 190_000, 78_000]].every(recipe =>
+    recipe.map(center => center + offset).every((center, index, centers) =>
+      center >= p.gapMinCenter && center <= p.gapMaxCenter &&
+      (index === 0 || Math.abs(center - centers[index - 1]!) <= p.maxGapDelta)));
+}
 function wetlandResolvedY(c: GameConfig, center: number, obstacleType: string, offset: number, radius: number): number {
   if (obstacleType === "debris") {
     const clearance = 21000 + c.flight.duckHalfHeight + 1;
@@ -137,6 +170,11 @@ function wetlandObstacles(c: GameConfig, center: number, type: string): { x: num
   if (type === "vine") return [{ x: 0, y: pipes.ceilingY, width: pipes.width, height: top - pipes.ceilingY }];
   if (type === "rock") return [{ x: 0, y: bottom, width: pipes.width, height: pipes.floorY - bottom }];
   return [{ x: 0, y: center - 21000, width: pipes.width, height: 42000 }];
+}
+function validWetlandRoutePoint(point: { xOffset: number; yOffset: number }, star = false): boolean {
+  return Number.isSafeInteger(point.xOffset) && Number.isSafeInteger(point.yOffset) &&
+    (star ? point.xOffset > 0 && point.xOffset <= 120_000 && point.yOffset > 0 && point.yOffset <= 70_000
+      : point.xOffset !== 0 && Math.abs(point.xOffset) <= 120_000 && Math.abs(point.yOffset) <= 70_000);
 }
 function validateWetlandRoute(c: GameConfig, center: number, type: string, point: { xOffset: number; yOffset: number }, radius: number, star = false): boolean {
   if (!Number.isSafeInteger(point.xOffset) || !Number.isSafeInteger(point.yOffset) ||
@@ -220,17 +258,30 @@ export function validateConfig(c: GameConfig): GameConfig {
       throw Error("invalid scheduled Star capacity or interval geometry");
   }
   if (c.wetland != null && c.challenges != null) throw Error("wetland and legacy challenge modes are mutually exclusive");
-  if (c.wetland != null && (c.wetland.catalogVersion !== 1 || c.wetland.recoverySpacing !== 360000 || !Array.isArray(c.wetland.stationSpacing) ||
+  if (c.wetland != null && (![1, 2].includes(c.wetland.catalogVersion) || c.wetland.recoverySpacing !== 360000 || !Array.isArray(c.wetland.stationSpacing) ||
       c.wetland.stationSpacing.length !== 3 || c.wetland.stationSpacing.some(value => !integer(value) || value <= 0) ||
       !Array.isArray(c.wetland.introFamilies) || c.wetland.introFamilies.join(",") !== "steady,quick-pairs" ||
       !Array.isArray(c.wetland.pressureFamilies) || c.wetland.pressureFamilies.join(",") !== "dive-climb,climb-dive,slalom" ||
       !Array.isArray(c.wetland.families) || c.wetland.families.length !== 5 ||
       c.wetland.stationSpacing.join(",") !== "240000,300000,360000" ||
       !c.wetland.starRoute || !Number.isSafeInteger(c.wetland.starRoute.xOffset) || !Number.isSafeInteger(c.wetland.starRoute.yOffset) ||
+      (c.wetland.catalogVersion === 1 && c.wetland.geometry !== undefined) ||
+      (c.wetland.catalogVersion === 1 && c.wetland.introLaneCenters !== undefined) ||
+      (c.wetland.catalogVersion === 2 && (!c.wetland.geometry || !integer(c.wetland.geometry.halfPipeMinPercent) || c.wetland.geometry.halfPipeMinPercent < 70 || c.wetland.geometry.halfPipeMinPercent > 88 ||
+        !integer(c.wetland.geometry.halfPipeMaxPercent) || c.wetland.geometry.halfPipeMaxPercent < c.wetland.geometry.halfPipeMinPercent || c.wetland.geometry.halfPipeMaxPercent > 90 ||
+        c.wetland.geometry.floatingBarMinWidth !== 90_000 || c.wetland.geometry.floatingBarMaxWidth !== 216_000 || c.wetland.geometry.floatingBarHeight !== 42_000 ||
+        !variedRecoveryCentersValid(p) ||
+        !Array.isArray(c.wetland.introLaneCenters) || c.wetland.introLaneCenters.length !== 4 ||
+        c.wetland.introLaneCenters.some(center => !integer(center) || center < p.gapMinCenter || center > p.gapMaxCenter) ||
+        c.wetland.introLaneCenters.some((center, index) => index > 0 && Math.abs(center - c.wetland!.introLaneCenters![index - 1]!) > p.maxGapDelta))) ||
       c.wetland.families.some(family => family.gapCenters.length !== 4 || family.obstacleTypes.length !== 4 || family.stationSpacing.length !== 4 || family.rewardRoute.length !== 4 ||
         family.gapCenters.some((center: number) => !integer(center) || center < p.gapMinCenter || center > p.gapMaxCenter) ||
-        family.rewardRoute.some((point: { xOffset: number; yOffset: number }, index: number) => !validateWetlandRoute(c, family.gapCenters[index]!, family.obstacleTypes[index]!, point, c.collectibles.find(item => item.typeId === "FEATHER")?.radius ?? 0)) ||
-        family.obstacleTypes.some((type: string, index: number) => !validateWetlandRoute(c, family.gapCenters[index]!, type, c.wetland!.starRoute, c.collectibles.find(item => item.typeId === "GAME_STAR")?.radius ?? 0, true)) ||
+        family.rewardRoute.some((point: { xOffset: number; yOffset: number }, index: number) => c.wetland!.catalogVersion === 2
+          ? !validWetlandRoutePoint(point)
+          : !validateWetlandRoute(c, family.gapCenters[index]!, family.obstacleTypes[index]!, point, c.collectibles.find(item => item.typeId === "FEATHER")?.radius ?? 0)) ||
+        family.obstacleTypes.some((type: string, index: number) => c.wetland!.catalogVersion === 2
+          ? !validWetlandRoutePoint(c.wetland!.starRoute, true)
+          : !validateWetlandRoute(c, family.gapCenters[index]!, type, c.wetland!.starRoute, c.collectibles.find(item => item.typeId === "GAME_STAR")?.radius ?? 0, true)) ||
         family.obstacleTypes.some((type: string) => !["pipes", "vine", "rock", "debris"].includes(type)) ||
         family.stationSpacing.some((spacing: number) => !integer(spacing) || !c.wetland!.stationSpacing.includes(spacing)) ||
         family.gapCenters.some((center: number, index: number) => index > 0 && Math.abs(center - family.gapCenters[index - 1]!) > p.maxGapDelta)) || c.limits.maxActiveCollectibles < 10))

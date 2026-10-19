@@ -1,11 +1,40 @@
 # Wetland challenges
 
-Status: implemented locally on `feature/wetland-challenges`; verification recorded
-October 19, 2026. Owner playtesting, physical Telegram/mobile and hosted acceptance
-remain open. Passing automated controllers do not establish universal reachability
-or human playability.
+Status: the `2.1.0` geometry iteration on `feature/varied-obstacle-geometry`
+is incomplete. Technical completion requires shared replay parity, account and
+settlement integration, reviewed reward-route evidence and final checks. The
+`2.0.0` contract and dated verification below describe the frozen baseline.
 
-## Gameplay contract
+## Geometry iteration in progress
+
+The approved target is simulation/generator `2.1.0`, configuration
+`dd-v2-varied-obstacles-v1` and encounter catalog version 2.
+
+- Scored stations remain visible until their collision bodies and decorative
+  silhouettes have scrolled offscreen. Passing still scores once.
+- Ceiling halves span a seeded 70–88% of playable height; floor halves span
+  70–90%. The ceiling cap preserves the existing flight physics: a full-width
+  90% ceiling half cannot be crossed at starting speed.
+  Custom catalog-2 half-height minima must not exceed the ceiling cap of 88%;
+  floor halves can still use a configured maximum of 90%.
+- Floating horizontal obstacles vary from 90 to 216 pixels wide, retain a
+  42-pixel thickness and vary their vertical position.
+- Simulation rectangles govern collision, scoring, reward placement and rendering.
+  Authored connectors establish high/low approaches before long barriers.
+- Existing `2.0.0` and older identities, serialized states and fixture expectations
+  remain frozen. New issuance waits for replay, frontend and settlement support.
+
+Some bounded survival witnesses pass, but reward-route acceptance is still open.
+Earlier searched reward examples were invalidated by a hidden-owner-metadata
+issue in the test controller; their execution does not establish the required
+observation contract. Corrected cases must use only observations matured after
+18 ticks, collect the complete opportunity and pass the following station.
+
+The approved finish target excludes browser suites, visual playtesting and
+physical Telegram/mobile acceptance. Technical checks do not imply human
+playability or hosted acceptance.
+
+## Frozen 2.0.0 gameplay contract
 
 The wetland rules use simulation `2.0.0`, generator `2.0.0` and default configuration
 `dd-v2-wetland-v1`. Flight controls, gravity, flap impulse, duck hitbox and the
@@ -52,7 +81,7 @@ Runs pin their rules at issuance. Existing simulation `1.4.0` / generator `1.3.0
 fields, and existing committed fixtures remain unchanged. Wetland fixtures are
 separate reviewed expectations shared by both implementations.
 
-Economy policy `verified-pickups-v3-wetland` accepts the new default identity.
+Economy policy `verified-pickups-v3-wetland` accepts the frozen `2.0.0` identity.
 Verified coins credit at 1:1 up to the existing 30-coin cap per run; Stars retain
 1:1 credit without a new cap. More available coins increase opportunities to reach
 the cap rather than changing shop prices or the database cap constraint.
@@ -76,7 +105,10 @@ new identity, duplicate delivery, the coin cap and prior policies. Routine Node/
 checks, race/vet and affected backend checks are required. Browser suites remain
 opt-in.
 
-Executed results on the completed implementation:
+### Historical catalog-1 evidence
+
+The following results describe the completed `2.0.0` baseline. They are not
+current acceptance evidence for catalog 2 or the dirty feature branch.
 
 - `npm run check`: passed types, lint, all 380 tests in 40 files, Go tests and the
   production build. The build retains a non-fatal large-chunk warning.

@@ -2,17 +2,22 @@ package simulation
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"testing"
 )
 
 func TestCurrentContractIdentity(t *testing.T) {
-	if SimulationVersion != "2.0.0" || GeneratorVersion != "2.0.0" || DefaultConfigID != "dd-v2-wetland-v1" {
-		t.Fatalf("unexpected wetland identity: %s/%s/%s", SimulationVersion, GeneratorVersion, DefaultConfigID)
+	if SimulationVersion != "2.1.0" || GeneratorVersion != "2.1.0" || DefaultConfigID != "dd-v2-varied-obstacles-v1" {
+		t.Fatalf("unexpected varied-obstacle identity: %s/%s/%s", SimulationVersion, GeneratorVersion, DefaultConfigID)
 	}
 	current, err := CreateRun(Descriptor{RunID: "current", Seed: 4, SimulationVersion: SimulationVersion, GeneratorVersion: GeneratorVersion, ConfigID: DefaultConfigID})
-	if err != nil || current.Config.Wetland == nil || current.NextPipeX == nil {
-		t.Fatalf("wetland default run missing catalog/cursor: err=%v", err)
+	if err != nil || current.Config.Wetland == nil || current.Config.Wetland.CatalogVersion != 2 || current.NextPipeX == nil {
+		t.Fatalf("varied-obstacle default run missing catalog/cursor: err=%v", err)
+	}
+	legacyWetland, err := CreateRun(Descriptor{RunID: "wetland-v2", Seed: 4, SimulationVersion: WetlandSimulationVersion, GeneratorVersion: WetlandGeneratorVersion, ConfigID: WetlandDefaultConfigID})
+	if err != nil || legacyWetland.Config.Wetland == nil || legacyWetland.Config.Wetland.CatalogVersion != 1 {
+		t.Fatalf("frozen wetland v2 identity is unavailable: err=%v", err)
 	}
 	if PriorSimulationVersion != "1.4.0" || PriorGeneratorVersion != "1.3.0" || PriorDefaultConfigID != "dd-v1-star-interval-v1" {
 		t.Fatalf("unexpected contract identity: %s/%s/%s", PriorSimulationVersion, PriorGeneratorVersion, PriorDefaultConfigID)
@@ -49,6 +54,97 @@ func TestCurrentContractIdentity(t *testing.T) {
 	}
 	if _, ok := priorObject["pipes"]; !ok {
 		t.Fatal("prior state lost pipes")
+	}
+}
+
+func TestCatalogVersionAndDescriptorPairBinding(t *testing.T) {
+	config := VariedObstacleConfiguration()
+	config.Pipes.Width++
+	id, err := ConfigIDFor(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	descriptor := Descriptor{RunID: "catalog-2-custom", Seed: 1, SimulationVersion: SimulationVersion, GeneratorVersion: GeneratorVersion, ConfigID: id}
+	if _, err := CreateRun(descriptor, config); err != nil {
+		t.Fatalf("catalog-2 custom config rejected under current pair: %v", err)
+	}
+	for _, pair := range [][2]string{{WetlandSimulationVersion, WetlandGeneratorVersion}, {PriorSimulationVersion, PriorGeneratorVersion}, {LegacySimulationVersion, LegacyGeneratorVersion}} {
+		wrong := descriptor
+		wrong.SimulationVersion, wrong.GeneratorVersion = pair[0], pair[1]
+		if _, err := CreateRun(wrong, config); err == nil {
+			t.Errorf("catalog-2 custom config accepted under frozen pair %s/%s", pair[0], pair[1])
+		}
+	}
+	legacy := WetlandConfiguration()
+	legacy.Pipes.Width++
+	legacyID, err := ConfigIDFor(legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacyDescriptor := Descriptor{RunID: "catalog-1-custom", Seed: 1, SimulationVersion: WetlandSimulationVersion, GeneratorVersion: WetlandGeneratorVersion, ConfigID: legacyID}
+	for _, pair := range [][2]string{{SimulationVersion, GeneratorVersion}, {WetlandSimulationVersion, WetlandGeneratorVersion}, {PriorSimulationVersion, PriorGeneratorVersion}, {LegacySimulationVersion, LegacyGeneratorVersion}} {
+		legacyDescriptor.SimulationVersion, legacyDescriptor.GeneratorVersion = pair[0], pair[1]
+		if _, err := CreateRun(legacyDescriptor, legacy); err != nil {
+			t.Errorf("catalog-1 custom run rejected under formerly accepted pair %s/%s: %v", pair[0], pair[1], err)
+		}
+	}
+}
+
+func TestVariedRecoveryGeometryTracksShiftedWorld(t *testing.T) {
+	const offset int64 = 600000
+	cases := []struct {
+		seed   uint32
+		recipe []int64
+	}{{0, []int64{430000, 310000, 190000, 78000}}, {2, []int64{100000, 220000, 340000, 460000}}}
+	for _, testCase := range cases {
+		t.Run(fmt.Sprintf("seed-%d", testCase.seed), func(t *testing.T) {
+			config := VariedObstacleConfiguration()
+			config.Pipes.CeilingY += offset
+			config.Pipes.FloorY += offset
+			config.Pipes.GapMinCenter += offset
+			config.Pipes.GapMaxCenter += offset
+			for i := range config.Wetland.IntroLaneCenters {
+				config.Wetland.IntroLaneCenters[i] += offset
+			}
+			for i := range config.Wetland.Families {
+				for j := range config.Wetland.Families[i].GapCenters {
+					config.Wetland.Families[i].GapCenters[j] += offset
+				}
+			}
+			if err := ValidateConfig(config); err != nil {
+				t.Fatal(err)
+			}
+			id, err := ConfigIDFor(config)
+			if err != nil {
+				t.Fatal(err)
+			}
+			descriptor := Descriptor{RunID: "shifted-recovery", Seed: int64(testCase.seed), SimulationVersion: SimulationVersion, GeneratorVersion: GeneratorVersion, ConfigID: id}
+			initial, err := CreateRun(descriptor, config)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for i, wantCenter := range testCase.recipe {
+				nextX := config.Pipes.SafeLeadIn
+				state := initial
+				state.Pipes = []Pipe{}
+				state.NextPipeIndex = int64(12 + i)
+				state.NextPipeX = &nextX
+				state.LastGapCenter = 280000 + offset
+				generated, err := GenerateNext(state)
+				if err != nil {
+					t.Fatal(err)
+				}
+				pipe := generated.State.Pipes[0]
+				if want := wantCenter + offset; pipe.GapCenter != want {
+					t.Errorf("station %d gap=%d want=%d", pipe.Index, pipe.GapCenter, want)
+				}
+				for _, obstacle := range pipe.Obstacles {
+					if obstacle.Height < 0 || obstacle.Y < config.Pipes.CeilingY || obstacle.Y+obstacle.Height > config.Pipes.FloorY {
+						t.Errorf("station %d obstacle outside world: %+v", pipe.Index, obstacle)
+					}
+				}
+			}
+		})
 	}
 }
 
@@ -169,7 +265,7 @@ func TestReviewedWetlandStationFixture(t *testing.T) {
 	if err := json.Unmarshal(data, &fixture); err != nil {
 		t.Fatal(err)
 	}
-	if fixture.FixtureRevision != "wetland-stations-1" || fixture.SimulationVersion != SimulationVersion || fixture.GeneratorVersion != GeneratorVersion || fixture.ConfigID != DefaultConfigID {
+	if fixture.FixtureRevision != "wetland-stations-1" || fixture.SimulationVersion != WetlandSimulationVersion || fixture.GeneratorVersion != WetlandGeneratorVersion || fixture.ConfigID != WetlandDefaultConfigID {
 		t.Fatalf("unexpected wetland fixture identity: %+v", fixture)
 	}
 	config := WetlandConfiguration()
@@ -191,7 +287,7 @@ func TestReviewedWetlandStationFixture(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	descriptor := Descriptor{RunID: "wetland-fixture", Seed: fixture.Seed, SimulationVersion: SimulationVersion, GeneratorVersion: GeneratorVersion, ConfigID: id}
+	descriptor := Descriptor{RunID: "wetland-fixture", Seed: fixture.Seed, SimulationVersion: WetlandSimulationVersion, GeneratorVersion: WetlandGeneratorVersion, ConfigID: id}
 	state, err := CreateRun(descriptor, config)
 	if err != nil {
 		t.Fatal(err)
@@ -248,6 +344,12 @@ func TestReviewedWetlandStationFixture(t *testing.T) {
 	}
 }
 
+func TestReviewedVariedWetlandFixture(t *testing.T) {
+	if err := VerifyWetlandFixtures("../../../contracts/simulation/wetland-v2.json"); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestWetlandObstacleRectanglesAreLethal(t *testing.T) {
 	config := WetlandConfiguration()
 	config.StarSchedule = nil
@@ -257,7 +359,7 @@ func TestWetlandObstacleRectanglesAreLethal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	descriptor := Descriptor{RunID: "wetland-collision", Seed: 9, SimulationVersion: SimulationVersion, GeneratorVersion: GeneratorVersion, ConfigID: id}
+	descriptor := Descriptor{RunID: "wetland-collision", Seed: 9, SimulationVersion: WetlandSimulationVersion, GeneratorVersion: WetlandGeneratorVersion, ConfigID: id}
 	initial, err := CreateRun(descriptor, config)
 	if err != nil {
 		t.Fatal(err)
@@ -315,7 +417,7 @@ func TestWetlandTrailsSpawnWholeAndStable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	state, err := CreateRun(Descriptor{RunID: "wetland-trails", Seed: 11, SimulationVersion: SimulationVersion, GeneratorVersion: GeneratorVersion, ConfigID: id}, config)
+	state, err := CreateRun(Descriptor{RunID: "wetland-trails", Seed: 11, SimulationVersion: WetlandSimulationVersion, GeneratorVersion: WetlandGeneratorVersion, ConfigID: id}, config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -344,7 +446,7 @@ func TestWetlandStarCapacityReservesWholeTrail(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	state, err := CreateRun(Descriptor{RunID: "wetland-star-route", Seed: 11, SimulationVersion: SimulationVersion, GeneratorVersion: GeneratorVersion, ConfigID: id}, config)
+	state, err := CreateRun(Descriptor{RunID: "wetland-star-route", Seed: 11, SimulationVersion: WetlandSimulationVersion, GeneratorVersion: WetlandGeneratorVersion, ConfigID: id}, config)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -78,13 +78,22 @@ type Config struct {
 	Wetland         *WetlandConfig `json:"wetland,omitempty"`
 }
 type WetlandConfig struct {
-	StationSpacing   []int64            `json:"stationSpacing"`
-	RecoverySpacing  int64              `json:"recoverySpacing"`
-	IntroFamilies    []string           `json:"introFamilies"`
-	PressureFamilies []string           `json:"pressureFamilies"`
-	CatalogVersion   int64              `json:"catalogVersion"`
-	Families         []WetlandFamily    `json:"families"`
-	StarRoute        WetlandRewardPoint `json:"starRoute"`
+	StationSpacing   []int64                `json:"stationSpacing"`
+	RecoverySpacing  int64                  `json:"recoverySpacing"`
+	IntroFamilies    []string               `json:"introFamilies"`
+	PressureFamilies []string               `json:"pressureFamilies"`
+	CatalogVersion   int64                  `json:"catalogVersion"`
+	Families         []WetlandFamily        `json:"families"`
+	StarRoute        WetlandRewardPoint     `json:"starRoute"`
+	Geometry         *WetlandGeometryConfig `json:"geometry,omitempty"`
+	IntroLaneCenters []int64                `json:"introLaneCenters,omitempty"`
+}
+type WetlandGeometryConfig struct {
+	HalfPipeMinPercent  int64 `json:"halfPipeMinPercent"`
+	HalfPipeMaxPercent  int64 `json:"halfPipeMaxPercent"`
+	FloatingBarMinWidth int64 `json:"floatingBarMinWidth"`
+	FloatingBarMaxWidth int64 `json:"floatingBarMaxWidth"`
+	FloatingBarHeight   int64 `json:"floatingBarHeight"`
 }
 type WetlandRewardPoint struct {
 	XOffset int64 `json:"xOffset"`
@@ -153,6 +162,9 @@ func stationRightEdge(p Pipe, c Config) int64 {
 		return right
 	}
 	return p.X + c.Pipes.Width/2
+}
+func stationRenderRightEdge(p Pipe, c Config) int64 {
+	return stationRightEdge(p, c) + c.Pipes.Width
 }
 
 type Collectible struct {
@@ -225,7 +237,7 @@ type Pattern struct {
 
 var canonicalCatalog = []Pattern{{"center", []int64{280000, 280000, 280000, 280000}}, {"rise-fall", []int64{260000, 280000, 300000, 280000}}, {"fall-rise", []int64{300000, 280000, 260000, 280000}}}
 var canonicalLegacyDefaultConfig = Config{FlightConfig{320, -5600, 8500, 100000, 12000, 10000}, PipeConfig{Speed: 3000, MaxSpeed: 4800, RampTicks: 2700, SpeedEveryPipes: 10, SpeedStepPercent: 10, GapMinCenter: 160000, GapMaxCenter: 400000, MaxGapDelta: 85000, Spacing: 300000, Width: 52000, GapHeight: 156000, SafeLeadIn: 420000, Horizon: 960000, FloorY: 561000, CeilingY: 0}, Limits{8, 2}, []Definition{{"FEATHER", 1, 34, 1, 1, 1, 7000, "feather-v1"}, {"GAME_STAR", 1, 8, 4, 3, 1, 7000, "game-star-v1"}}, 58, nil, defaultChallengeSet(), nil}
-var canonicalDefaultConfig = Config{FlightConfig{320, -5600, 8500, 100000, 12000, 10000}, PipeConfig{Speed: 3000, MaxSpeed: 4800, RampTicks: 2700, SpeedEveryPipes: 10, SpeedStepPercent: 10, GapMinCenter: 160000, GapMaxCenter: 400000, MaxGapDelta: 85000, Spacing: 300000, Width: 52000, GapHeight: 156000, SafeLeadIn: 420000, Horizon: 960000, FloorY: 561000, CeilingY: 0}, Limits{8, 3}, []Definition{{"FEATHER", 1, 34, 1, 1, 1, 7000, "feather-v1"}, {"GAME_STAR", 1, 0, 4, 3, 1, 7000, "game-star-v1"}}, 66, &StarSchedule{8, 16}, defaultChallengeSet(), nil}
+var canonicalPriorDefaultConfig = Config{FlightConfig{320, -5600, 8500, 100000, 12000, 10000}, PipeConfig{Speed: 3000, MaxSpeed: 4800, RampTicks: 2700, SpeedEveryPipes: 10, SpeedStepPercent: 10, GapMinCenter: 160000, GapMaxCenter: 400000, MaxGapDelta: 85000, Spacing: 300000, Width: 52000, GapHeight: 156000, SafeLeadIn: 420000, Horizon: 960000, FloorY: 561000, CeilingY: 0}, Limits{8, 3}, []Definition{{"FEATHER", 1, 34, 1, 1, 1, 7000, "feather-v1"}, {"GAME_STAR", 1, 0, 4, 3, 1, 7000, "game-star-v1"}}, 66, &StarSchedule{8, 16}, defaultChallengeSet(), nil}
 
 func defaultChallengeSet() *ChallengeSet {
 	return &ChallengeSet{4, "intro-steady", []string{"cruise-steady", "cruise-rise", "cruise-dip", "cruise-offset"}, []string{"pressure-rise", "pressure-dip", "pressure-offset"}, "recovery-steady", []ChallengeFamily{
@@ -251,11 +263,11 @@ func PatternCatalog() []Pattern {
 }
 
 // DefaultConfiguration returns an independent copy of the default rules.
-func PriorDefaultConfiguration() Config  { return cloneConfig(canonicalDefaultConfig) }
-func DefaultConfiguration() Config       { return WetlandConfiguration() }
+func PriorDefaultConfiguration() Config  { return cloneConfig(canonicalPriorDefaultConfig) }
+func DefaultConfiguration() Config       { return VariedObstacleConfiguration() }
 func LegacyDefaultConfiguration() Config { return cloneConfig(canonicalLegacyDefaultConfig) }
 func WetlandConfiguration() Config {
-	c := cloneConfig(canonicalDefaultConfig)
+	c := cloneConfig(canonicalPriorDefaultConfig)
 	c.Challenges = nil
 	c.Limits.MaxActiveCollectibles = 10
 	coinRoute := func(points ...int64) []WetlandRewardPoint {
@@ -275,20 +287,36 @@ func WetlandConfiguration() Config {
 	return c
 }
 
+func VariedObstacleConfiguration() Config {
+	c := WetlandConfiguration()
+	c.Pipes.GapMinCenter, c.Pipes.GapMaxCenter, c.Pipes.MaxGapDelta = 78000, 483000, 120000
+	c.Wetland.CatalogVersion = 2
+	c.Wetland.Geometry = &WetlandGeometryConfig{HalfPipeMinPercent: 70, HalfPipeMaxPercent: 90, FloatingBarMinWidth: 90000, FloatingBarMaxWidth: 216000, FloatingBarHeight: 42000}
+	c.Wetland.IntroLaneCenters = []int64{280000, 340000, 400000, 483000}
+	for i := range c.Wetland.Families {
+		family := &c.Wetland.Families[i]
+		family.GapCenters = []int64{480000, 480000, 480000, 480000}
+		if family.ID == "steady" {
+			family.ObstacleTypes = []string{"pipes", "pipes", "pipes", "pipes"}
+		}
+	}
+	return c
+}
+
 const MaxCounter int64 = 9007199254740990
 const maxSafeInteger int64 = 9007199254740991
-const SimulationVersion = "2.0.0"
-const GeneratorVersion = "2.0.0"
-const DefaultConfigID = "dd-v2-wetland-v1"
+const SimulationVersion = "2.1.0"
+const GeneratorVersion = "2.1.0"
+const DefaultConfigID = "dd-v2-varied-obstacles-v1"
 const PriorSimulationVersion = "1.4.0"
 const PriorGeneratorVersion = "1.3.0"
 const PriorDefaultConfigID = "dd-v1-star-interval-v1"
 const LegacySimulationVersion = "1.3.0"
 const LegacyGeneratorVersion = "1.2.0"
 const LegacyDefaultConfigID = "dd-v1-stepped-v1"
-const WetlandSimulationVersion = SimulationVersion
-const WetlandGeneratorVersion = GeneratorVersion
-const WetlandDefaultConfigID = DefaultConfigID
+const WetlandSimulationVersion = "2.0.0"
+const WetlandGeneratorVersion = "2.0.0"
+const WetlandDefaultConfigID = "dd-v2-wetland-v1"
 
 func Step(input State, frames []Input) (Result, error) {
 	input = cloneState(input)
@@ -391,7 +419,11 @@ func Step(input State, frames []Input) (Result, error) {
 	keptP := []Pipe{}
 	for _, p := range pipes {
 		if input.Config.Wetland != nil {
-			if stationRightEdge(p, input.Config) >= duck.X-f.DuckHalfWidth {
+			if input.Config.Wetland.CatalogVersion >= 2 {
+				if stationRenderRightEdge(p, input.Config) >= 0 {
+					keptP = append(keptP, p)
+				}
+			} else if stationRightEdge(p, input.Config) >= duck.X-f.DuckHalfWidth {
 				keptP = append(keptP, p)
 			}
 		} else if p.X+pc.Width >= -pc.Width {

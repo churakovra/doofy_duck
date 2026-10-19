@@ -4,9 +4,11 @@ The deterministic game runs independently in TypeScript and Go. The modules expo
 
 ## Wetland rules
 
-The new default identity is simulation `2.0.0`, generator `2.0.0`, configuration
-`dd-v2-wetland-v1`. See [wetland challenges](WETLAND_CHALLENGES.md) for the
-gameplay contract, deployment ordering and current verification status.
+The shared simulation default is simulation `2.1.0`, generator `2.1.0`,
+configuration `dd-v2-varied-obstacles-v1`, encounter catalog 2. Account issuance
+remains pinned to the frozen `2.0.0` / `2.0.0` / `dd-v2-wetland-v1` identity
+until frontend, replay and settlement integration are accepted. See
+[wetland challenges](WETLAND_CHALLENGES.md) for current verification status.
 
 Four-station encounters combine paired pipes, ceiling vines, floor rocks/reeds and
 floating debris. Each station supplies authoritative collision rectangles,
@@ -20,6 +22,21 @@ recovery alternate. Seeded pressure selection does not repeat across consecutive
 pressure encounters. Geometry and spacing belong to the same catalog; the initial
 spacing choices are 240, 300 and 360 pixels, with 360-pixel recovery spacing.
 Flight physics and the speed formula below remain unchanged.
+
+Catalog 2 generates ceiling halves spanning 70–88% and floor halves spanning
+70–90% of playable height. Floating debris is 90–216 pixels wide and 42 pixels
+thick, with a seeded vertical center. The shared half-height minimum must be
+70–88%; the configured maximum may reach 90%, with ceiling halves capped at 88%.
+Collision and scoring use the realized
+integer rectangles, including each floating bar's actual width. A scored station
+remains in state until its complete silhouette has scrolled offscreen. The
+156-pixel paired opening, physics and speed progression remain unchanged.
+
+Introductory paired openings establish the seeded high or low approach; pressure
+encounters keep their attached halves on that side. Recovery openings connect
+toward the next pressure lane. Authored catalog-2 openings bypass the legacy gap
+clamp, so the introduction and recovery retain their intended shape. Catalog 1
+retains its frozen generation, reward placement and pruning behavior.
 
 Coin routes offer two pickups in the initial/recovery families and four in the
 second introductory/pressure families. Stars use the independent seeded 8–16
@@ -67,7 +84,7 @@ incompatible selectable family boundaries before play starts. Thus validated
 challenge centers retain their authored shape; the bounds clamp still protects
 the gap-only path. The legacy catalog above does not select these new families.
 
-Descriptor validation accepts the paired wetland, prior and legacy simulation/generator
+Descriptor validation accepts the varied, wetland, prior and legacy simulation/generator
 versions. Each default config ID is bound to its matching version pair; custom
 configuration IDs carry canonical configuration content. A legacy descriptor
 without an explicit config resolves to the legacy default, whose serialized state

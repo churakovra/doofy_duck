@@ -7,18 +7,18 @@ export interface RunDescriptor {
   readonly generatorVersion: string;
   readonly configId: string;
 }
-export const SIMULATION_VERSION = "2.0.0";
-export const GENERATOR_VERSION = "2.0.0";
-export const DEFAULT_CONFIG_ID = "dd-v2-wetland-v1";
+export const SIMULATION_VERSION = "2.1.0";
+export const GENERATOR_VERSION = "2.1.0";
+export const DEFAULT_CONFIG_ID = "dd-v2-varied-obstacles-v1";
 export const PRIOR_SIMULATION_VERSION = "1.4.0";
 export const PRIOR_GENERATOR_VERSION = "1.3.0";
 export const PRIOR_DEFAULT_CONFIG_ID = "dd-v1-star-interval-v1";
 export const LEGACY_SIMULATION_VERSION = "1.3.0";
 export const LEGACY_GENERATOR_VERSION = "1.2.0";
 export const LEGACY_DEFAULT_CONFIG_ID = "dd-v1-stepped-v1";
-export const WETLAND_SIMULATION_VERSION = SIMULATION_VERSION;
-export const WETLAND_GENERATOR_VERSION = GENERATOR_VERSION;
-export const WETLAND_DEFAULT_CONFIG_ID = DEFAULT_CONFIG_ID;
+export const WETLAND_SIMULATION_VERSION = "2.0.0";
+export const WETLAND_GENERATOR_VERSION = "2.0.0";
+export const WETLAND_DEFAULT_CONFIG_ID = "dd-v2-wetland-v1";
 export interface RunDescriptorIdentity {
   readonly runId: string;
   readonly seed: number;
@@ -87,6 +87,15 @@ export interface WetlandConfig {
   readonly families: readonly WetlandEncounterFamily[];
   readonly starRoute: WetlandRewardPoint;
   readonly catalogVersion: number;
+  readonly geometry?: WetlandGeometryConfig;
+  readonly introLaneCenters?: readonly number[];
+}
+export interface WetlandGeometryConfig {
+  readonly halfPipeMinPercent: number;
+  readonly halfPipeMaxPercent: number;
+  readonly floatingBarMinWidth: number;
+  readonly floatingBarMaxWidth: number;
+  readonly floatingBarHeight: number;
 }
 export interface WetlandRewardPoint { readonly xOffset: number; readonly yOffset: number; }
 export interface WetlandEncounterFamily {

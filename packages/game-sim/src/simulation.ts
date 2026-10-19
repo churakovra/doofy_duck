@@ -1,8 +1,8 @@
 import { configIdFor } from "./canonical.js";
 import { bonusY, generateNext, wetlandRewardPoint, worldSpeedAt } from "./generation.js";
 import { deepFreeze, incrementCounter } from "./internal.js";
-import { DEFAULT_CONFIG, LEGACY_DEFAULT_CONFIG, PRIOR_DEFAULT_CONFIG, validateConfig, validateDescriptor } from "./config.js";
-import { mix32, SIMULATION_VERSION, GENERATOR_VERSION, LEGACY_DEFAULT_CONFIG_ID, LEGACY_SIMULATION_VERSION, LEGACY_GENERATOR_VERSION, PRIOR_DEFAULT_CONFIG_ID, PRIOR_SIMULATION_VERSION, PRIOR_GENERATOR_VERSION, type Collectible, type GameConfig, type InputFrame, type Phase, type RunDescriptor, type RunDescriptorIdentity, type RunState, type StepResult, type GameEvent } from "./types.js";
+import { DEFAULT_CONFIG, LEGACY_DEFAULT_CONFIG, PRIOR_DEFAULT_CONFIG, WETLAND_DEFAULT_CONFIG, validateConfig, validateDescriptor } from "./config.js";
+import { mix32, SIMULATION_VERSION, GENERATOR_VERSION, LEGACY_DEFAULT_CONFIG_ID, LEGACY_SIMULATION_VERSION, LEGACY_GENERATOR_VERSION, PRIOR_DEFAULT_CONFIG_ID, PRIOR_SIMULATION_VERSION, PRIOR_GENERATOR_VERSION, WETLAND_DEFAULT_CONFIG_ID, WETLAND_GENERATOR_VERSION, WETLAND_SIMULATION_VERSION, type Collectible, type GameConfig, type InputFrame, type Phase, type RunDescriptor, type RunDescriptorIdentity, type RunState, type StepResult, type GameEvent } from "./types.js";
 
 export function createRunDescriptor(
   identity: RunDescriptorIdentity,
@@ -11,10 +11,11 @@ export function createRunDescriptor(
   const configId = configIdFor(config);
   const legacy = configId === LEGACY_DEFAULT_CONFIG_ID;
   const prior = configId === PRIOR_DEFAULT_CONFIG_ID;
+  const wetland = configId === WETLAND_DEFAULT_CONFIG_ID;
   return {
     ...identity,
-    simulationVersion: legacy ? LEGACY_SIMULATION_VERSION : prior ? PRIOR_SIMULATION_VERSION : SIMULATION_VERSION,
-    generatorVersion: legacy ? LEGACY_GENERATOR_VERSION : prior ? PRIOR_GENERATOR_VERSION : GENERATOR_VERSION,
+    simulationVersion: legacy ? LEGACY_SIMULATION_VERSION : prior ? PRIOR_SIMULATION_VERSION : wetland ? WETLAND_SIMULATION_VERSION : SIMULATION_VERSION,
+    generatorVersion: legacy ? LEGACY_GENERATOR_VERSION : prior ? PRIOR_GENERATOR_VERSION : wetland ? WETLAND_GENERATOR_VERSION : GENERATOR_VERSION,
     configId,
   };
 }
@@ -24,10 +25,13 @@ export function createRun(
   config?: GameConfig,
 ): RunState {
   validateDescriptor(descriptor);
-  const resolvedConfig = config ?? (descriptor.configId === LEGACY_DEFAULT_CONFIG_ID ? LEGACY_DEFAULT_CONFIG : descriptor.configId === PRIOR_DEFAULT_CONFIG_ID ? PRIOR_DEFAULT_CONFIG : DEFAULT_CONFIG);
+  const resolvedConfig = config ?? (descriptor.configId === LEGACY_DEFAULT_CONFIG_ID ? LEGACY_DEFAULT_CONFIG : descriptor.configId === PRIOR_DEFAULT_CONFIG_ID ? PRIOR_DEFAULT_CONFIG : descriptor.configId === WETLAND_DEFAULT_CONFIG_ID ? WETLAND_DEFAULT_CONFIG : DEFAULT_CONFIG);
   validateConfig(resolvedConfig);
   if (descriptor.configId !== configIdFor(resolvedConfig))
     throw Error("configId does not identify supplied config");
+  if (resolvedConfig.wetland?.catalogVersion === 2 &&
+      (descriptor.simulationVersion !== SIMULATION_VERSION || descriptor.generatorVersion !== GENERATOR_VERSION))
+    throw Error("catalog-2 wetland config requires the current simulation and generator versions");
   const ownedConfig = cloneConfig(resolvedConfig);
   const starSchedule = ownedConfig.starSchedule;
   const starInterval = starSchedule ? seededStarInterval(descriptor.seed, 0, starSchedule.minIntervalPipes, starSchedule.maxIntervalPipes) : undefined;
@@ -62,6 +66,9 @@ function stationRightEdge(pipe: RunState["pipes"][number], config: GameConfig): 
     return Math.max(...pipe.obstacles.map(obstacle => pipe.x + obstacle.xOffset + Math.floor(obstacle.width / 2)));
   return pipe.x + Math.floor(config.pipes.width / 2);
 }
+function stationRenderRightEdge(pipe: RunState["pipes"][number], config: GameConfig): number {
+  return stationRightEdge(pipe, config) + config.pipes.width;
+}
 function cloneConfig(config: GameConfig): GameConfig {
   const { starSchedule, ...base } = config;
   return {
@@ -76,7 +83,7 @@ function cloneConfig(config: GameConfig): GameConfig {
       pressureFamilyIds: [...config.challenges.pressureFamilyIds],
       families: config.challenges.families.map(family => ({ ...family, gapCenters: [...family.gapCenters] })),
     },
-    ...(config.wetland == null ? {} : { wetland: { ...config.wetland, stationSpacing: [...config.wetland.stationSpacing], introFamilies: [...config.wetland.introFamilies], pressureFamilies: [...config.wetland.pressureFamilies], starRoute: { ...config.wetland.starRoute }, families: config.wetland.families.map(family => ({ ...family, gapCenters: [...family.gapCenters], obstacleTypes: [...family.obstacleTypes], stationSpacing: [...family.stationSpacing], rewardRoute: family.rewardRoute.map(point => ({ ...point })) })) } }),
+    ...(config.wetland == null ? {} : { wetland: { ...config.wetland, stationSpacing: [...config.wetland.stationSpacing], introFamilies: [...config.wetland.introFamilies], pressureFamilies: [...config.wetland.pressureFamilies], ...(config.wetland.introLaneCenters === undefined ? {} : { introLaneCenters: [...config.wetland.introLaneCenters] }), ...(config.wetland.geometry === undefined ? {} : { geometry: { ...config.wetland.geometry } }), starRoute: { ...config.wetland.starRoute }, families: config.wetland.families.map(family => ({ ...family, gapCenters: [...family.gapCenters], obstacleTypes: [...family.obstacleTypes], stationSpacing: [...family.stationSpacing], rewardRoute: family.rewardRoute.map(point => ({ ...point })) })) } }),
     ...(starSchedule == null ? {} : { starSchedule: { ...starSchedule } }),
   };
 }
@@ -179,7 +186,9 @@ export function step(
     tick: input.tick + 1,
     duck,
     pipes: outPipes.filter((p) => input.config.wetland
-      ? stationRightEdge(p, input.config) >= duck.x - f.duckHalfWidth
+      ? input.config.wetland.catalogVersion >= 2
+        ? stationRenderRightEdge(p, input.config) >= 0
+        : stationRightEdge(p, input.config) >= duck.x - f.duckHalfWidth
       : p.x + pc.width >= -pc.width),
     ...(input.config.wetland && input.nextPipeX !== undefined
       ? { nextPipeX: input.nextPipeX - speed }

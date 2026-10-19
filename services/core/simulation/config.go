@@ -5,6 +5,19 @@ import (
 	"strings"
 )
 
+func variedRecoveryCentersValid(p PipeConfig) bool {
+	offset := p.GapMinCenter - 78000
+	for _, recipe := range [][]int64{{100000, 220000, 340000, 460000}, {430000, 310000, 190000, 78000}} {
+		for i, base := range recipe {
+			center := base + offset
+			if center < p.GapMinCenter || center > p.GapMaxCenter || i > 0 && abs(center-(recipe[i-1]+offset)) > p.MaxGapDelta {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 func Mix32(x uint32) uint32 {
 	x ^= x >> 16
 	x *= 0x85ebca6b
@@ -21,10 +34,14 @@ func validateDescriptor(d Descriptor) error {
 	currentRules := d.SimulationVersion == SimulationVersion && d.GeneratorVersion == GeneratorVersion
 	priorRules := d.SimulationVersion == PriorSimulationVersion && d.GeneratorVersion == PriorGeneratorVersion
 	legacyRules := d.SimulationVersion == LegacySimulationVersion && d.GeneratorVersion == LegacyGeneratorVersion
+	wetlandRules := d.SimulationVersion == WetlandSimulationVersion && d.GeneratorVersion == WetlandGeneratorVersion
 	customConfig := strings.HasPrefix(d.ConfigID, "dd-v1-config:") && len(d.ConfigID) > len("dd-v1-config:")
-	if strings.TrimSpace(d.RunID) == "" || !(currentRules || priorRules || legacyRules) ||
-		!(d.ConfigID == DefaultConfigID || d.ConfigID == PriorDefaultConfigID || d.ConfigID == LegacyDefaultConfigID || customConfig) ||
+	if strings.TrimSpace(d.RunID) == "" || !(currentRules || wetlandRules || priorRules || legacyRules) ||
+		!(d.ConfigID == DefaultConfigID || d.ConfigID == WetlandDefaultConfigID || d.ConfigID == PriorDefaultConfigID || d.ConfigID == LegacyDefaultConfigID || customConfig) ||
 		(d.ConfigID == DefaultConfigID && !currentRules) || (d.ConfigID == PriorDefaultConfigID && !priorRules) || (d.ConfigID == LegacyDefaultConfigID && !legacyRules) {
+		return fmt.Errorf("invalid descriptor")
+	}
+	if d.ConfigID == WetlandDefaultConfigID && !wetlandRules {
 		return fmt.Errorf("invalid descriptor")
 	}
 	return nil
@@ -44,7 +61,14 @@ func cloneConfig(c Config) Config {
 	}
 	if c.Wetland != nil {
 		wetland := *c.Wetland
+		if wetland.Geometry != nil {
+			geometry := *wetland.Geometry
+			wetland.Geometry = &geometry
+		}
 		wetland.StationSpacing = append([]int64{}, c.Wetland.StationSpacing...)
+		if c.Wetland.IntroLaneCenters != nil {
+			wetland.IntroLaneCenters = append([]int64{}, c.Wetland.IntroLaneCenters...)
+		}
 		wetland.IntroFamilies = append([]string{}, c.Wetland.IntroFamilies...)
 		wetland.PressureFamilies = append([]string{}, c.Wetland.PressureFamilies...)
 		wetland.Families = append([]WetlandFamily{}, c.Wetland.Families...)
@@ -133,7 +157,12 @@ func ValidateConfig(c Config) error {
 		w := c.Wetland
 		numericValues = append(numericValues, w.CatalogVersion)
 		numericValues = append(numericValues, w.StationSpacing...)
+		numericValues = append(numericValues, w.IntroLaneCenters...)
 		numericValues = append(numericValues, w.RecoverySpacing, w.StarRoute.XOffset, w.StarRoute.YOffset)
+		if w.Geometry != nil {
+			numericValues = append(numericValues, w.Geometry.HalfPipeMinPercent, w.Geometry.HalfPipeMaxPercent,
+				w.Geometry.FloatingBarMinWidth, w.Geometry.FloatingBarMaxWidth, w.Geometry.FloatingBarHeight)
+		}
 		for _, family := range w.Families {
 			numericValues = append(numericValues, family.GapCenters...)
 			numericValues = append(numericValues, family.StationSpacing...)
@@ -190,8 +219,26 @@ func ValidateConfig(c Config) error {
 		if c.Challenges != nil {
 			return fmt.Errorf("wetland and legacy challenge modes are mutually exclusive")
 		}
-		if wetland.CatalogVersion != 1 || len(wetland.StationSpacing) != 3 || wetland.RecoverySpacing != 360000 || len(wetland.IntroFamilies) != 2 || len(wetland.PressureFamilies) != 3 || len(wetland.Families) != 5 {
+		if (wetland.CatalogVersion != 1 && wetland.CatalogVersion != 2) || len(wetland.StationSpacing) != 3 || wetland.RecoverySpacing != 360000 || len(wetland.IntroFamilies) != 2 || len(wetland.PressureFamilies) != 3 || len(wetland.Families) != 5 {
 			return fmt.Errorf("wetland catalog")
+		}
+		if wetland.CatalogVersion == 1 {
+			if wetland.Geometry != nil || wetland.IntroLaneCenters != nil {
+				return fmt.Errorf("legacy wetland catalog cannot contain varied geometry")
+			}
+		} else {
+			g := wetland.Geometry
+			if g == nil || g.HalfPipeMinPercent < 70 || g.HalfPipeMinPercent > 88 || !variedRecoveryCentersValid(p) ||
+				g.HalfPipeMaxPercent < g.HalfPipeMinPercent || g.HalfPipeMaxPercent > 90 ||
+				g.FloatingBarMinWidth != 90000 || g.FloatingBarMaxWidth != 216000 || g.FloatingBarHeight != 42000 ||
+				len(wetland.IntroLaneCenters) != 4 {
+				return fmt.Errorf("wetland varied geometry bounds")
+			}
+			for i, center := range wetland.IntroLaneCenters {
+				if center < p.GapMinCenter || center > p.GapMaxCenter || i > 0 && abs(center-wetland.IntroLaneCenters[i-1]) > p.MaxGapDelta {
+					return fmt.Errorf("wetland intro lane bounds")
+				}
+			}
 		}
 		if strings.Join(wetland.IntroFamilies, ",") != "steady,quick-pairs" || strings.Join(wetland.PressureFamilies, ",") != "dive-climb,climb-dive,slalom" {
 			return fmt.Errorf("wetland families")
@@ -260,8 +307,9 @@ func ValidateConfig(c Config) error {
 		}
 		for _, family := range wetland.Families {
 			for i, typeID := range family.ObstacleTypes {
-				if !validWetlandRoute(c, family.ID, int64(i), family.GapCenters[i], typeID, family.RewardRoute[i], featherRadius, false) ||
-					!validWetlandRoute(c, family.ID, int64(i), family.GapCenters[i], typeID, wetland.StarRoute, starDefinition, true) {
+				if wetland.CatalogVersion == 2 && (!validWetlandRoutePoint(family.RewardRoute[i], false) || !validWetlandRoutePoint(wetland.StarRoute, true)) ||
+					wetland.CatalogVersion == 1 && (!validWetlandRoute(c, family.ID, int64(i), family.GapCenters[i], typeID, family.RewardRoute[i], featherRadius, false, 0, int64(i)) ||
+						!validWetlandRoute(c, family.ID, int64(i), family.GapCenters[i], typeID, wetland.StarRoute, starDefinition, true, 0, int64(i))) {
 					return fmt.Errorf("wetland reward route intersects obstacle or leaves flight bounds")
 				}
 			}
@@ -386,13 +434,13 @@ func ValidateConfig(c Config) error {
 	return nil
 }
 
-func validWetlandRoute(c Config, familyID string, step int64, center int64, obstacleType string, point WetlandRewardPoint, radius int64, star bool) bool {
-	if point.XOffset == 0 || abs(point.XOffset) > 120000 || point.YOffset < -70000 || point.YOffset > 70000 || star && (point.XOffset <= 0 || point.YOffset <= 0) {
+func validWetlandRoute(c Config, familyID string, step int64, center int64, obstacleType string, point WetlandRewardPoint, radius int64, star bool, seed uint32, index int64) bool {
+	if !validWetlandRoutePoint(point, star) {
 		return false
 	}
 	stationStep := step
 	pipe := Pipe{X: 0, GapCenter: center, EncounterFamily: familyID, StationStep: &stationStep}
-	pipe.Obstacles = wetlandObstacles(obstacleType, center, c)
+	pipe.Obstacles = wetlandObstacles(obstacleType, center, c, seed, index)
 	_, y := wetlandRewardPoint(c, pipe, radius, star)
 	if y <= c.Pipes.CeilingY+c.Flight.DuckHalfHeight || y >= c.Pipes.FloorY-c.Flight.DuckHalfHeight {
 		return false
@@ -406,6 +454,13 @@ func validWetlandRoute(c Config, familyID string, step int64, center int64, obst
 		}
 	}
 	return true
+}
+
+func validWetlandRoutePoint(point WetlandRewardPoint, star bool) bool {
+	if star {
+		return point.XOffset > 0 && point.XOffset <= 120000 && point.YOffset > 0 && point.YOffset <= 70000
+	}
+	return point.XOffset != 0 && abs(point.XOffset) <= 120000 && point.YOffset >= -70000 && point.YOffset <= 70000
 }
 
 func uniqueStrings(values []string) []string {
