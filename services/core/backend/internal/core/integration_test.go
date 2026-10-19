@@ -91,6 +91,10 @@ func TestPostgresRunCheckpointsAreOwnedIdempotentAndFenced(t *testing.T) {
 	if first.WriterToken == "" {
 		t.Fatal("new run did not return writer token")
 	}
+	if first.SimulationVersion != sim.SimulationVersion || first.GeneratorVersion != sim.GeneratorVersion ||
+		first.ConfigID != "dd-v2-varied-obstacles-v1" || first.State.Config.Wetland == nil || first.State.Config.Wetland.CatalogVersion != 2 {
+		t.Fatalf("new run identity/catalog mismatch: %s/%s/%s", first.SimulationVersion, first.GeneratorVersion, first.ConfigID)
+	}
 	statuses := make(chan int, 2)
 	for i := 0; i < 2; i++ {
 		wg.Add(1)
@@ -131,7 +135,9 @@ func TestPostgresRunCheckpointsAreOwnedIdempotentAndFenced(t *testing.T) {
 		t.Fatalf("invalid checkpoint evidence: %+v err=%v", evidence, e)
 	}
 	replayed, replayTicks, _, e := ReplayCheckpoint(first.State, 0, evidence.Ticks, ActiveTickLimit)
-	if e != nil || replayTicks != ack.ActiveTicks || replayed.Tick != ack.State.Tick || replayed.Score != ack.State.Score {
+	replayedJSON, replayJSONErr := sim.CanonicalJSON(replayed)
+	ackJSON, ackJSONErr := sim.CanonicalJSON(ack.State)
+	if e != nil || replayJSONErr != nil || ackJSONErr != nil || replayTicks != ack.ActiveTicks || replayedJSON != ackJSON {
 		t.Fatalf("stored input evidence did not reproduce accepted state: ticks=%d err=%v", replayTicks, e)
 	}
 	conflict := map[string]any{"checkpointSequence": 0, "writerGeneration": 1, "writerToken": first.WriterToken, "idempotencyKey": "different-key", "ticks": [][]sim.Input{{{Sequence: 0, Action: "FLAP"}}, {}}}
@@ -203,6 +209,45 @@ func TestReadyRequiresEveryEmbeddedMigration(t *testing.T) {
 	}
 	if status := requestReady(); status != http.StatusServiceUnavailable {
 		t.Fatalf("missing current migration readiness status=%d", status)
+	}
+}
+
+func TestPostgresRecoveryRetainsPersistedCatalogOneIdentity(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	const runID = "00000000-0000-4000-8000-000000000287"
+	const accountID = "00000000-0000-4000-8000-000000000288"
+	config := sim.WetlandConfiguration()
+	configID, err := sim.ConfigIDFor(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, err := sim.CreateRun(sim.Descriptor{RunID: runID, Seed: 37, SimulationVersion: sim.WetlandSimulationVersion, GeneratorVersion: sim.WetlandGeneratorVersion, ConfigID: configID}, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO core_runs(id,account_id,seed,simulation_version,generator_version,config_id,state,status,writer_token_hash,last_contact) VALUES($1,$2,37,$3,$4,$5,$6,'active',decode('01','hex'),now())`, runID, accountID, sim.WetlandSimulationVersion, sim.WetlandGeneratorVersion, configID, encoded); err != nil {
+		t.Fatal(err)
+	}
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer((&Server{DB: pool, Auth: JWTVerifier{Keys: map[string]ed25519.PublicKey{"k": pub}}, OutboxConfigured: true}).Handler())
+	defer server.Close()
+	resp := request(t, server.Client(), http.MethodGet, server.URL+"/api/v1/runs/current", integrationTokenFor(t, priv, accountID), nil)
+	defer resp.Body.Close()
+	var recovered Snapshot
+	if resp.StatusCode != http.StatusOK || json.NewDecoder(resp.Body).Decode(&recovered) != nil {
+		t.Fatalf("persisted catalog-1 run recovery status=%d", resp.StatusCode)
+	}
+	if recovered.RunID != runID || recovered.SimulationVersion != sim.WetlandSimulationVersion || recovered.GeneratorVersion != sim.WetlandGeneratorVersion ||
+		recovered.ConfigID != "dd-v2-wetland-v1" || recovered.State.Config.Wetland == nil || recovered.State.Config.Wetland.CatalogVersion != 1 {
+		t.Fatalf("catalog-1 recovery identity changed: %+v", recovered)
 	}
 }
 
@@ -354,8 +399,8 @@ func TestPostgresCompletionOutboxRetriesAndOutageGrace(t *testing.T) {
 		t.Fatalf("create status=%d", resp.StatusCode)
 	}
 	state := run.State
-	if state.Descriptor.SimulationVersion != sim.WetlandSimulationVersion || state.Descriptor.GeneratorVersion != sim.WetlandGeneratorVersion || state.Descriptor.ConfigID != sim.WetlandDefaultConfigID || state.Config.Wetland == nil {
-		t.Fatalf("new run did not pin wetland rules: %+v", state.Descriptor)
+	if state.Descriptor.SimulationVersion != sim.SimulationVersion || state.Descriptor.GeneratorVersion != sim.GeneratorVersion || state.Descriptor.ConfigID != "dd-v2-varied-obstacles-v1" || state.Config.Wetland == nil || state.Config.Wetland.CatalogVersion != 2 {
+		t.Fatalf("new run did not pin varied-obstacle rules: %+v", state.Descriptor)
 	}
 	var ticks [][]sim.Input
 	for i := 0; i < CheckpointTickLimit; i++ {

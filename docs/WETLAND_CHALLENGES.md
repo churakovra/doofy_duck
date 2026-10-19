@@ -1,8 +1,9 @@
 # Wetland challenges
 
 Status: the `2.1.0` geometry iteration on `feature/varied-obstacle-geometry`
-is incomplete. Technical completion requires shared replay parity, account and
-settlement integration, reviewed reward-route evidence and final checks. The
+is incomplete. Shared simulation, account and settlement integration are implemented and
+reviewed. Technical completion still requires the full reward-route evidence
+and final checks. The
 `2.0.0` contract and dated verification below describe the frozen baseline.
 
 ## Geometry iteration in progress
@@ -22,7 +23,35 @@ The approved target is simulation/generator `2.1.0`, configuration
 - Simulation rectangles govern collision, scoring, reward placement and rendering.
   Authored connectors establish high/low approaches before long barriers.
 - Existing `2.0.0` and older identities, serialized states and fixture expectations
-  remain frozen. New issuance waits for replay, frontend and settlement support.
+  remain frozen. New issuance uses catalog 2 after replay, frontend and settlement
+  support were integrated.
+
+Catalog 2 starts with paired openings approaching one seeded edge lane. The low
+route uses centers 280/340/400/483 pixels; the high route mirrors them to
+281/221/161/78. Quick pairs retain the selected approach. Pressure encounters
+choose a seeded high or low lane; their attached halves use the matching floor
+or ceiling orientation. Recovery uses paired openings at 360-pixel spacing.
+When the next pressure lane changes, recovery connects through
+100/220/340/460 pixels downward or 430/310/190/78 upward. Custom worlds translate
+these recipes from their configured minimum gap center and validate their bounds.
+
+Reward positions are resolved alongside the realized rectangles. Coin routes
+use the free side of attached obstacles or an offset above/below floating debris;
+paired openings retain authored lateral offsets. Stars use an approach detour
+before the station. Pickup radius, duck clearance and world bounds constrain the
+resolved points. Geometry clearance alone does not establish a playable reward
+route: complete pickup and following-exit witnesses remain required.
+
+Shared simulation support is committed in `6068641`. Type checking, lint,
+154 simulation tests, native Go tests and shared parity passed for that milestone.
+Independent review found custom-version binding and translated-recovery defects;
+both were fixed and rechecked. Account integration also passed type/lint checks, 65 focused web tests, Core
+PostgreSQL tests, and Platform formatting/lint/mypy plus 66 tests with real
+PostgreSQL. Independent integration review found no blocker. New runs use
+catalog 2; policy `verified-pickups-v4-varied-obstacles` accepts only its exact
+default identity, retaining 1:1 credit, the 30-coin run cap and existing Star
+rules. The full catalog-2 route matrix and final checks remain open, so these
+results do not mark the feature complete.
 
 Some bounded survival witnesses pass, but reward-route acceptance is still open.
 Earlier searched reward examples were invalidated by a hidden-owner-metadata

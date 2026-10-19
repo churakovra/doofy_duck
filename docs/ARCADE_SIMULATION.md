@@ -5,9 +5,8 @@ The deterministic game runs independently in TypeScript and Go. The modules expo
 ## Wetland rules
 
 The shared simulation default is simulation `2.1.0`, generator `2.1.0`,
-configuration `dd-v2-varied-obstacles-v1`, encounter catalog 2. Account issuance
-remains pinned to the frozen `2.0.0` / `2.0.0` / `dd-v2-wetland-v1` identity
-until frontend, replay and settlement integration are accepted. See
+configuration `dd-v2-varied-obstacles-v1`, encounter catalog 2. New account runs use this identity. Existing runs retain the frozen
+`2.0.0` / `2.0.0` / `dd-v2-wetland-v1` identity or their earlier rules. See
 [wetland challenges](WETLAND_CHALLENGES.md) for current verification status.
 
 Four-station encounters combine paired pipes, ceiling vines, floor rocks/reeds and

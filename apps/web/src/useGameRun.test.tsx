@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useGameRun } from './useGameRun';
 import { LocaleProvider, useLocale } from './locale';
-import { DEFAULT_CONFIG, PRIOR_DEFAULT_CONFIG, type GameConfig, type GameEvent, type RunDescriptorIdentity } from '@doofy-duck/game-sim';
+import { DEFAULT_CONFIG, PRIOR_DEFAULT_CONFIG, WETLAND_DEFAULT_CONFIG, createRun, createRunDescriptor, type GameConfig, type GameEvent, type RunDescriptorIdentity, type RunState } from '@doofy-duck/game-sim';
 
 let run: ReturnType<typeof useGameRun>;
 let frameId: number;
@@ -12,7 +12,7 @@ let now: number;
 let frames: Map<number, FrameRequestCallback>;
 let root: ReturnType<typeof createRoot>;
 let host: HTMLDivElement;
-let options: { config?: GameConfig; createIdentity?: () => RunDescriptorIdentity; onEvents?: (events: readonly GameEvent[]) => void; onTick?: (state: unknown, ticks: readonly { sequence: number; action: 'FLAP' }[]) => void; activeTickLimit?: number } = {};
+let options: { config?: GameConfig; createIdentity?: () => RunDescriptorIdentity; initialState?: RunState; onEvents?: (events: readonly GameEvent[]) => void; onTick?: (state: unknown, ticks: readonly { sequence: number; action: 'FLAP' }[]) => void; activeTickLimit?: number } = {};
 const callbacks = {
   onFlapUnlock: vi.fn(), onFlap: vi.fn(), onPickup: vi.fn(),
   onPhaseChange: vi.fn(), onRunEnded: vi.fn(),
@@ -63,13 +63,23 @@ afterEach(() => {
 });
 
 describe('run clock integration', () => {
-  it('restarts a fresh default run with the current wetland identity', () => {
+  it('restarts a fresh default run with the varied-obstacle identity', () => {
     act(() => run.restart());
+    expect(run.getState().config.wetland?.catalogVersion).toBe(2);
+    expect(run.getState().descriptor).toMatchObject({
+      simulationVersion: '2.1.0', generatorVersion: '2.1.0', configId: 'dd-v2-varied-obstacles-v1',
+    });
+    expect(run.getState().config).toEqual(DEFAULT_CONFIG);
+  });
+
+  it('recovers an existing catalog-1 run without changing its identity', () => {
+    const state = createRun(createRunDescriptor({ runId: 'retained-wetland-v2', seed: 3 }, WETLAND_DEFAULT_CONFIG), WETLAND_DEFAULT_CONFIG);
+    options = { config: WETLAND_DEFAULT_CONFIG, initialState: state };
+    act(() => root.render(<LocaleProvider><Harness key="retained-wetland-v2" /></LocaleProvider>));
     expect(run.getState().config.wetland?.catalogVersion).toBe(1);
     expect(run.getState().descriptor).toMatchObject({
       simulationVersion: '2.0.0', generatorVersion: '2.0.0', configId: 'dd-v2-wetland-v1',
     });
-    expect(run.getState().config).toEqual(DEFAULT_CONFIG);
   });
 
   it('keeps the same active run and input sequence when language changes', () => {

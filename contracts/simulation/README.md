@@ -1,6 +1,6 @@
 # Arcade simulation fixture contract
 
-The arcade rules are documented in [`docs/ARCADE_SIMULATION.md`](../../docs/ARCADE_SIMULATION.md). Shared default identity: simulation `2.1.0`, generator `2.1.0`, default configuration `dd-v2-varied-obstacles-v1`, catalog 2. Frozen `2.0.0` / `2.0.0` / `dd-v2-wetland-v1` remains supported; account issuance stays pinned there while integration is pending. The prior `1.4.0`/`1.3.0` rules with `dd-v1-star-interval-v1` remain supported. The frozen `golden-v1.json` remains simulation `1.3.0`, generator `1.2.0`, configuration `dd-v1-stepped-v1`; its expected bytes are unchanged. `star-schedule-v1.json` adds authored seeded schedule vectors for the prior default.
+The arcade rules are documented in [`docs/ARCADE_SIMULATION.md`](../../docs/ARCADE_SIMULATION.md). Shared default identity: simulation `2.1.0`, generator `2.1.0`, default configuration `dd-v2-varied-obstacles-v1`, catalog 2. Frozen `2.0.0` / `2.0.0` / `dd-v2-wetland-v1` remains supported for existing runs; new account runs use the catalog-2 default. The prior `1.4.0`/`1.3.0` rules with `dd-v1-star-interval-v1` remain supported. The frozen `golden-v1.json` remains simulation `1.3.0`, generator `1.2.0`, configuration `dd-v1-stepped-v1`; its expected bytes are unchanged. `star-schedule-v1.json` adds authored seeded schedule vectors for the prior default.
 
 ## Authoritative files
 

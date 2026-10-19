@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { PRIOR_DEFAULT_CONFIG, WETLAND_DEFAULT_CONFIG, canonicalState, createRun, createRunDescriptor } from '@doofy-duck/game-sim';
+import { DEFAULT_CONFIG, PRIOR_DEFAULT_CONFIG, WETLAND_DEFAULT_CONFIG, canonicalState, createRun, createRunDescriptor } from '@doofy-duck/game-sim';
 
 vi.mock('pixi.js', () => ({
   Container: class {
@@ -82,6 +82,24 @@ describe('scene rendering', () => {
     expect(rect!.args[1]).toBe(obstacle.y / 1000);
     expect(world.calls.filter(call => call.method === 'roundRect')).toHaveLength(4);
     expect(world.calls.find(call => call.method === 'circle' && call.args[2] === 7)).toBeDefined();
+  });
+
+  it('renders varied obstacle widths and retains a scored station until simulation removal', () => {
+    const initial = createRun(createRunDescriptor({ runId: 'scene-varied', seed: 2 }));
+    const state = { ...initial, pipes: [{
+      ...initial.pipes[0]!, scored: true,
+      obstacles: [
+        { typeId: 'debris' as const, xOffset: -80_000, y: 160_000, width: 90_000, height: 42_000 },
+        { typeId: 'debris' as const, xOffset: 80_000, y: 260_000, width: 216_000, height: 42_000 },
+      ],
+    }], collectibles: [], config: DEFAULT_CONFIG };
+    const world = graphics();
+
+    paintWorld(world as never, state);
+
+    const rectangles = world.calls.filter(call => call.method === 'roundRect');
+    expect(rectangles.map(call => call.args[2])).toEqual([90, 216]);
+    expect(rectangles.map(call => call.args[3])).toEqual([42, 42]);
   });
 
   it('chooses collectible art by definition appearance and falls back for unknown appearances', () => {

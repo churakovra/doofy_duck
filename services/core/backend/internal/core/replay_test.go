@@ -1,10 +1,54 @@
 package core
 
 import (
+	"encoding/json"
 	"testing"
 
 	sim "doofyduck/simulation"
 )
+
+func TestReplayCheckpointRoundTripsVariedObstacleState(t *testing.T) {
+	config := sim.VariedObstacleConfiguration()
+	configID, err := sim.ConfigIDFor(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, err := sim.CreateRun(sim.Descriptor{RunID: "varied-replay", Seed: 7, SimulationVersion: sim.SimulationVersion, GeneratorVersion: sim.GeneratorVersion, ConfigID: configID}, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Descriptor.ConfigID != "dd-v2-varied-obstacles-v1" || state.Config.Wetland.CatalogVersion != 2 {
+		t.Fatalf("unexpected varied run identity/catalog: %+v", state.Descriptor)
+	}
+	var recovered sim.State
+	encoded, err := json.Marshal(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(encoded, &recovered); err != nil {
+		t.Fatal(err)
+	}
+	ticks := [][]sim.Input{{{Sequence: 0, Action: "FLAP"}}, {}, {}}
+	first, firstTicks, _, err := ReplayCheckpoint(state, 0, ticks, ActiveTickLimit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, secondTicks, _, err := ReplayCheckpoint(recovered, 0, ticks, ActiveTickLimit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstJSON, err := sim.CanonicalJSON(first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondJSON, err := sim.CanonicalJSON(second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if firstTicks != secondTicks || firstJSON != secondJSON {
+		t.Fatalf("recovered varied state replay diverged: ticks %d/%d", firstTicks, secondTicks)
+	}
+}
 
 func newState(t *testing.T) sim.State {
 	t.Helper()
