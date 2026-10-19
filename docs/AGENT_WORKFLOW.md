@@ -10,9 +10,18 @@ requirements or evidence that any implementation has passed acceptance.
 Read before assigning implementation or delegated documentation.
 
 - Inspect existing changes before assignment. Brief the worker on behavior and
-  acceptance criteria, owned files, required checks and relevant instruction/doc
-  paths. Reference shared instructions instead of copying them. Workers read only
-  needed context and follow root and nearest component instructions.
+  acceptance criteria for one coherent milestone, owned files, required checks,
+  a reporting/stop bound and relevant instruction/doc paths. Reference shared
+  instructions instead of copying them or the investigation history.
+- When feasibility is uncertain, first run a bounded investigation producing
+  constraints, a minimal reproducible case and open decisions. Use read-only Sol
+  analysis before production changes when that uncertainty controls the design.
+  Do not grow production code or a general-purpose test framework just to explore
+  an unsettled requirement. Ordinary, understood changes do not need this gate.
+- After feasibility is settled, deliver small, complete milestones. Each shared
+  simulation milestone includes its TypeScript/Go behavior and affected parity
+  checks; do not defer all native integration until the end. Keep unfinished rules
+  unavailable for issuance until their consumers and settlement support are ready.
 - Use the root model routing and `fork_turns="none"` with model overrides. Only
   the main agent delegates; workers must not spawn agents. Respect concurrency
   limits and do not fill slots merely because they exist.
@@ -31,6 +40,10 @@ Read before assigning implementation or delegated documentation.
 - During implementation, main resolves shared decisions and blockers without
   repeating the worker's investigation. Review the complete returned milestone;
   short coordination does not replace integration review.
+- The worker owns routine implementation decisions within the settled contract.
+  Use one concise brief and one consolidated review per milestone, rather than
+  approvals after individual edits or a stream of main-agent algorithm patches.
+  Report scope changes, blockers and the reassessment threshold promptly.
 
 ## Test assumptions
 
@@ -42,6 +55,11 @@ observation/reaction timing, requested speed, entry position/velocity, complete
 pickup criteria and survival through the following exit. For other harnesses,
 check the applicable inputs, timing, workload and success conditions; mark any
 inapplicable assumptions explicitly.
+
+Declare the required coverage matrix before searching or expanding cases. Retain
+failures and report uncovered cells. Searching for successful examples can establish
+an explicitly bounded witness, but cannot replace failing required cases or satisfy
+coverage merely by asserting that some example of each type passed.
 
 Separate the requirement from the controller strategy and fixture assumptions.
 A failed controller trace does not itself prove impossible geometry. Diagnose
@@ -70,6 +88,11 @@ request to the existing Luna owner. Recheck changed paths and affected callers;
 reopen broad review only when scope or evidence warrants it. Apply the root
 verification requirements after integration and subsequent relevant edits.
 
+For risky feasibility work, review the constraints and harness strategy early;
+do not wait for full feature integration. Later integration review covers the
+complete delivered milestone, with follow-up focused on changed assumptions and
+paths rather than repeating unchanged analysis.
+
 Before sustained load tests, complete requirement-coverage review, resolve blocking
 findings, pass integration checks and freeze the tested backend revision. Record
 local, browser, real Telegram and hosted acceptance separately. Do not substitute
@@ -90,11 +113,14 @@ Stop the repair loop and update the checkpoint with:
   or missing environment/evidence.
 - A revised approach and the smallest next check that can distinguish causes.
 
-Main reassesses the contract/design and provides targeted analysis or narrows the
-work, then returns implementation to the existing owner. Do not repeat the same
-approach without new evidence. Ask the user only for changes to approved scope or
-requirements, or a missing decision that needs their input. Reassessment does not
-waive acceptance requirements or authorize model substitution.
+Obtain an independent, read-only diagnosis from Sol using the failing requirement,
+minimal case and attempt evidence. No further implementation or controller tuning
+on that failure proceeds while the diagnosis is pending. Main records a materially
+revised approach, a narrower deliverable or a requirement decision, then returns
+implementation to Luna with one bounded discriminator. Another parameter change
+or newly named subproblem is not sufficient to restart the same repair loop.
+Ask the user only for changes to approved scope/requirements or a missing decision.
+Reassessment does not waive acceptance requirements or authorize Sol code writing.
 
 ## Checkpoints
 
@@ -117,6 +143,13 @@ Refresh at milestones, reassessment and handoff. Before replacing a worker, incl
 changed files, decisions, remaining work and check results. Keep credentials and
 private material out of checkpoints. Temporary files may be cleaned up: if lost,
 reconstruct state from Git, owners and logs before acting; never infer a pass.
+
+Main owns the current checkpoint; worker reports supply updates. At resume or a
+checkout change, verify the actual worktree, branch or detached HEAD, dirty files,
+live worker IDs and running jobs. Replace stale status instead of appending
+contradictory histories. Stop the old owner before a fresh-context handoff; preserve
+the contract and evidence, not every prior message. Capacity errors alone are not
+evidence of context exhaustion or permission to change models.
 
 When context becomes burdensome and the objective is unchanged, refresh the
 checkpoint and use supported compaction if available. When the objective changes,
@@ -147,3 +180,8 @@ control after launch with a clear resume checkpoint. Collect results on their
 return or via an available completion notification. Do not schedule follow-ups
 without user authorization. Report running jobs as running, never passed. Report
 changes, checks actually run/results and remaining limitations at completion.
+
+A delegated coding timebox is a reporting checkpoint, not an enforced process
+timeout. Distinguish a live agent from a running test process; verify its status
+before saying work continues in the background. If neither remains active, report
+the saved incomplete state and next action instead.
