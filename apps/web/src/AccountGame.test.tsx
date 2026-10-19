@@ -19,7 +19,7 @@ const harness = vi.hoisted(() => ({
   clearAccount: vi.fn(),
   gameAppearance: null as unknown,
   runCanPlay: null as null | (() => boolean), runRuntimeError: '', runScore: 0,
-  traceRecords: new Map<string, unknown>(), save: vi.fn(), runPhase: 'READY', runOptions: null as null | { onTick(state: unknown, inputs: readonly unknown[]): void },
+  traceRecords: new Map<string, unknown>(), save: vi.fn(), runPhase: 'READY', runOptions: null as null | { initialState?: { descriptor?: { simulationVersion: string; generatorVersion: string; configId: string }; config?: { wetland?: { catalogVersion?: number } } }; onTick(state: unknown, inputs: readonly unknown[]): void },
 }));
 
 vi.mock('./telegram-web-app', async () => {
@@ -138,6 +138,16 @@ afterEach(() => {
 });
 
 describe('account run transport', () => {
+  it('starts and checkpoints the paired-route descriptor supplied by Core', async () => {
+    await act(async () => { host.querySelector<HTMLButtonElement>('.account-panel .primary-button')?.click(); });
+    await vi.waitFor(() => expect(harness.createRun).toHaveBeenCalled());
+
+    expect(harness.runOptions?.initialState).toMatchObject({
+      descriptor: { simulationVersion: '2.2.0', generatorVersion: '2.2.0', configId: 'dd-v2-paired-routes-v1' },
+      config: { wetland: { catalogVersion: 3 } },
+    });
+  });
+
   it('orders the compact top row as wallet, record, shop, then menu', () => {
     const header = host.querySelector<HTMLElement>('.account-hud')!;
     expect(header.querySelector('.brand')).toBeNull();
@@ -654,6 +664,10 @@ describe('account run transport', () => {
     await act(async () => { await vi.waitFor(() => expect(harness.submitCheckpoint).toHaveBeenCalledTimes(1)); });
     for (let tick = 121; tick <= 127; tick++) act(() => onTick({ phase: 'RUNNING', tick } as never, []));
     await act(async () => { finishRequest(runSnapshot({ checkpointSequence: 0, activeTicks: 120 })); });
+    expect(harness.runOptions?.initialState).toMatchObject({
+      descriptor: { simulationVersion: '2.2.0', generatorVersion: '2.2.0', configId: 'dd-v2-paired-routes-v1' },
+      config: { wetland: { catalogVersion: 3 } },
+    });
     await vi.waitFor(() => {
       const trace = harness.traceRecords.get(`${account.account_id}:${initialState.descriptor.runId}`) as { activeTicks: number; unsentTicks: unknown[]; pending: unknown[] };
       expect(trace).toMatchObject({ activeTicks: 127, pending: [] });

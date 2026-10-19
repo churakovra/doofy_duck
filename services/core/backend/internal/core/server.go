@@ -308,13 +308,13 @@ func (s *Server) createRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	seed := int64(uint32(seedBytes[0])<<24 | uint32(seedBytes[1])<<16 | uint32(seedBytes[2])<<8 | uint32(seedBytes[3]))
-	config := sim.VariedObstacleConfiguration()
+	config := sim.DefaultConfiguration()
 	configID, e := sim.ConfigIDFor(config)
 	if e != nil {
 		writeError(w, 500, "internal", "simulation configuration invalid")
 		return
 	}
-	simulationVersion, generatorVersion := sim.VariedObstacleSimulationVersion, sim.VariedObstacleGeneratorVersion
+	simulationVersion, generatorVersion := sim.SimulationVersion, sim.GeneratorVersion
 	state, e := sim.CreateRun(sim.Descriptor{RunID: id, Seed: seed, SimulationVersion: simulationVersion, GeneratorVersion: generatorVersion, ConfigID: configID}, config)
 	if e != nil {
 		writeError(w, 500, "internal", "could not create simulation")

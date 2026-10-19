@@ -20,16 +20,19 @@ STAR_POLICY_VERSION = "verified-pickups-v2-stars"
 HISTORICAL_STAR_POLICY_VERSION = "verified-pickups-v2-historical-coins"
 WETLAND_POLICY_VERSION = "verified-pickups-v3-wetland"
 VARIED_OBSTACLE_POLICY_VERSION = "verified-pickups-v4-varied-obstacles"
+PAIRED_ROUTES_POLICY_VERSION = "verified-pickups-v5-paired-routes"
 COIN_RUN_CAP = 30
 SUPPORTED_SIMULATION_IDENTITY = ("1.3.0", "1.2.0", "dd-v1-stepped-v1")
 STAR_SIMULATION_IDENTITY = ("1.4.0", "1.3.0", "dd-v1-star-interval-v1")
 WETLAND_SIMULATION_IDENTITY = ("2.0.0", "2.0.0", "dd-v2-wetland-v1")
 VARIED_OBSTACLE_SIMULATION_IDENTITY = ("2.1.0", "2.1.0", "dd-v2-varied-obstacles-v1")
+PAIRED_ROUTES_SIMULATION_IDENTITY = ("2.2.0", "2.2.0", "dd-v2-paired-routes-v1")
 SUPPORTED_SIMULATION_IDENTITIES = {
     SUPPORTED_SIMULATION_IDENTITY: POLICY_VERSION,
     STAR_SIMULATION_IDENTITY: STAR_POLICY_VERSION,
     WETLAND_SIMULATION_IDENTITY: WETLAND_POLICY_VERSION,
     VARIED_OBSTACLE_SIMULATION_IDENTITY: VARIED_OBSTACLE_POLICY_VERSION,
+    PAIRED_ROUTES_SIMULATION_IDENTITY: PAIRED_ROUTES_POLICY_VERSION,
 }
 HISTORICAL_SIMULATION_IDENTITIES = {
     SUPPORTED_SIMULATION_IDENTITY,
@@ -625,7 +628,12 @@ def settlement_rewards(
     """Return approved live rewards for a simulation identity, or None if unsupported."""
     if identity == SUPPORTED_SIMULATION_IDENTITY:
         return min(feathers, max(feathers_remaining, 0)), 0
-    if identity in (STAR_SIMULATION_IDENTITY, WETLAND_SIMULATION_IDENTITY, VARIED_OBSTACLE_SIMULATION_IDENTITY):
+    if identity in (
+        STAR_SIMULATION_IDENTITY,
+        WETLAND_SIMULATION_IDENTITY,
+        VARIED_OBSTACLE_SIMULATION_IDENTITY,
+        PAIRED_ROUTES_SIMULATION_IDENTITY,
+    ):
         return min(feathers, max(feathers_remaining, 0)), game_stars
     return None
 

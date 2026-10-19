@@ -765,6 +765,93 @@ def test_varied_obstacle_policy_deduplicates_delivery_caps_feathers_and_preserve
         )
 
 
+def test_paired_routes_policy_deduplicates_delivery_caps_feathers_and_preserves_v4(client):
+    from app import database
+    from app.economy.models import CompletionSettlement
+    from app.economy.settlement import process_settlement_batch
+    from app.economy.wallet.models import Wallet, WalletLedgerEntry
+
+    token, account_id = _login(client, 420035)
+    paired_run = UUID(int=440)
+    first = _completion_event(
+        account_id=account_id,
+        run_id=paired_run,
+        life_index=0,
+        feathers=20,
+        stars=900,
+        simulation_version="2.2.0",
+        generator_version="2.2.0",
+        config_id="dd-v2-paired-routes-v1",
+    )
+    _accept_completion(client, first)
+    _accept_completion(client, dict(first))
+    _accept_completion(
+        client,
+        _completion_event(
+            account_id=account_id,
+            run_id=paired_run,
+            life_index=1,
+            feathers=20,
+            stars=700,
+            simulation_version="2.2.0",
+            generator_version="2.2.0",
+            config_id="dd-v2-paired-routes-v1",
+        ),
+    )
+    varied_run = UUID(int=441)
+    _accept_completion(
+        client,
+        _completion_event(
+            account_id=account_id,
+            run_id=varied_run,
+            life_index=0,
+            feathers=5,
+            stars=50,
+            simulation_version="2.1.0",
+            generator_version="2.1.0",
+            config_id="dd-v2-varied-obstacles-v1",
+        ),
+    )
+    settings = replace(
+        client.app.state.settings,
+        economy_settlement_enabled=True,
+        economy_settlement_activated_at=datetime.now(UTC) - timedelta(minutes=1),
+    )
+    with database.EconomySession.begin() as session:
+        assert process_settlement_batch(session, settings=settings, limit=10) == 3
+    with database.EconomySession() as session:
+        rows = session.scalars(
+            select(CompletionSettlement)
+            .where(CompletionSettlement.run_id == paired_run)
+            .order_by(CompletionSettlement.life_index)
+        ).all()
+        varied = session.scalar(select(CompletionSettlement).where(CompletionSettlement.run_id == varied_run))
+        assert [(row.status, row.policy_version, row.feathers_credited, row.stars_credited) for row in rows] == [
+            ("committed", "verified-pickups-v5-paired-routes", 20, 900),
+            ("committed", "verified-pickups-v5-paired-routes", 10, 700),
+        ]
+        assert varied is not None and varied.policy_version == "verified-pickups-v4-varied-obstacles"
+        assert varied.feathers_credited == 5 and varied.stars_credited == 50
+        assert (
+            session.scalar(select(Wallet.balance).where(Wallet.account_id == account_id, Wallet.currency == "FEATHER"))
+            == 35
+        )
+        assert (
+            session.scalar(
+                select(Wallet.balance).where(Wallet.account_id == account_id, Wallet.currency == "GAME_STAR")
+            )
+            == 1650
+        )
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(WalletLedgerEntry)
+                .where(WalletLedgerEntry.policy_version == "verified-pickups-v5-paired-routes")
+            )
+            == 4
+        )
+
+
 def test_historical_backfill_credits_coins_for_both_known_profiles_and_no_stars(client):
     from app import database
     from app.economy.models import CompletionSettlement
@@ -928,21 +1015,54 @@ def test_settlement_does_not_issue_pre_activation_or_unknown_simulation_facts(cl
         generator_version="2.1.0",
         config_id="dd-v1-config:custom-content",
     )
+    mismatched_paired_event = _completion_event(
+        account_id=account_id,
+        run_id=UUID(int=427),
+        feathers=8,
+        completed_at=cutoff + timedelta(seconds=1),
+        simulation_version="2.2.0",
+        generator_version="2.1.0",
+        config_id="dd-v2-paired-routes-v1",
+    )
+    wrong_paired_config_event = _completion_event(
+        account_id=account_id,
+        run_id=UUID(int=428),
+        feathers=8,
+        completed_at=cutoff + timedelta(seconds=1),
+        simulation_version="2.2.0",
+        generator_version="2.2.0",
+        config_id="dd-v2-varied-obstacles-v1",
+    )
+    custom_paired_identity_event = _completion_event(
+        account_id=account_id,
+        run_id=UUID(int=429),
+        feathers=8,
+        completed_at=cutoff + timedelta(seconds=1),
+        simulation_version="2.2.0",
+        generator_version="2.2.0",
+        config_id="dd-v1-config:custom-content",
+    )
     _accept_completion(client, old_event)
     _accept_completion(client, unknown_event)
     _accept_completion(client, mismatched_pair_event)
     _accept_completion(client, custom_identity_event)
+    _accept_completion(client, mismatched_paired_event)
+    _accept_completion(client, wrong_paired_config_event)
+    _accept_completion(client, custom_paired_identity_event)
     settings = replace(
         client.app.state.settings,
         economy_settlement_enabled=True,
         economy_settlement_activated_at=cutoff,
     )
     with database.EconomySession.begin() as session:
-        assert process_settlement_batch(session, settings=settings, limit=10) == 3
+        assert process_settlement_batch(session, settings=settings, limit=10) == 6
     with database.EconomySession() as session:
         rows = session.scalars(select(CompletionSettlement).order_by(CompletionSettlement.run_id)).all()
         assert [(row.status, row.reason) for row in rows] == [
             ("pending", "settlement_disabled"),
+            ("actionable_failure", "unsupported_simulation_identity"),
+            ("actionable_failure", "unsupported_simulation_identity"),
+            ("actionable_failure", "unsupported_simulation_identity"),
             ("actionable_failure", "unsupported_simulation_identity"),
             ("actionable_failure", "unsupported_simulation_identity"),
             ("actionable_failure", "unsupported_simulation_identity"),

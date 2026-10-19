@@ -1,10 +1,10 @@
 # Wetland challenges
 
-Status: the owner requested paired-pipe gameplay after local playtesting, while
-keeping varied spacing and authored coin/Star routes. The active implementation
-target is simulation/generator `2.2.0`, configuration
-`dd-v2-paired-routes-v1`, encounter catalog 3. Integration and technical checks
-are in progress; this is not a completed release.
+Status: paired-pipe gameplay keeps varied spacing and authored coin/Star routes.
+The implementation target is simulation/generator `2.2.0`, configuration
+`dd-v2-paired-routes-v1`, encounter catalog 3. Core issues this identity for new
+runs. Technical integration and independent review are complete; final root
+verification remains in progress. Local gameplay acceptance remains open.
 
 The mixed obstacle implementations remain in the codebase under their frozen
 `2.1.0` and `2.0.0` identities. Existing flights retain their issued rules. The
@@ -37,8 +37,8 @@ The new default uses the paired reward resolver rather than catalog-2 edge-lane
 geometry. Generation, collision, scoring and collection remain shared integer
 TypeScript/Go rules. Collecting or ignoring rewards cannot change later geometry.
 
-Issuance must remain on the supported older identity until shared replay,
-frontend recovery and settlement support for the new identity are ready. Policy
+New-run issuance uses the paired identity now that shared replay, frontend
+recovery and settlement support are ready. Policy
 `verified-pickups-v5-paired-routes` will accept only
 `2.2.0` / `2.2.0` / `dd-v2-paired-routes-v1`, retaining the 30-coin run cap, 1:1
 credit and existing Star rules. All older supported policies remain eligible.

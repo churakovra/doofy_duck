@@ -91,8 +91,8 @@ func TestPostgresRunCheckpointsAreOwnedIdempotentAndFenced(t *testing.T) {
 	if first.WriterToken == "" {
 		t.Fatal("new run did not return writer token")
 	}
-	if first.SimulationVersion != sim.VariedObstacleSimulationVersion || first.GeneratorVersion != sim.VariedObstacleGeneratorVersion ||
-		first.ConfigID != "dd-v2-varied-obstacles-v1" || first.State.Config.Wetland == nil || first.State.Config.Wetland.CatalogVersion != 2 {
+	if first.SimulationVersion != sim.SimulationVersion || first.GeneratorVersion != sim.GeneratorVersion ||
+		first.ConfigID != sim.DefaultConfigID || first.State.Config.Wetland == nil || first.State.Config.Wetland.CatalogVersion != 3 {
 		t.Fatalf("new run identity/catalog mismatch: %s/%s/%s", first.SimulationVersion, first.GeneratorVersion, first.ConfigID)
 	}
 	statuses := make(chan int, 2)
@@ -115,8 +115,21 @@ func TestPostgresRunCheckpointsAreOwnedIdempotentAndFenced(t *testing.T) {
 	var ack Snapshot
 	_ = json.NewDecoder(resp.Body).Decode(&ack)
 	resp.Body.Close()
-	if ack.ActiveTicks != 2 || ack.CheckpointSequence != 0 || ack.WriterToken != "" {
+	if ack.ActiveTicks != 2 || ack.CheckpointSequence != 0 || ack.WriterToken != "" ||
+		ack.SimulationVersion != sim.SimulationVersion || ack.GeneratorVersion != sim.GeneratorVersion || ack.ConfigID != sim.DefaultConfigID ||
+		ack.State.Descriptor.SimulationVersion != sim.SimulationVersion || ack.State.Config.Wetland == nil || ack.State.Config.Wetland.CatalogVersion != 3 {
 		t.Fatalf("bad checkpoint snapshot: %+v", ack)
+	}
+	resp = request(t, httpServer.Client(), http.MethodGet, httpServer.URL+"/api/v1/runs/current", token, nil)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("recovered checkpoint run status %d", resp.StatusCode)
+	}
+	var recoveredRun Snapshot
+	_ = json.NewDecoder(resp.Body).Decode(&recoveredRun)
+	resp.Body.Close()
+	if recoveredRun.RunID != first.RunID || recoveredRun.SimulationVersion != sim.SimulationVersion || recoveredRun.GeneratorVersion != sim.GeneratorVersion ||
+		recoveredRun.ConfigID != sim.DefaultConfigID || recoveredRun.State.Descriptor.ConfigID != sim.DefaultConfigID || recoveredRun.State.Config.Wetland == nil || recoveredRun.State.Config.Wetland.CatalogVersion != 3 {
+		t.Fatalf("checkpoint recovery changed paired identity: %+v", recoveredRun)
 	}
 	resp = request(t, httpServer.Client(), http.MethodPost, httpServer.URL+"/api/v1/runs/"+first.RunID+"/checkpoints", token, checkpoint)
 	if resp.StatusCode != 200 {
@@ -177,6 +190,45 @@ func TestPostgresRunCheckpointsAreOwnedIdempotentAndFenced(t *testing.T) {
 	var checkpointCount int
 	if e = pool.QueryRow(ctx, `SELECT count(*) FROM core_checkpoints WHERE run_id=$1`, first.RunID).Scan(&checkpointCount); e != nil || checkpointCount != 1 {
 		t.Fatalf("checkpoint records=%d err=%v", checkpointCount, e)
+	}
+}
+
+func TestPostgresRecoveryRetainsPersistedCatalogTwoIdentity(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	const runID = "00000000-0000-4000-8000-000000000289"
+	const accountID = "00000000-0000-4000-8000-000000000290"
+	config := sim.VariedObstacleConfiguration()
+	configID, err := sim.ConfigIDFor(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, err := sim.CreateRun(sim.Descriptor{RunID: runID, Seed: 37, SimulationVersion: sim.VariedObstacleSimulationVersion, GeneratorVersion: sim.VariedObstacleGeneratorVersion, ConfigID: configID}, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO core_runs(id,account_id,seed,simulation_version,generator_version,config_id,state,status,writer_token_hash,last_contact) VALUES($1,$2,37,$3,$4,$5,$6,'active',decode('01','hex'),now())`, runID, accountID, sim.VariedObstacleSimulationVersion, sim.VariedObstacleGeneratorVersion, configID, encoded); err != nil {
+		t.Fatal(err)
+	}
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer((&Server{DB: pool, Auth: JWTVerifier{Keys: map[string]ed25519.PublicKey{"k": pub}}, OutboxConfigured: true}).Handler())
+	defer server.Close()
+	resp := request(t, server.Client(), http.MethodGet, server.URL+"/api/v1/runs/current", integrationTokenFor(t, priv, accountID), nil)
+	defer resp.Body.Close()
+	var recovered Snapshot
+	if resp.StatusCode != http.StatusOK || json.NewDecoder(resp.Body).Decode(&recovered) != nil {
+		t.Fatalf("persisted catalog-2 run recovery status=%d", resp.StatusCode)
+	}
+	if recovered.RunID != runID || recovered.SimulationVersion != sim.VariedObstacleSimulationVersion || recovered.GeneratorVersion != sim.VariedObstacleGeneratorVersion ||
+		recovered.ConfigID != sim.VariedObstacleDefaultConfigID || recovered.State.Config.Wetland == nil || recovered.State.Config.Wetland.CatalogVersion != 2 {
+		t.Fatalf("catalog-2 recovery identity changed: %+v", recovered)
 	}
 }
 
@@ -399,8 +451,8 @@ func TestPostgresCompletionOutboxRetriesAndOutageGrace(t *testing.T) {
 		t.Fatalf("create status=%d", resp.StatusCode)
 	}
 	state := run.State
-	if state.Descriptor.SimulationVersion != sim.VariedObstacleSimulationVersion || state.Descriptor.GeneratorVersion != sim.VariedObstacleGeneratorVersion || state.Descriptor.ConfigID != "dd-v2-varied-obstacles-v1" || state.Config.Wetland == nil || state.Config.Wetland.CatalogVersion != 2 {
-		t.Fatalf("new run did not pin varied-obstacle rules: %+v", state.Descriptor)
+	if state.Descriptor.SimulationVersion != sim.SimulationVersion || state.Descriptor.GeneratorVersion != sim.GeneratorVersion || state.Descriptor.ConfigID != sim.DefaultConfigID || state.Config.Wetland == nil || state.Config.Wetland.CatalogVersion != 3 {
+		t.Fatalf("new run did not pin paired-route rules: %+v", state.Descriptor)
 	}
 	var ticks [][]sim.Input
 	for i := 0; i < CheckpointTickLimit; i++ {

@@ -114,13 +114,13 @@ capacity and real Telegram/device acceptance are separate gates.
 
 - Wallet balances, purchases and equipment belong to the signed-in account. Verified completed-run pickups become spendable after settlement; pending rewards are shown separately. In-game Stars are not Telegram Stars or redeemable rewards.
 - One writer controls an active account run. Another tab or device must explicitly take over; account ownership and server verification govern persistent progress.
-- Seeded four-station wetland encounters mix paired pipes, hanging vines, ground rocks/reeds and floating debris. Two introductory families lead into alternating pressure and recovery encounters, with authored 240/300/360-pixel spacing. Pause freezes play and restart resets the schedule.
+- Seeded four-station wetland encounters use paired pipes with authored 240/300/360-pixel spacing. Two introductory families lead into alternating pressure and recovery routes. Optional coin trails and scheduled Stars reward harder flight paths. Pause freezes play and restart resets the schedule. Mixed obstacles remain supported by their frozen legacy identities for future development.
 - Active-time world speed ramps from 180 to 288 pixels/second over 45 seconds. Score adds speed in 10% steps per 10 cleared obstacle stations until the same cap, which can be reached earlier. Each station scores once, including a pair of pipes.
 - Optional coin routes and seeded Stars reward harder flight paths. Verified coin credit retains its 30-per-run wallet cap; collecting more does not raise that cap. See the wetland record for controller evidence and remaining owner playtesting.
 - Velocity tilt, wing/flap motion, restrained squash/stretch and bounded visual effects improve feedback without changing authoritative hitboxes. Extra motion respects the reduced-motion setting.
 - Original synthesized flap/pickup/death sounds and a quiet music loop unlock from a user gesture. Separate sound/music controls are saved locally; backgrounding and pause silence playback.
 
-The shared simulation default uses version 2.1.0, generator 2.1.0 and config ID `dd-v2-varied-obstacles-v1`. New account runs use that identity; full catalog-2 route acceptance remains in progress on this feature branch. Existing 2.0.0, 1.4.0/1.3.0 and 1.3.0/1.2.0 runs retain their original rules. See [`docs/ARCADE_SIMULATION.md`](docs/ARCADE_SIMULATION.md) for the rules and [wetland challenges](docs/WETLAND_CHALLENGES.md) for verification status.
+The shared simulation default uses version 2.2.0, generator 2.2.0 and config ID `dd-v2-paired-routes-v1`. New account runs use that identity; existing catalog-2 `2.1.0`, wetland `2.0.0`, and earlier runs retain their original rules. See [`docs/ARCADE_SIMULATION.md`](docs/ARCADE_SIMULATION.md) for the rules and [wetland challenges](docs/WETLAND_CHALLENGES.md) for verification status.
 
 ## Verification commands
 

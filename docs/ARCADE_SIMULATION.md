@@ -5,9 +5,9 @@ The deterministic game runs independently in TypeScript and Go. The modules expo
 ## Wetland rules
 
 The new paired-route default is simulation `2.2.0`, generator `2.2.0`,
-configuration `dd-v2-paired-routes-v1`, encounter catalog 3. Integration is in
-progress; account issuance remains pinned to supported catalog 2 until replay,
-frontend and settlement consumers are ready. Existing runs retain their issued
+configuration `dd-v2-paired-routes-v1`, encounter catalog 3. Core issues this
+identity for new runs after replay, frontend and settlement support were
+integrated. Existing runs retain their issued
 identity, including frozen `2.1.0` / `2.1.0` / `dd-v2-varied-obstacles-v1`,
 `2.0.0` / `2.0.0` / `dd-v2-wetland-v1` and earlier rules. See
 [wetland challenges](WETLAND_CHALLENGES.md) for current verification status.
