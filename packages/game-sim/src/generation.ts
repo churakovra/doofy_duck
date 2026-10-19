@@ -241,6 +241,53 @@ export function wetlandRewardPoint(config: GameConfig, pipe: Pipe, radius: numbe
   }
   return { x: pipe.x + authored.xOffset, y: pipe.gapCenter + offset };
 }
+/** Individual pickup positions for the v4 currency formations. */
+export function currencyFormationPoints(config: GameConfig, seed: number, pipe: Pipe, radius: number, star = false, eventOrdinal = pipe.index): readonly { x: number; y: number }[] {
+  const center = wetlandRewardPoint(config, pipe, radius, star);
+  if (config.wetland?.catalogVersion !== 4) return [center];
+  const variant = mix32((seed ^ Math.imul(pipe.index + 1, 0x9e3779b9) ^ Math.imul(eventOrdinal + 1, 0x85ebca6b) ^ (star ? 0x51ed270b : 0)) >>> 0);
+  const halfOpening = Math.floor(config.pipes.gapHeight / 2) - config.flight.duckHalfHeight - radius - 2;
+  const yVariation = star ? 22_000 : 15_000;
+  const centerY = Math.max(pipe.gapCenter - halfOpening + yVariation,
+    Math.min(pipe.gapCenter + halfOpening - yVariation, center.y));
+  if (star) {
+    const offsets = [[0, -22000], [21000, -7000], [13000, 18000], [-13000, 18000], [-21000, -7000]] as const;
+    const rotation = (variant >>> 1) & 3;
+    // Keep the rotated group entirely outside one pipe while translating its authored center.
+    const margin = 22_000 + config.flight.duckHalfWidth + radius + 2;
+    const safeCenterX = (variant & 1) === 0
+      ? pipe.x - margin
+      : pipe.x + config.pipes.width + margin;
+    const centerShiftX = safeCenterX - center.x;
+    const formationCenterX = center.x + centerShiftX;
+    return offsets.map(([dx, dy]) => {
+      const rotated = rotateFormationOffset(dx, dy, rotation);
+      return { x: formationCenterX + rotated.x, y: centerY + rotated.y };
+    });
+  }
+  const outside = (variant & 1) === 1;
+  const direction = (variant & 2) === 0 ? 1 : -1;
+  // Three vertices form a fish: the nose and two vertically separated tail points.
+  const xMargin = 18_000 + config.flight.duckHalfWidth + radius + 2;
+  const centerX = outside
+    ? direction < 0 ? pipe.x - xMargin : pipe.x + config.pipes.width + xMargin
+    : pipe.x + Math.floor(config.pipes.width / 2);
+  const yDirection = (variant & 4) === 0 ? 1 : -1;
+  return [
+    { x: centerX + direction * 18_000, y: centerY },
+    { x: centerX - direction * 18_000, y: centerY - yDirection * 15_000 },
+    { x: centerX - direction * 18_000, y: centerY + yDirection * 15_000 },
+  ];
+}
+
+function rotateFormationOffset(x: number, y: number, quarterTurns: number): { x: number; y: number } {
+  switch (quarterTurns) {
+    case 1: return { x: -y, y: x };
+    case 2: return { x: -x, y: -y };
+    case 3: return { x: y, y: -x };
+    default: return { x, y };
+  }
+}
 /** Speed for a one-based active simulation tick; READY is still stationary. */
 export function worldSpeedAt(config: GameConfig, tick: number, score = 0): number {
   validateConfig(config);

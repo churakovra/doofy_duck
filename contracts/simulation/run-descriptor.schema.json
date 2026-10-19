@@ -15,6 +15,13 @@
   "oneOf": [
     {
       "properties": {
+        "simulationVersion": { "const": "2.3.0" },
+        "generatorVersion": { "const": "2.3.0" },
+        "configId": { "anyOf": [{ "const": "dd-v2-currency-formations-v1" }, { "pattern": "^dd-v1-config:.+$" }] }
+      }
+    },
+    {
+      "properties": {
         "simulationVersion": { "const": "2.2.0" },
         "generatorVersion": { "const": "2.2.0" },
         "configId": { "anyOf": [{ "const": "dd-v2-paired-routes-v1" }, { "pattern": "^dd-v1-config:.+$" }] }

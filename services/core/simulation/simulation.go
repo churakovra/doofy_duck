@@ -264,7 +264,7 @@ func PatternCatalog() []Pattern {
 
 // DefaultConfiguration returns an independent copy of the default rules.
 func PriorDefaultConfiguration() Config  { return cloneConfig(canonicalPriorDefaultConfig) }
-func DefaultConfiguration() Config       { return PairedRoutesConfiguration() }
+func DefaultConfiguration() Config       { return CurrencyFormationsConfiguration() }
 func LegacyDefaultConfiguration() Config { return cloneConfig(canonicalLegacyDefaultConfig) }
 func WetlandConfiguration() Config {
 	c := cloneConfig(canonicalPriorDefaultConfig)
@@ -313,11 +313,21 @@ func PairedRoutesConfiguration() Config {
 	return c
 }
 
+func CurrencyFormationsConfiguration() Config {
+	c := PairedRoutesConfiguration()
+	c.Wetland.CatalogVersion = 4
+	c.Limits.MaxActiveCollectibles = 29
+	return c
+}
+
 const MaxCounter int64 = 9007199254740990
 const maxSafeInteger int64 = 9007199254740991
-const SimulationVersion = "2.2.0"
-const GeneratorVersion = "2.2.0"
-const DefaultConfigID = "dd-v2-paired-routes-v1"
+const PairedRoutesSimulationVersion = "2.2.0"
+const PairedRoutesGeneratorVersion = "2.2.0"
+const PairedRoutesConfigID = "dd-v2-paired-routes-v1"
+const SimulationVersion = "2.3.0"
+const GeneratorVersion = "2.3.0"
+const DefaultConfigID = "dd-v2-currency-formations-v1"
 const VariedObstacleSimulationVersion = "2.1.0"
 const VariedObstacleGeneratorVersion = "2.1.0"
 const VariedObstacleDefaultConfigID = "dd-v2-varied-obstacles-v1"
@@ -513,7 +523,7 @@ func Step(input State, frames []Input) (Result, error) {
 		recovery := p.EncounterFamily == "steady" && block >= 2 && block%2 == 1
 		smallTrail := p.EncounterFamily == "steady" && (block == 0 || recovery)
 		trail := s.Config.Wetland != nil && (!smallTrail || p.StationStep != nil && (*p.StationStep == 1 || *p.StationStep == 3))
-		if trail && int64(len(s.Collectibles)) < s.Config.Limits.MaxActiveCollectibles {
+		if trail {
 			var definition *Definition
 			for i := range s.Config.Collectibles {
 				if s.Config.Collectibles[i].TypeID == "FEATHER" {
@@ -524,12 +534,18 @@ func Step(input State, frames []Input) (Result, error) {
 			if definition == nil {
 				return Result{}, fmt.Errorf("wetland FEATHER definition missing")
 			}
-			id := fmt.Sprintf("feather-trail-%d-%d", block, *p.StationStep)
-			spawned[id] = true
-			rewardX, rewardY := wetlandRewardPoint(s.Config, p, definition.Radius, false)
-			s.Collectibles = append(s.Collectibles, Collectible{id, "FEATHER", rewardX, rewardY, 1, definition.Radius, false})
-		} else if trail {
-			return Result{}, fmt.Errorf("wetland reward capacity invariant violated")
+			points := currencyFormationPoints(s.Config, uint32(s.Descriptor.Seed), p, definition.Radius, false, p.Index)
+			if int64(len(s.Collectibles)+len(points)) > s.Config.Limits.MaxActiveCollectibles {
+				return Result{}, fmt.Errorf("wetland reward capacity invariant violated")
+			}
+			for member, point := range points {
+				id := fmt.Sprintf("feather-trail-%d-%d", block, *p.StationStep)
+				if s.Config.Wetland.CatalogVersion == 4 {
+					id += fmt.Sprintf("-%d", member)
+				}
+				spawned[id] = true
+				s.Collectibles = append(s.Collectibles, Collectible{id, "FEATHER", point[0], point[1], 1, definition.Radius, false})
+			}
 		}
 		if scheduledStar {
 			activeStars := 0
@@ -538,11 +554,7 @@ func Step(input State, frames []Input) (Result, error) {
 					activeStars++
 				}
 			}
-			if activeStars > 0 || int64(len(s.Collectibles)) >= s.Config.Limits.MaxActiveCollectibles {
-				return Result{}, fmt.Errorf("scheduled Star capacity invariant violated")
-			}
 			id := fmt.Sprintf("star-%d", p.Index)
-			spawned[id] = true
 			schedule := s.Config.StarSchedule
 			var starDefinition *Definition
 			for i := range s.Config.Collectibles {
@@ -554,12 +566,27 @@ func Step(input State, frames []Input) (Result, error) {
 			if starDefinition == nil {
 				return Result{}, fmt.Errorf("scheduled Star definition missing")
 			}
-			starX := p.X
-			starY := bonusY(s.Config, uint32(s.Descriptor.Seed), p, starDefinition.Radius)
+			var points [][2]int64
 			if s.Config.Wetland != nil {
-				starX, starY = wetlandRewardPoint(s.Config, p, starDefinition.Radius, true)
+				ordinal := int64(0)
+				if starOrdinal != nil {
+					ordinal = *starOrdinal
+				}
+				points = currencyFormationPoints(s.Config, uint32(s.Descriptor.Seed), p, starDefinition.Radius, true, ordinal)
+			} else {
+				points = [][2]int64{{p.X, bonusY(s.Config, uint32(s.Descriptor.Seed), p, starDefinition.Radius)}}
 			}
-			s.Collectibles = append(s.Collectibles, Collectible{id, "GAME_STAR", starX, starY, 1, starDefinition.Radius, false})
+			if activeStars > 0 || int64(len(s.Collectibles)+len(points)) > s.Config.Limits.MaxActiveCollectibles {
+				return Result{}, fmt.Errorf("scheduled Star capacity invariant violated")
+			}
+			for member, point := range points {
+				memberID := id
+				if s.Config.Wetland != nil && s.Config.Wetland.CatalogVersion == 4 {
+					memberID += fmt.Sprintf("-%d", member)
+				}
+				spawned[memberID] = true
+				s.Collectibles = append(s.Collectibles, Collectible{memberID, "GAME_STAR", point[0], point[1], 1, starDefinition.Radius, false})
+			}
 			ordinal := int64(1)
 			if starOrdinal != nil {
 				ordinal, e = inc(*starOrdinal, 1)

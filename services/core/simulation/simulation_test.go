@@ -4,16 +4,21 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 )
 
 func TestCurrentContractIdentity(t *testing.T) {
-	if SimulationVersion != "2.2.0" || GeneratorVersion != "2.2.0" || DefaultConfigID != "dd-v2-paired-routes-v1" {
-		t.Fatalf("unexpected paired-routes identity: %s/%s/%s", SimulationVersion, GeneratorVersion, DefaultConfigID)
+	if SimulationVersion != "2.3.0" || GeneratorVersion != "2.3.0" || DefaultConfigID != "dd-v2-currency-formations-v1" {
+		t.Fatalf("unexpected currency-formations identity: %s/%s/%s", SimulationVersion, GeneratorVersion, DefaultConfigID)
 	}
 	current, err := CreateRun(Descriptor{RunID: "current", Seed: 4, SimulationVersion: SimulationVersion, GeneratorVersion: GeneratorVersion, ConfigID: DefaultConfigID})
-	if err != nil || current.Config.Wetland == nil || current.Config.Wetland.CatalogVersion != 3 || current.NextPipeX == nil {
-		t.Fatalf("paired-routes default run missing catalog/cursor: err=%v", err)
+	if err != nil || current.Config.Wetland == nil || current.Config.Wetland.CatalogVersion != 4 || current.NextPipeX == nil {
+		t.Fatalf("currency-formations default run missing catalog/cursor: err=%v", err)
+	}
+	paired, err := CreateRun(Descriptor{RunID: "paired-frozen", Seed: 4, SimulationVersion: PairedRoutesSimulationVersion, GeneratorVersion: PairedRoutesGeneratorVersion, ConfigID: PairedRoutesConfigID})
+	if err != nil || paired.Config.Wetland == nil || paired.Config.Wetland.CatalogVersion != 3 {
+		t.Fatalf("frozen paired-routes identity is unavailable: err=%v", err)
 	}
 	if current.Config.Wetland.StarRoute != (WetlandRewardPoint{XOffset: 100000, YOffset: 35000}) {
 		t.Fatalf("paired-routes Star route=%+v, want paired offset 100000/35000", current.Config.Wetland.StarRoute)
@@ -129,7 +134,7 @@ func TestCatalogThreeAcceptsPairedRoutesAndRejectsMixedObstacles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := CreateRun(Descriptor{RunID: "catalog-3-paired", Seed: 3, SimulationVersion: SimulationVersion, GeneratorVersion: GeneratorVersion, ConfigID: id}); err != nil {
+	if _, err := CreateRun(Descriptor{RunID: "catalog-3-paired", Seed: 3, SimulationVersion: PairedRoutesSimulationVersion, GeneratorVersion: PairedRoutesGeneratorVersion, ConfigID: id}); err != nil {
 		t.Fatalf("catalog-3 default-pair run rejected: %v", err)
 	}
 	mixed := cloneConfig(config)
@@ -405,6 +410,12 @@ func TestReviewedPairedRoutesFixture(t *testing.T) {
 	}
 }
 
+func TestReviewedCurrencyFormationsFixture(t *testing.T) {
+	if err := VerifyWetlandFixtures("../../../contracts/simulation/currency-formations-v1.json"); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestWetlandObstacleRectanglesAreLethal(t *testing.T) {
 	config := WetlandConfiguration()
 	config.StarSchedule = nil
@@ -527,7 +538,7 @@ func TestWetlandStarCapacityReservesWholeTrail(t *testing.T) {
 }
 
 func TestPairedRoutesRewardLifecycleAndCapacity(t *testing.T) {
-	config := DefaultConfiguration()
+	config := PairedRoutesConfiguration()
 	config.Pipes.Horizon = 4000000
 	config.Limits.MaxActivePipes, config.Limits.MaxActiveCollectibles = 12, 13
 	config.StarSchedule = nil
@@ -535,7 +546,7 @@ func TestPairedRoutesRewardLifecycleAndCapacity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	state, err := CreateRun(Descriptor{RunID: "paired-trails", Seed: 11, SimulationVersion: SimulationVersion, GeneratorVersion: GeneratorVersion, ConfigID: id}, config)
+	state, err := CreateRun(Descriptor{RunID: "paired-trails", Seed: 11, SimulationVersion: PairedRoutesSimulationVersion, GeneratorVersion: PairedRoutesGeneratorVersion, ConfigID: id}, config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -563,7 +574,7 @@ func TestPairedRoutesRewardLifecycleAndCapacity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	starState, err := CreateRun(Descriptor{RunID: "paired-star-route", Seed: 11, SimulationVersion: SimulationVersion, GeneratorVersion: GeneratorVersion, ConfigID: id}, config)
+	starState, err := CreateRun(Descriptor{RunID: "paired-star-route", Seed: 11, SimulationVersion: PairedRoutesSimulationVersion, GeneratorVersion: PairedRoutesGeneratorVersion, ConfigID: id}, config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -590,6 +601,187 @@ func TestPairedRoutesRewardLifecycleAndCapacity(t *testing.T) {
 	}
 	if stars != 1 || feathers != 3 || int64(len(starred.State.Collectibles)) > config.Limits.MaxActiveCollectibles {
 		t.Fatalf("paired Star reserve dropped route or exceeded cap: stars=%d feathers=%d items=%d cap=%d", stars, feathers, len(starred.State.Collectibles), config.Limits.MaxActiveCollectibles)
+	}
+}
+
+func TestCurrencyFormationsEmitIndividualMembersWithinCapacity(t *testing.T) {
+	config := CurrencyFormationsConfiguration()
+	config.Pipes.Horizon = 4000000
+	config.StarSchedule = nil
+	id, err := ConfigIDFor(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, err := CreateRun(Descriptor{RunID: "formation-feathers", Seed: 11, SimulationVersion: SimulationVersion, GeneratorVersion: GeneratorVersion, ConfigID: id}, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state.Phase = Running
+	spawned, err := Step(state, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]bool{}
+	feathers := 0
+	for _, item := range spawned.State.Collectibles {
+		if seen[item.ID] {
+			t.Fatalf("duplicate collectible ID %q", item.ID)
+		}
+		seen[item.ID] = true
+		if item.TypeID == "FEATHER" {
+			feathers++
+			if item.Amount != 1 {
+				t.Errorf("formation member amount=%d, want one", item.Amount)
+			}
+		}
+	}
+	if feathers < 3 || int64(len(spawned.State.Collectibles)) > config.Limits.MaxActiveCollectibles {
+		t.Fatalf("feather formation count=%d total=%d cap=%d", feathers, len(spawned.State.Collectibles), config.Limits.MaxActiveCollectibles)
+	}
+
+	config.Pipes.Horizon = 1700000
+	config.StarSchedule = &StarSchedule{MinIntervalPipes: 8, MaxIntervalPipes: 8}
+	id, err = ConfigIDFor(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, err = CreateRun(Descriptor{RunID: "formation-stars", Seed: 11, SimulationVersion: SimulationVersion, GeneratorVersion: GeneratorVersion, ConfigID: id}, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state.Phase = Running
+	state.NextStarPipeIndex = 1
+	ordinal := int64(0)
+	state.StarScheduleOrdinal = &ordinal
+	starred, err := Step(state, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stars := 0
+	for _, item := range starred.State.Collectibles {
+		if item.TypeID == "GAME_STAR" {
+			stars++
+			if item.Amount != 1 || !strings.HasPrefix(item.ID, "star-1-") {
+				t.Errorf("bad Star member %+v", item)
+			}
+		}
+	}
+	if stars != 5 || int64(len(starred.State.Collectibles)) > config.Limits.MaxActiveCollectibles {
+		t.Fatalf("Star formation count=%d total=%d cap=%d", stars, len(starred.State.Collectibles), config.Limits.MaxActiveCollectibles)
+	}
+}
+
+func TestCurrencyFormationGeometryAndSupportedBounds(t *testing.T) {
+	config := CurrencyFormationsConfiguration()
+	state, err := CreateRun(Descriptor{RunID: "formation-geometry", Seed: 1, SimulationVersion: SimulationVersion, GeneratorVersion: GeneratorVersion, ConfigID: DefaultConfigID}, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pipe := state.Pipes[1]
+	featherRadius, starRadius := int64(0), int64(0)
+	for _, definition := range config.Collectibles {
+		if definition.TypeID == "FEATHER" {
+			featherRadius = definition.Radius
+		}
+		if definition.TypeID == "GAME_STAR" {
+			starRadius = definition.Radius
+		}
+	}
+	coin := currencyFormationPoints(config, 1, pipe, featherRadius, false, pipe.Index)
+	if len(coin) != 3 {
+		t.Fatalf("coin formation has %d members", len(coin))
+	}
+	if coin[1][0] != coin[2][0] || coin[1][1] == coin[2][1] || coin[0][0] == coin[1][0] {
+		t.Fatalf("three-member coin group is not a fish-like triangle: %v", coin)
+	}
+	cross := (coin[1][0]-coin[0][0])*(coin[2][1]-coin[0][1]) - (coin[2][0]-coin[0][0])*(coin[1][1]-coin[0][1])
+	if cross == 0 {
+		t.Fatalf("coin formation is collinear: %v", coin)
+	}
+
+	inspectStar := func(seed, eventOrdinal int64) (string, string) {
+		points := currencyFormationPoints(config, uint32(seed), pipe, starRadius, true, eventOrdinal)
+		var centerX, centerY int64
+		for _, point := range points {
+			if point[1]-starRadius-config.Flight.DuckHalfHeight <= pipe.GapCenter-config.Pipes.GapHeight/2 ||
+				point[1]+starRadius+config.Flight.DuckHalfHeight >= pipe.GapCenter+config.Pipes.GapHeight/2 ||
+				!(point[0]+starRadius+config.Flight.DuckHalfWidth < pipe.X || point[0]-starRadius-config.Flight.DuckHalfWidth > pipe.X+config.Pipes.Width) {
+				t.Fatalf("Star member is not clear of its pipe or gap bounds: point=%v pipe=%+v", point, pipe)
+			}
+			centerX += point[0]
+			centerY += point[1]
+		}
+		centerX /= int64(len(points))
+		centerY /= int64(len(points))
+		side := "inside"
+		switch {
+		case centerX < pipe.X:
+			side = "left"
+		case centerX > pipe.X+config.Pipes.Width:
+			side = "right"
+		}
+		parts := make([]string, len(points))
+		for i, point := range points {
+			parts[i] = fmt.Sprintf("%d,%d", point[0]-centerX, point[1]-centerY)
+		}
+		return side, strings.Join(parts, ";")
+	}
+	for _, samples := range [][][2]int64{
+		{{1, 0}, {2, 0}, {3, 0}, {4, 0}, {5, 0}, {6, 0}, {7, 0}, {8, 0}},
+		{{1, 0}, {1, 1}, {1, 2}, {1, 3}, {1, 4}, {1, 5}, {1, 6}, {1, 7}},
+	} {
+		sides, orientations := map[string]bool{}, map[string]bool{}
+		for _, sample := range samples {
+			side, orientation := inspectStar(sample[0], sample[1])
+			sides[side] = true
+			orientations[orientation] = true
+		}
+		if len(sides) != 2 || !sides["left"] || !sides["right"] {
+			t.Fatalf("scheduled Star obstacle sides did not vary across a single seed/event axis: %v", sides)
+		}
+		if len(orientations) < 2 {
+			t.Fatalf("scheduled Star orientations did not vary across a single seed/event axis: %v", orientations)
+		}
+	}
+
+	narrow := CurrencyFormationsConfiguration()
+	narrow.Pipes.GapHeight = 60000
+	if err := ValidateConfig(narrow); err == nil {
+		t.Fatal("catalog-4 accepted a 60000-unit opening that cannot fit the Star formation")
+	}
+}
+
+func TestCurrencyFormationRejectsNeighborPipeClearanceRegression(t *testing.T) {
+	config := CurrencyFormationsConfiguration()
+	config.Pipes.Width = 140000
+	for i := range config.Collectibles {
+		if config.Collectibles[i].TypeID == "FEATHER" {
+			config.Collectibles[i].Radius = 50000
+		}
+	}
+	for i := range config.Wetland.Families {
+		if config.Wetland.Families[i].ID == "slalom" {
+			config.Wetland.Families[i].GapCenters = []int64{280000, 330000, 250000, 320000}
+		}
+	}
+	stationStep := int64(1)
+	owner := Pipe{ID: "pipe-113", Index: 113, X: 0, GapCenter: 330000, StationStep: &stationStep, EncounterFamily: "slalom"}
+	points := currencyFormationPoints(config, 1, owner, 50000, false, owner.Index)
+	if len(points) != 3 || points[0][0] != 238002 {
+		t.Fatalf("slalom station 113 witness nose=%v, want x=238002", points)
+	}
+	nextStationX, lowerPipeTop := int64(240000), int64(328000)
+	neighborCollision := false
+	for _, point := range points {
+		if point[0]+50000+config.Flight.DuckHalfWidth >= nextStationX && point[1]+50000+config.Flight.DuckHalfHeight >= lowerPipeTop {
+			neighborCollision = true
+		}
+	}
+	if !neighborCollision {
+		t.Fatalf("regression witness no longer intersects next lower pipe: points=%v", points)
+	}
+	if err := ValidateConfig(config); err == nil || !strings.Contains(err.Error(), "currency formation clearance") {
+		t.Fatalf("catalog-4 accepted neighboring FEATHER pipe collision: %v", err)
 	}
 }
 

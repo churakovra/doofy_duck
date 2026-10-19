@@ -256,6 +256,78 @@ func sign64(v int64) int64 {
 	return 0
 }
 
+func currencyFormationPoints(c Config, seed uint32, p Pipe, radius int64, star bool, eventOrdinal int64) [][2]int64 {
+	x, y := wetlandRewardPoint(c, p, radius, star)
+	if c.Wetland == nil || c.Wetland.CatalogVersion != 4 {
+		return [][2]int64{{x, y}}
+	}
+	starSalt := uint32(0)
+	if star {
+		starSalt = 0x51ed270b
+	}
+	variant := Mix32(seed ^ uint32(p.Index+1)*uint32(0x9e3779b9) ^ uint32(eventOrdinal+1)*uint32(0x85ebca6b) ^ starSalt)
+	halfOpening := c.Pipes.GapHeight/2 - c.Flight.DuckHalfHeight - radius - 2
+	yVariation := int64(15000)
+	if star {
+		yVariation = 22000
+	}
+	centerY := max64(p.GapCenter-halfOpening+yVariation, min64(p.GapCenter+halfOpening-yVariation, y))
+	if star {
+		offsets := [][2]int64{{0, -22000}, {21000, -7000}, {13000, 18000}, {-13000, 18000}, {-21000, -7000}}
+		points := make([][2]int64, len(offsets))
+		rotation := (variant >> 1) & 3
+		// Translate the authored center so the rotated group clears one side of the pipe.
+		margin := int64(22000) + c.Flight.DuckHalfWidth + radius + 2
+		safeCenterX := p.X - margin
+		if variant&1 != 0 {
+			safeCenterX = p.X + c.Pipes.Width + margin
+		}
+		centerShiftX := safeCenterX - x
+		formationCenterX := x + centerShiftX
+		for i, offset := range offsets {
+			dx, dy := rotateFormationOffset(offset[0], offset[1], rotation)
+			points[i] = [2]int64{formationCenterX + dx, centerY + dy}
+		}
+		return points
+	}
+	direction := int64(1)
+	if variant&2 != 0 {
+		direction = -1
+	}
+	centerX := p.X + c.Pipes.Width/2
+	if variant&1 != 0 {
+		margin := int64(18000) + c.Flight.DuckHalfWidth + radius + 2
+		if direction < 0 {
+			centerX = p.X - margin
+		} else {
+			centerX = p.X + c.Pipes.Width + margin
+		}
+	}
+	baseY := int64(1)
+	if variant&4 != 0 {
+		baseY = -1
+	}
+	// The nose and two vertically separated tail points form a three-member fish.
+	return [][2]int64{
+		{centerX + direction*18000, centerY},
+		{centerX - direction*18000, centerY - baseY*15000},
+		{centerX - direction*18000, centerY + baseY*15000},
+	}
+}
+
+func rotateFormationOffset(x, y int64, quarterTurns uint32) (int64, int64) {
+	switch quarterTurns {
+	case 1:
+		return -y, x
+	case 2:
+		return -x, -y
+	case 3:
+		return y, -x
+	default:
+		return x, y
+	}
+}
+
 func CreateRun(d Descriptor, configurations ...Config) (State, error) {
 	if e := validateDescriptor(d); e != nil {
 		return State{}, e
@@ -268,6 +340,8 @@ func CreateRun(d Descriptor, configurations ...Config) (State, error) {
 		c = configurations[0]
 	} else if d.ConfigID == DefaultConfigID {
 		c = DefaultConfiguration()
+	} else if d.ConfigID == PairedRoutesConfigID {
+		c = PairedRoutesConfiguration()
 	} else if d.ConfigID == VariedObstacleDefaultConfigID {
 		c = VariedObstacleConfiguration()
 	} else if d.ConfigID == WetlandDefaultConfigID {
@@ -290,8 +364,11 @@ func CreateRun(d Descriptor, configurations ...Config) (State, error) {
 		if c.Wetland.CatalogVersion == 2 && (d.SimulationVersion != VariedObstacleSimulationVersion || d.GeneratorVersion != VariedObstacleGeneratorVersion) {
 			return State{}, fmt.Errorf("catalog-2 wetland config requires frozen varied-obstacle simulation and generator versions")
 		}
-		if c.Wetland.CatalogVersion == 3 && (d.SimulationVersion != SimulationVersion || d.GeneratorVersion != GeneratorVersion) {
-			return State{}, fmt.Errorf("catalog-3 wetland config requires current simulation and generator versions")
+		if c.Wetland.CatalogVersion == 3 && (d.SimulationVersion != PairedRoutesSimulationVersion || d.GeneratorVersion != PairedRoutesGeneratorVersion) {
+			return State{}, fmt.Errorf("catalog-3 wetland config requires paired-routes simulation and generator versions")
+		}
+		if c.Wetland.CatalogVersion == 4 && (d.SimulationVersion != SimulationVersion || d.GeneratorVersion != GeneratorVersion) {
+			return State{}, fmt.Errorf("catalog-4 wetland config requires currency-formations simulation and generator versions")
 		}
 	}
 	s := State{Descriptor: d, Config: cloneConfig(c), Phase: Ready, Duck: Duck{X: c.Flight.DuckX, Y: floorHalf(c.Pipes.FloorY + c.Pipes.CeilingY)}, Pipes: []Pipe{}, Collectibles: []Collectible{}, Totals: map[string]int64{}, RNGState: uint32(d.Seed), LastGapCenter: floorHalf(c.Pipes.GapMinCenter + c.Pipes.GapMaxCenter), LastCollectiblePipe: -1000000, InputHistory: []Input{}}

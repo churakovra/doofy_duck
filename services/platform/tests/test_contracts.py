@@ -141,6 +141,7 @@ def test_settlement_policies_keep_legacy_stars_out_and_credit_new_stars_without_
     wetland_identity = ("2.0.0", "2.0.0", "dd-v2-wetland-v1")
     varied_obstacle_identity = ("2.1.0", "2.1.0", "dd-v2-varied-obstacles-v1")
     paired_routes_identity = ("2.2.0", "2.2.0", "dd-v2-paired-routes-v1")
+    currency_formations_identity = ("2.3.0", "2.3.0", "dd-v2-currency-formations-v1")
 
     assert settlement_rewards(legacy_identity, feathers=20, game_stars=9, feathers_remaining=10) == (10, 0)
     assert settlement_rewards(star_identity, feathers=20, game_stars=9, feathers_remaining=10) == (10, 9)
@@ -152,8 +153,10 @@ def test_settlement_policies_keep_legacy_stars_out_and_credit_new_stars_without_
     assert settlement_rewards(wetland_identity, feathers=40, game_stars=900, feathers_remaining=30) == (30, 900)
     assert settlement_rewards(varied_obstacle_identity, feathers=40, game_stars=900, feathers_remaining=30) == (30, 900)
     assert settlement_rewards(paired_routes_identity, feathers=40, game_stars=900, feathers_remaining=30) == (30, 900)
+    assert settlement_rewards(currency_formations_identity, feathers=40, game_stars=900, feathers_remaining=30) == (30, 900)
     assert historical_coin_reward(varied_obstacle_identity, 40, 30) is None
     assert historical_coin_reward(paired_routes_identity, 40, 30) is None
+    assert historical_coin_reward(currency_formations_identity, 40, 30) is None
     assert (
         settlement_rewards(
             ("2.1.0", "2.0.0", "dd-v2-varied-obstacles-v1"), feathers=4, game_stars=2, feathers_remaining=30

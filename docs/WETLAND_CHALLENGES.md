@@ -1,10 +1,10 @@
 # Wetland challenges
 
-Status: paired-pipe gameplay keeps varied spacing and authored coin/Star routes.
-The implementation target is simulation/generator `2.2.0`, configuration
-`dd-v2-paired-routes-v1`, encounter catalog 3. Core issues this identity for new
-runs. Technical integration and independent review are complete; final root
-verification remains in progress. Local gameplay acceptance remains open.
+Status: current new runs use catalog-4 currency formations. Simulation/generator
+`2.3.0` use configuration `dd-v2-currency-formations-v1`; catalog-3 paired
+routes remain frozen at `2.2.0` / `dd-v2-paired-routes-v1`. Both use paired-pipe
+gameplay, varied spacing and authored coin/Star routes. Local gameplay
+acceptance remains open.
 
 The mixed obstacle implementations remain in the codebase under their frozen
 `2.1.0` and `2.0.0` identities. Existing flights retain their issued rules. The
@@ -20,6 +20,9 @@ resolve the recorded matrix and reward-route gaps before returning mixed
 obstacles to new-run issuance.
 
 ## Paired-route target
+
+The frozen catalog-3 paired identity remains replayable for existing runs.
+New-run behavior is described below under currency formations.
 
 Catalog 3 restores all four stations in every family to paired pipes. It retains
 the original wetland authored gap centers, the 156-pixel opening and
@@ -37,12 +40,23 @@ The new default uses the paired reward resolver rather than catalog-2 edge-lane
 geometry. Generation, collision, scoring and collection remain shared integer
 TypeScript/Go rules. Collecting or ignoring rewards cannot change later geometry.
 
-New-run issuance uses the paired identity now that shared replay, frontend
-recovery and settlement support are ready. Policy
-`verified-pickups-v5-paired-routes` will accept only
+Previously issued paired runs use policy
+`verified-pickups-v5-paired-routes`, which accepts only
 `2.2.0` / `2.2.0` / `dd-v2-paired-routes-v1`, retaining the 30-coin run cap, 1:1
 credit and existing Star rules. All older supported policies remain eligible.
-New paired fixtures supplement the frozen fixture files.
+The catalog-3 paired fixtures remain byte-frozen.
+
+## Currency formations
+
+Catalog 4 keeps paired pipes and spacing while creating groups of three
+individual FEATHER members on eligible coin routes and five individual
+GAME_STAR members on each scheduled Star route. Each member has amount 1, a
+stable deterministic ID and the existing collision/event path. Group value is
+the member count. Seeded layouts vary sides and place coin members inside or
+outside pipe routes. The 29-member active capacity covers the maximum of eight
+active stations with three coin members each plus one five-member Star group.
+The settlement cap and per-member payout semantics remain unchanged. The new
+`currency-formations-v1.json` fixture supplements all frozen fixture bytes.
 
 Required current evidence is paired geometry and varied spacing, complete unique
 reward opportunities and Star capacity, fatal-tick ordering, once-only scoring,

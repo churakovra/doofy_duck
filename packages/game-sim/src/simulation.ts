@@ -1,8 +1,8 @@
 import { configIdFor } from "./canonical.js";
-import { bonusY, generateNext, wetlandRewardPoint, worldSpeedAt } from "./generation.js";
+import { bonusY, currencyFormationPoints, generateNext, worldSpeedAt } from "./generation.js";
 import { deepFreeze, incrementCounter } from "./internal.js";
-import { DEFAULT_CONFIG, LEGACY_DEFAULT_CONFIG, PRIOR_DEFAULT_CONFIG, VARIED_OBSTACLE_DEFAULT_CONFIG, WETLAND_DEFAULT_CONFIG, validateConfig, validateDescriptor } from "./config.js";
-import { mix32, SIMULATION_VERSION, GENERATOR_VERSION, LEGACY_DEFAULT_CONFIG_ID, LEGACY_SIMULATION_VERSION, LEGACY_GENERATOR_VERSION, PRIOR_DEFAULT_CONFIG_ID, PRIOR_SIMULATION_VERSION, PRIOR_GENERATOR_VERSION, VARIED_OBSTACLE_DEFAULT_CONFIG_ID, VARIED_OBSTACLE_GENERATOR_VERSION, VARIED_OBSTACLE_SIMULATION_VERSION, WETLAND_DEFAULT_CONFIG_ID, WETLAND_GENERATOR_VERSION, WETLAND_SIMULATION_VERSION, type Collectible, type GameConfig, type InputFrame, type Phase, type RunDescriptor, type RunDescriptorIdentity, type RunState, type StepResult, type GameEvent } from "./types.js";
+import { DEFAULT_CONFIG, LEGACY_DEFAULT_CONFIG, PAIRED_ROUTES_DEFAULT_CONFIG, PRIOR_DEFAULT_CONFIG, VARIED_OBSTACLE_DEFAULT_CONFIG, WETLAND_DEFAULT_CONFIG, validateConfig, validateDescriptor } from "./config.js";
+import { mix32, SIMULATION_VERSION, GENERATOR_VERSION, PAIRED_ROUTES_CONFIG_ID, PAIRED_ROUTES_GENERATOR_VERSION, PAIRED_ROUTES_SIMULATION_VERSION, LEGACY_DEFAULT_CONFIG_ID, LEGACY_SIMULATION_VERSION, LEGACY_GENERATOR_VERSION, PRIOR_DEFAULT_CONFIG_ID, PRIOR_SIMULATION_VERSION, PRIOR_GENERATOR_VERSION, VARIED_OBSTACLE_DEFAULT_CONFIG_ID, VARIED_OBSTACLE_GENERATOR_VERSION, VARIED_OBSTACLE_SIMULATION_VERSION, WETLAND_DEFAULT_CONFIG_ID, WETLAND_GENERATOR_VERSION, WETLAND_SIMULATION_VERSION, type Collectible, type GameConfig, type InputFrame, type Phase, type RunDescriptor, type RunDescriptorIdentity, type RunState, type StepResult, type GameEvent } from "./types.js";
 
 export function createRunDescriptor(
   identity: RunDescriptorIdentity,
@@ -12,11 +12,12 @@ export function createRunDescriptor(
   const legacy = configId === LEGACY_DEFAULT_CONFIG_ID;
   const prior = configId === PRIOR_DEFAULT_CONFIG_ID;
   const wetland = configId === WETLAND_DEFAULT_CONFIG_ID;
+  const paired = config.wetland?.catalogVersion === 3;
   const varied = config.wetland?.catalogVersion === 2;
   return {
     ...identity,
-    simulationVersion: legacy ? LEGACY_SIMULATION_VERSION : prior ? PRIOR_SIMULATION_VERSION : wetland ? WETLAND_SIMULATION_VERSION : varied ? VARIED_OBSTACLE_SIMULATION_VERSION : SIMULATION_VERSION,
-    generatorVersion: legacy ? LEGACY_GENERATOR_VERSION : prior ? PRIOR_GENERATOR_VERSION : wetland ? WETLAND_GENERATOR_VERSION : varied ? VARIED_OBSTACLE_GENERATOR_VERSION : GENERATOR_VERSION,
+    simulationVersion: legacy ? LEGACY_SIMULATION_VERSION : prior ? PRIOR_SIMULATION_VERSION : wetland ? WETLAND_SIMULATION_VERSION : varied ? VARIED_OBSTACLE_SIMULATION_VERSION : paired ? PAIRED_ROUTES_SIMULATION_VERSION : SIMULATION_VERSION,
+    generatorVersion: legacy ? LEGACY_GENERATOR_VERSION : prior ? PRIOR_GENERATOR_VERSION : wetland ? WETLAND_GENERATOR_VERSION : varied ? VARIED_OBSTACLE_GENERATOR_VERSION : paired ? PAIRED_ROUTES_GENERATOR_VERSION : GENERATOR_VERSION,
     configId,
   };
 }
@@ -26,7 +27,7 @@ export function createRun(
   config?: GameConfig,
 ): RunState {
   validateDescriptor(descriptor);
-  const resolvedConfig = config ?? (descriptor.configId === LEGACY_DEFAULT_CONFIG_ID ? LEGACY_DEFAULT_CONFIG : descriptor.configId === PRIOR_DEFAULT_CONFIG_ID ? PRIOR_DEFAULT_CONFIG : descriptor.configId === WETLAND_DEFAULT_CONFIG_ID ? WETLAND_DEFAULT_CONFIG : descriptor.configId === VARIED_OBSTACLE_DEFAULT_CONFIG_ID ? VARIED_OBSTACLE_DEFAULT_CONFIG : DEFAULT_CONFIG);
+  const resolvedConfig = config ?? (descriptor.configId === LEGACY_DEFAULT_CONFIG_ID ? LEGACY_DEFAULT_CONFIG : descriptor.configId === PRIOR_DEFAULT_CONFIG_ID ? PRIOR_DEFAULT_CONFIG : descriptor.configId === WETLAND_DEFAULT_CONFIG_ID ? WETLAND_DEFAULT_CONFIG : descriptor.configId === VARIED_OBSTACLE_DEFAULT_CONFIG_ID ? VARIED_OBSTACLE_DEFAULT_CONFIG : descriptor.configId === PAIRED_ROUTES_CONFIG_ID ? PAIRED_ROUTES_DEFAULT_CONFIG : DEFAULT_CONFIG);
   validateConfig(resolvedConfig);
   if (descriptor.configId !== configIdFor(resolvedConfig))
     throw Error("configId does not identify supplied config");
@@ -34,8 +35,11 @@ export function createRun(
       (descriptor.simulationVersion !== VARIED_OBSTACLE_SIMULATION_VERSION || descriptor.generatorVersion !== VARIED_OBSTACLE_GENERATOR_VERSION))
     throw Error("catalog-2 wetland config requires the frozen varied-obstacle simulation and generator versions");
   if (resolvedConfig.wetland?.catalogVersion === 3 &&
-      (descriptor.simulationVersion !== SIMULATION_VERSION || descriptor.generatorVersion !== GENERATOR_VERSION))
+      (descriptor.simulationVersion !== PAIRED_ROUTES_SIMULATION_VERSION || descriptor.generatorVersion !== PAIRED_ROUTES_GENERATOR_VERSION))
     throw Error("catalog-3 wetland config requires the current simulation and generator versions");
+  if (resolvedConfig.wetland?.catalogVersion === 4 &&
+      (descriptor.simulationVersion !== SIMULATION_VERSION || descriptor.generatorVersion !== GENERATOR_VERSION))
+    throw Error("catalog-4 wetland config requires the currency-formation simulation and generator versions");
   const ownedConfig = cloneConfig(resolvedConfig);
   const starSchedule = ownedConfig.starSchedule;
   const starInterval = starSchedule ? seededStarInterval(descriptor.seed, 0, starSchedule.minIntervalPipes, starSchedule.maxIntervalPipes) : undefined;
@@ -239,39 +243,33 @@ export function step(
       const wetlandRecovery = pipe.encounterFamily === "steady" && block >= 2 && block % 2 === 1;
       const wetlandSmallTrail = pipe.encounterFamily === "steady" && (block === 0 || wetlandRecovery);
       const wetlandTrail = next.config.wetland != null && (wetlandSmallTrail ? pipe.stationStep === 1 || pipe.stationStep === 3 : true);
-      if (wetlandTrail && next.collectibles.length >= next.config.limits.maxActiveCollectibles)
+      const featherPoints = wetlandTrail
+        ? currencyFormationPoints(next.config, input.descriptor.seed, pipe, next.config.collectibles.find(item => item.typeId === "FEATHER")!.radius)
+        : [];
+      if (wetlandTrail && next.collectibles.length + featherPoints.length > next.config.limits.maxActiveCollectibles)
         throw Error("wetland reward capacity invariant violated");
       if (wetlandTrail) {
         const definition = next.config.collectibles.find(item => item.typeId === "FEATHER")!;
-        const collectibleId = `feather-trail-${block}-${pipe.stationStep}`;
-        spawnedThisTick.add(collectibleId);
-        next = { ...next, collectibles: [...next.collectibles, {
-          id: collectibleId, typeId: "FEATHER",
-          ...wetlandRewardPoint(next.config, pipe, definition.radius),
-          amount: 1, radius: definition.radius, collected: false,
-        }] };
+        next = { ...next, collectibles: [...next.collectibles, ...featherPoints.map((point, member) => {
+          const collectibleId = `feather-trail-${block}-${pipe.stationStep}${next.config.wetland?.catalogVersion === 4 ? `-${member}` : ""}`;
+          spawnedThisTick.add(collectibleId);
+          return { id: collectibleId, typeId: "FEATHER", ...point, amount: 1, radius: definition.radius, collected: false };
+        })] };
       }
       if (scheduledStar) {
         const activeStars = next.collectibles.filter(collectible => collectible.typeId === "GAME_STAR").length;
-        if (activeStars > 0 || next.collectibles.length >= next.config.limits.maxActiveCollectibles)
+        const definition = next.config.collectibles.find(item => item.typeId === "GAME_STAR")!;
+        const starPoints = next.config.wetland
+          ? currencyFormationPoints(next.config, input.descriptor.seed, pipe, definition.radius, true, starScheduleOrdinal ?? 0)
+          : [{ x: pipe.x, y: bonusY(next.config, input.descriptor.seed, pipe, definition.radius) }];
+        if (activeStars > 0 || next.collectibles.length + starPoints.length > next.config.limits.maxActiveCollectibles)
           throw Error("scheduled Star capacity invariant violated");
         const schedule = next.config.starSchedule!;
-        const definition = next.config.collectibles.find(item => item.typeId === "GAME_STAR")!;
-        const collectibleId = `star-${pipe.index}`;
-        spawnedThisTick.add(collectibleId);
-        next = {
-          ...next,
-          collectibles: [...next.collectibles, {
-            id: collectibleId,
-            typeId: "GAME_STAR",
-            ...(next.config.wetland
-              ? wetlandRewardPoint(next.config, pipe, definition.radius, true)
-              : { x: pipe.x, y: bonusY(next.config, input.descriptor.seed, pipe, definition.radius) }),
-            amount: 1,
-            radius: definition.radius,
-            collected: false,
-          }],
-        };
+        next = { ...next, collectibles: [...next.collectibles, ...starPoints.map((point, member) => {
+          const collectibleId = `star-${pipe.index}${next.config.wetland?.catalogVersion === 4 ? `-${member}` : ""}`;
+          spawnedThisTick.add(collectibleId);
+          return { id: collectibleId, typeId: "GAME_STAR", ...point, amount: 1, radius: definition.radius, collected: false };
+        })] };
         const ordinal = incrementCounter(starScheduleOrdinal ?? 0);
         const gap = seededStarInterval(input.descriptor.seed, ordinal, schedule.minIntervalPipes, schedule.maxIntervalPipes);
         nextStarPipeIndex = incrementCounter(nextStarPipeIndex ?? pipe.index, gap);
