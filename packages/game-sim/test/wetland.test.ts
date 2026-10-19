@@ -32,10 +32,14 @@ import type { EncounterFamilyId, GameConfig, GameEvent, InputFrame, RunState } f
 type Mutable<T> = { -readonly [K in keyof T]: T[K] extends readonly (infer U)[] ? Mutable<U>[] : T[K] extends object ? Mutable<T[K]> : T[K] };
 
 function safeIntervals(state: RunState, station: RunState["pipes"][number]): [number, number][] {
+  return safeIntervalsForObstacles(state, station.obstacles ?? []);
+}
+
+function safeIntervalsForObstacles(state: RunState, obstacles: NonNullable<RunState["pipes"][number]["obstacles"]>): [number, number][] {
   const { flight, pipes } = state.config;
   const min = pipes.ceilingY + flight.duckHalfHeight + 1;
   const max = pipes.floorY - flight.duckHalfHeight - 1;
-  const blocked = (station.obstacles ?? []).map(obstacle => [
+  const blocked = obstacles.map(obstacle => [
     Math.max(min, obstacle.y - flight.duckHalfHeight),
     Math.min(max, obstacle.y + obstacle.height + flight.duckHalfHeight),
   ] as [number, number]).filter(([a, b]) => a <= b).sort((a, b) => a[0] - b[0]);
@@ -49,6 +53,43 @@ function safeIntervals(state: RunState, station: RunState["pipes"][number]): [nu
   return safe.map(([a, b]): [number, number] => state.config.wetland?.catalogVersion === 2
     ? [a, b]
     : [a + 25_000, b - 25_000]).filter(([a, b]) => a <= b);
+}
+
+function retainSafeDebrisReference(
+  state: RunState,
+  reference: number,
+  snapshot: { type: string; obstacles: NonNullable<RunState["pipes"][number]["obstacles"]> },
+): number | undefined {
+  if (snapshot.type !== "debris") return undefined;
+  return safeIntervalsForObstacles(state, snapshot.obstacles).some(([low, high]) => reference >= low && reference <= high)
+    ? reference
+    : undefined;
+}
+
+function emergencyObstacleNeedsFlap(
+  state: RunState,
+  observations: ReadonlyMap<string, RewardOwnerSnapshot & { y: number }>,
+  observedXs: ReadonlyMap<string, number>,
+  speed: number,
+): boolean {
+  const { flight } = state.config;
+  const coastY = state.duck.y + Math.min(flight.maxFallSpeed, state.duck.vy + flight.gravity);
+  const flapY = state.duck.y + Math.min(flight.maxFallSpeed, flight.flapVelocity + flight.gravity);
+  for (const [stationId, observation] of observations) {
+    if (state.tick < observation.readyAt) continue;
+    const observedX = observedXs.get(stationId);
+    if (observedX === undefined) continue;
+    const nextX = observedX - speed;
+    for (const obstacle of observation.obstacles) {
+      const left = nextX + obstacle.xOffset - Math.floor(obstacle.width / 2);
+      const right = nextX + obstacle.xOffset + Math.floor(obstacle.width / 2);
+      if (right < flight.duckX - flight.duckHalfWidth || left > flight.duckX + flight.duckHalfWidth) continue;
+      const coastHits = coastY + flight.duckHalfHeight >= obstacle.y && coastY - flight.duckHalfHeight <= obstacle.y + obstacle.height;
+      const flapHits = flapY + flight.duckHalfHeight >= obstacle.y && flapY - flight.duckHalfHeight <= obstacle.y + obstacle.height;
+      if (coastHits && !flapHits) return true;
+    }
+  }
+  return false;
 }
 
 function nearestSafeY(state: RunState, station: RunState["pipes"][number]): number {
@@ -192,8 +233,8 @@ function matureRewardOwner(rewardId: string, observedStations: ReadonlyMap<strin
   return owner && tick >= owner.readyAt ? owner : undefined;
 }
 
-function runRewardWitness(seed: number, entryY: number, entryVy: number, scoreTarget: number, starIndex?: number, rules = WETLAND_DEFAULT_CONFIG, pursueRewards = true, forcedFlapRange?: [number, number]) {
-  const config = {
+function runRewardWitness(seed: number, entryY: number, entryVy: number, scoreTarget: number, starIndex?: number, rules = WETLAND_DEFAULT_CONFIG, pursueRewards = true, forcedFlapRange?: [number, number], profile: "custom-cap" | "normal-default" = "custom-cap") {
+  const config = profile === "normal-default" ? rules : {
     ...rules,
     pipes: { ...rules.pipes, horizon: 1_700_000 },
     limits: { maxActivePipes: 24, maxActiveCollectibles: 25 },
@@ -202,12 +243,20 @@ function runRewardWitness(seed: number, entryY: number, entryVy: number, scoreTa
       : { minIntervalPipes: 8, maxIntervalPipes: 8 },
   };
   let state = createRun(createRunDescriptor({ runId: `wetland-reward-witness-${seed}-${scoreTarget}`, seed }, config), config);
-  state = { ...state, phase: "RUNNING", tick: config.pipes.rampTicks, duck: { ...state.duck, y: entryY, vy: entryVy },
+  if (profile === "custom-cap") state = { ...state, phase: "RUNNING", tick: config.pipes.rampTicks, duck: { ...state.duck, y: entryY, vy: entryVy },
     ...(starIndex === undefined ? { nextStarPipeIndex: 1, starScheduleOrdinal: 0 } : { nextStarPipeIndex: starIndex, starScheduleOrdinal: 0 }) };
+  const initialState = state;
   const observedStations = new Map<string, RewardOwnerSnapshot & { y: number }>();
+  const observedXs = new Map<string, number>();
   const observedRewards = new Map<string, { id: string; observedAt: number; readyAt: number; x: number; y: number; radius: number }>();
   const collected = new Set<string>();
   const collectedAt = new Map<string, number>();
+  const collectionEvents = new Map<string, { count: number; amount: number }>();
+  const displacements: { tick: number; stationId: string; actual: number; expected: number; score: number }[] = [];
+  let terminal: { before: { tick: number; score: number; y: number; vy: number; flap: boolean; pipes: unknown[] };
+    after: { tick: number; score: number; phase: string; y: number; vy: number }; events: readonly GameEvent[];
+    lastInputs: typeof inputs; activeTarget: { id: string; y: number; type: string; gap?: number | undefined };
+    matureStation: unknown; matureReward: unknown } | undefined;
   const passedTypes: { stationId: string; type: string; spanPercent: number }[] = [];
   let currentTarget = "";
   const targetChanges: { tick: number; readyAt: number; y: number; target: string; duckY: number; duckVy: number }[] = [];
@@ -227,6 +276,7 @@ function runRewardWitness(seed: number, entryY: number, entryVy: number, scoreTa
           obstacles: (station.obstacles ?? []).map(item => ({ ...item })),
           ...(obstacle?.typeId === "debris" ? { obstacleCenter: obstacle.y + Math.floor(obstacle.height / 2) } : {}),
         });
+        observedXs.set(station.stationId, station.x);
       }
     }
     for (const item of state.collectibles) {
@@ -245,13 +295,17 @@ function runRewardWitness(seed: number, entryY: number, entryVy: number, scoreTa
     if (!reward && station) expect(state.tick, `${station.stationId} 18-tick reaction`).toBeGreaterThanOrEqual(observedStations.get(station.stationId!)!.readyAt);
     if (target && target !== currentTarget) {
       currentTarget = target;
-      targetY = reward ? observedRewards.get(reward.id)!.y : observedStations.get(station!.stationId!)!.y;
       if (reward) {
+        targetY = observedRewards.get(reward.id)!.y;
         const owner = matureRewardOwner(reward.id, observedStations, state.tick);
         targetType = owner?.type ?? "unknown";
         targetGap = owner?.obstacleCenter ?? owner?.gap;
       } else {
         const observation = observedStations.get(station!.stationId!)!;
+        const retainedReference = !pursueRewards
+          ? retainSafeDebrisReference(state, targetY, observation)
+          : undefined;
+        targetY = retainedReference ?? observation.y;
         targetType = observation.type;
         targetGap = observation.obstacleCenter ?? observation.gap;
       }
@@ -271,24 +325,39 @@ function runRewardWitness(seed: number, entryY: number, entryVy: number, scoreTa
     let flap = state.duck.y > targetY + threshold && state.duck.vy > 0;
     if ((coastY - flight.duckHalfHeight <= state.config.pipes.ceilingY || coastY + flight.duckHalfHeight >= state.config.pipes.floorY) &&
       flapY - flight.duckHalfHeight > state.config.pipes.ceilingY && flapY + flight.duckHalfHeight < state.config.pipes.floorY) flap = true;
-    for (const obstacleStation of state.pipes) {
-      if (!obstacleStation.stationId || state.tick < (observedStations.get(obstacleStation.stationId)?.readyAt ?? Number.POSITIVE_INFINITY)) continue;
-      for (const obstacle of obstacleStation.obstacles ?? []) {
-        const left = obstacleStation.x - speed + obstacle.xOffset - Math.floor(obstacle.width / 2);
-        const right = obstacleStation.x - speed + obstacle.xOffset + Math.floor(obstacle.width / 2);
-        if (right < flight.duckX - flight.duckHalfWidth || left > flight.duckX + flight.duckHalfWidth) continue;
-        const coastHits = coastY + flight.duckHalfHeight >= obstacle.y && coastY - flight.duckHalfHeight <= obstacle.y + obstacle.height;
-        const flapHits = flapY + flight.duckHalfHeight >= obstacle.y && flapY - flight.duckHalfHeight <= obstacle.y + obstacle.height;
-        if (coastHits && !flapHits) flap = true;
-      }
-    }
+    if (emergencyObstacleNeedsFlap(state, observedStations, observedXs, speed)) flap = true;
+    if (profile === "normal-default" && state.phase === "READY") flap = true;
     if (forcedFlapRange && state.tick >= forcedFlapRange[0] && state.tick <= forcedFlapRange[1]) flap = true;
+    flap = finalWorldSafeAction(state, flap);
     inputs.push({ tick: state.tick, flap });
+    const worldAdvances = state.phase === "RUNNING" || (state.phase === "READY" && flap);
+    const beforePipes = worldAdvances ? state.pipes.map(pipe => ({ id: pipe.id, stationId: pipe.stationId, x: pipe.x })) : [];
     const result = step(state, flap ? [makeInput(state.nextInputSequence, "FLAP")] : []);
+    if (result.state.phase === "DEAD") {
+      const rewardObservation = observedRewards.get(currentTarget);
+      const stationObservation = observedStations.get(currentTarget) ??
+        (rewardObservation ? matureRewardOwner(currentTarget, observedStations, state.tick) : undefined);
+      terminal = { before: { tick: state.tick, score: state.score, y: state.duck.y, vy: state.duck.vy, flap,
+        pipes: state.pipes.map(pipe => ({ stationId: pipe.stationId, x: pipe.x, gapCenter: pipe.gapCenter, obstacles: pipe.obstacles })) },
+        after: { tick: result.state.tick, score: result.state.score, phase: result.state.phase, y: result.state.duck.y, vy: result.state.duck.vy },
+        events: result.events, lastInputs: inputs.slice(-40), activeTarget: { id: currentTarget, y: targetY, type: targetType, gap: targetGap },
+        matureStation: stationObservation && { ...stationObservation, maturityDelay: stationObservation.readyAt - stationObservation.observedAt },
+        matureReward: rewardObservation && { ...rewardObservation, maturityDelay: rewardObservation.readyAt - rewardObservation.observedAt } };
+    }
     result.events.filter(event => event.type === "CurrencyCollected").forEach(event => {
       collected.add(event.collectibleId);
       collectedAt.set(event.collectibleId, event.tick);
+      const current = collectionEvents.get(event.collectibleId) ?? { count: 0, amount: 0 };
+      collectionEvents.set(event.collectibleId, { count: current.count + 1, amount: current.amount + event.amount });
     });
+    if (worldAdvances) {
+      const expected = worldSpeedAt(config, state.tick + 1, state.score);
+      for (const [stationId, x] of observedXs) observedXs.set(stationId, x - expected);
+      for (const pipe of beforePipes) {
+        const moved = result.state.pipes.find(item => item.id === pipe.id);
+        if (moved) displacements.push({ tick: state.tick, stationId: pipe.stationId ?? pipe.id, actual: pipe.x - moved.x, expected, score: state.score });
+      }
+    }
     for (const event of result.events) if (event.type === "ObstaclePassed") {
       const passedStation = state.pipes.find(pipe => pipe.stationId === event.stationId);
       const obstacle = passedStation?.obstacles?.[0];
@@ -298,7 +367,10 @@ function runRewardWitness(seed: number, entryY: number, entryVy: number, scoreTa
     state = result.state;
     if (forcedFlapRange && state.tick === forcedFlapRange[1] + 1) branchCheckpoint = state;
   }
-  return { state, collected, collectedAt, targetChanges, passedTypes, inputs, branchCheckpoint, observedStations, observedRewards };
+  return { state, initialState, profile, args: { seed, entryY, entryVy, scoreTarget, starIndex, pursueRewards, forcedFlapRange, profile,
+    configIdentity: state.descriptor.configId, horizon: config.pipes.horizon, maxActivePipes: config.limits.maxActivePipes,
+    maxActiveCollectibles: config.limits.maxActiveCollectibles, starSchedule: config.starSchedule },
+    collected, collectedAt, collectionEvents, displacements, terminal, targetChanges, passedTypes, inputs, branchCheckpoint, observedStations, observedRewards };
 }
 
 type MatureGeometry = {
@@ -496,10 +568,44 @@ function worldSafeBlindFlap(state: RunState): boolean {
   return flapSafe && Math.abs(flapY - midpoint) < Math.abs(coastY - midpoint);
 }
 
+function minimumFlapCenter(state: RunState): number {
+  const { flight } = state.config;
+  let y = state.duck.y;
+  let vy = flight.flapVelocity;
+  let minimum = y;
+  do {
+    vy = Math.min(flight.maxFallSpeed, vy + flight.gravity);
+    y += vy;
+    minimum = Math.min(minimum, y);
+  } while (vy < 0);
+  return minimum;
+}
+
+function isFlapWorldSafe(state: RunState): boolean {
+  return minimumFlapCenter(state) - state.config.flight.duckHalfHeight > state.config.pipes.ceilingY;
+}
+
+function isCoastWorldSafe(state: RunState): boolean {
+  const { flight, pipes } = state.config;
+  const nextY = state.duck.y + Math.min(flight.maxFallSpeed, state.duck.vy + flight.gravity);
+  return nextY - flight.duckHalfHeight > pipes.ceilingY && nextY + flight.duckHalfHeight < pipes.floorY;
+}
+
+function finalWorldSafeAction(state: RunState, preferredFlap: boolean): boolean {
+  const flapSafe = isFlapWorldSafe(state);
+  const coastSafe = isCoastWorldSafe(state);
+  if (preferredFlap && flapSafe) return true;
+  if (!preferredFlap && coastSafe) return false;
+  if (coastSafe) return false;
+  if (flapSafe) return true;
+  throw new Error(`no world-safe action at tick=${state.tick} y=${state.duck.y} vy=${state.duck.vy}`);
+}
+
 function runPlannedWitness(seed: number, entryY: number, entryVy: number, scoreTarget: number, rules: GameConfig) {
   const config = { ...rules, pipes: { ...rules.pipes, horizon: 1_700_000 }, limits: { maxActivePipes: 24, maxActiveCollectibles: 25 }, starSchedule: null };
   let state = createRun(createRunDescriptor({ runId: `wetland-plan-${seed}-${scoreTarget}`, seed }, config), config);
   state = { ...state, phase: "RUNNING", tick: config.pipes.rampTicks, duck: { ...state.duck, y: entryY, vy: entryVy } };
+  const initialState = state;
   const observations = new Map<string, MatureGeometry & { readyAt: number }>();
   const passed: { stationId: string; type: string; spanPercent: number; x: number; y: number; vy: number }[] = [];
   const entries = new Map<string, { x: number; y: number; vy: number; tick: number }>();
@@ -551,10 +657,10 @@ function runPlannedWitness(seed: number, entryY: number, entryVy: number, scoreT
     }
     state = result.state;
   }
-  return { state, passed, entries, inputs, observations: [...observations.values()], planning };
+  return { state, initialState, profile: "custom-cap" as const, passed, entries, inputs, observations: [...observations.values()], planning };
 }
 
-function runGeometryExitWitness(config: GameConfig, stations: RunState["pipes"]): { state: RunState; passed: string[]; inputs: { tick: number; flap: boolean }[]; observations: { stationId: string; observedAt: number; readyAt: number }[] } {
+function runGeometryExitWitness(config: GameConfig, stations: RunState["pipes"]): { state: RunState; passed: string[]; inputs: { tick: number; flap: boolean }[]; displacements: { tick: number; stationId: string; actual: number; expected: number }[]; observations: { stationId: string; observedAt: number; readyAt: number }[]; activations: { tick: number; stations: string[] }[] } {
   let state = createRun(createRunDescriptor({ runId: "geometry-exit-witness", seed: 0 }, config), config);
   state = { ...state, phase: "RUNNING", tick: config.pipes.rampTicks,
     duck: { ...state.duck, y: 280_000, vy: 0 }, pipes: stations,
@@ -562,6 +668,8 @@ function runGeometryExitWitness(config: GameConfig, stations: RunState["pipes"])
   const observations = new Map<string, MatureGeometry & { readyAt: number }>();
   const passed: string[] = [];
   const inputs: { tick: number; flap: boolean }[] = [];
+  const displacements: { tick: number; stationId: string; actual: number; expected: number }[] = [];
+  const activations: { tick: number; stations: string[] }[] = [];
   let plan: boolean[] = [];
   for (let frame = 0; frame < 1_000 && state.phase === "RUNNING"; frame += 1) {
     for (const station of state.pipes) if (station.stationId && station.x <= 360_000 && station.x >= state.duck.x - 40_000 && !observations.has(station.stationId))
@@ -573,16 +681,23 @@ function runGeometryExitWitness(config: GameConfig, stations: RunState["pipes"])
       const status = { reason: "", horizon: 0, stationId: "", bandLow: 0, bandHigh: 0, targetY: 0, preparedBand: "none" };
       const generated = planMatureGeometry(state, mature, status, 1024, 60);
       if (mature.length && !generated) throw new Error(`exit witness planner failed at tick=${state.tick} y=${state.duck.y} vy=${state.duck.vy} ${status.reason}`);
+      if (newMature) activations.push({ tick: state.tick, stations: mature.filter(item => item.readyAt === state.tick).map(item => item.stationId) });
       plan = generated ?? [];
     }
     const flap = plan.shift() ?? worldSafeBlindFlap(state);
     inputs.push({ tick: state.tick, flap });
+    const before = state.pipes.map(pipe => ({ id: pipe.id, stationId: pipe.stationId, x: pipe.x }));
     const result = step(state, flap ? [makeInput(state.nextInputSequence, "FLAP")] : []);
+    const expected = worldSpeedAt(config, state.tick + 1, state.score);
+    for (const pipe of before) {
+      const moved = result.state.pipes.find(item => item.id === pipe.id);
+      if (moved) displacements.push({ tick: state.tick, stationId: pipe.stationId ?? pipe.id, actual: pipe.x - moved.x, expected });
+    }
     for (const event of result.events) if (event.type === "ObstaclePassed") passed.push(event.stationId);
     state = result.state;
     if (passed.includes(stations[1]?.stationId ?? "") && !state.pipes.some(pipe => pipe.stationId === stations[1]?.stationId)) break;
   }
-  return { state, passed, inputs, observations: [...observations.values()].map(({ stationId, observedAt, readyAt }) => ({ stationId, observedAt, readyAt })) };
+  return { state, passed, inputs, displacements, activations, observations: [...observations.values()].map(({ stationId, observedAt, readyAt }) => ({ stationId, observedAt, readyAt })) };
 }
 
 function replayHalfPipeRoute(config: GameConfig, seed: number, obstacleHeight: number, stationX: number, initialTick: number, prelude: string, crossing: string) {
@@ -644,6 +759,48 @@ const variedWetlandFixture = JSON.parse(readFileSync("contracts/simulation/wetla
 const variedValidationFixture = JSON.parse(readFileSync("contracts/simulation/wetland-v2-config-validation.json", "utf8")) as typeof validationFixture;
 
 describe("wetland station contract", () => {
+  it("checks the full discrete flap ascent against the public ceiling", () => {
+    const config = DEFAULT_CONFIG;
+    const initial = createRun(createRunDescriptor({ runId: "flap-ascent-bound", seed: 0 }, config), config);
+    const atKnownUnsafeApex = { ...initial, phase: "RUNNING" as const,
+      duck: { ...initial.duck, y: 55_860, vy: 0 } };
+    const atSafeApex = { ...atKnownUnsafeApex, duck: { ...atKnownUnsafeApex.duck, y: 56_241 } };
+    expect(minimumFlapCenter(atKnownUnsafeApex)).toBe(9_620);
+    expect(isFlapWorldSafe(atKnownUnsafeApex)).toBe(false);
+    expect(minimumFlapCenter(atSafeApex)).toBe(10_001);
+    expect(isFlapWorldSafe(atSafeApex)).toBe(true);
+    expect(finalWorldSafeAction(atKnownUnsafeApex, true)).toBe(false);
+    const noWorldSafeAction = { ...initial, phase: "RUNNING" as const,
+      duck: { ...initial.duck, y: 15_000, vy: -8_000 } };
+    expect(() => finalWorldSafeAction(noWorldSafeAction, false)).toThrow(/no world-safe action/);
+  });
+
+  it("retains a safe existing survival reference for a matured debris snapshot", () => {
+    const config = DEFAULT_CONFIG;
+    const state = createRun(createRunDescriptor({ runId: "mature-debris-reference", seed: 0 }, config), config);
+    const snapshot = { type: "debris", obstacles: [
+      { typeId: "debris" as const, xOffset: 0, y: 412_902, width: 216_000, height: 42_000 },
+    ] };
+    expect(retainSafeDebrisReference(state, 35_001, snapshot)).toBe(35_001);
+    expect(retainSafeDebrisReference(state, 433_902, snapshot)).toBeUndefined();
+    expect(retainSafeDebrisReference(state, 35_001, { ...snapshot, type: "rock" })).toBeUndefined();
+  });
+
+  it("checks mature emergency rectangles from the captured public snapshot", () => {
+    const config = DEFAULT_CONFIG;
+    const initial = createRun(createRunDescriptor({ runId: "captured-emergency-geometry", seed: 0 }, config), config);
+    const station = { ...initial.pipes[0]!, stationId: "station-0", obstacles: [] };
+    const state = { ...initial, phase: "RUNNING" as const, tick: 1,
+      duck: { ...initial.duck, y: 30_000, vy: 0 }, pipes: [station] };
+    const observed = new Map<string, RewardOwnerSnapshot & { y: number }>([["station-0", {
+      readyAt: 1, observedAt: 0, x: 103_000, y: 30_000, type: "debris", gap: 280_000,
+      obstacles: [{ typeId: "debris", xOffset: 0, y: 35_000, width: 52_000, height: 5_000 }],
+    }]]);
+    const observedXs = new Map([["station-0", 103_000]]);
+    const speed = worldSpeedAt(config, state.tick + 1, state.score);
+    expect(emergencyObstacleNeedsFlap(state, observed, observedXs, speed)).toBe(true);
+  });
+
   it("issues a new varied-geometry identity while retaining the frozen 2.0 wetland identity", () => {
     expect([SIMULATION_VERSION, GENERATOR_VERSION, DEFAULT_CONFIG_ID]).toEqual([
       "2.1.0", "2.1.0", "dd-v2-varied-obstacles-v1",
@@ -977,6 +1134,60 @@ describe("wetland station contract", () => {
       .toEqual(new Set(["vine", "rock"]));
   }, 30_000);
 
+  it("gates the seed-two cap entry through its first pressure recovery", () => {
+    const result = runPlannedWitness(2, 275_000, -500, 17, DEFAULT_CONFIG);
+    const recoveryExit = result.passed.find(item => item.stationId === "station-16");
+    expect({ profile: result.profile, seed: result.initialState.descriptor.seed, phase: result.initialState.phase,
+      tick: result.initialState.tick, y: result.initialState.duck.y, vy: result.initialState.duck.vy,
+      horizon: result.initialState.config.pipes.horizon,
+      maxActivePipes: result.initialState.config.limits.maxActivePipes,
+      maxActiveCollectibles: result.initialState.config.limits.maxActiveCollectibles,
+      starSchedule: result.initialState.config.starSchedule ?? null })
+      .toEqual({ profile: "custom-cap", seed: 2, phase: "RUNNING", tick: DEFAULT_CONFIG.pipes.rampTicks,
+        y: 275_000, vy: -500, horizon: 1_700_000,
+        maxActivePipes: 24, maxActiveCollectibles: 25, starSchedule: null });
+    expect(result.initialState.descriptor.configId).toMatch(/^dd-v1-config:/);
+    expect(result.state.phase, `seed=2 initial=${result.initialState.phase}/${result.initialState.tick}/${result.initialState.duck.y}/${result.initialState.duck.vy} final=${result.state.phase}/${result.state.tick}/${result.state.score}/${result.state.duck.y}/${result.state.duck.vy} passed=${JSON.stringify(result.passed.slice(-6))} plans=${JSON.stringify(result.planning.slice(-5))}`)
+      .toBe("RUNNING");
+    expect(result.state.score).toBeGreaterThanOrEqual(17);
+    const station16Observation = result.observations.find(item => item.stationId === "station-16");
+    expect(station16Observation).toBeDefined();
+    expect(station16Observation!.readyAt - station16Observation!.observedAt).toBe(18);
+    expect(recoveryExit).toBeDefined();
+  }, 30_000);
+
+  it("discriminates normal seed-nine survival when reward pursuit is disabled", () => {
+    const config = DEFAULT_CONFIG;
+    const expectedInitial = createRun(createRunDescriptor({ runId: "wetland-reward-witness-9-17", seed: 9 }, config), config);
+    const result = runRewardWitness(9, 280_000, 0, 17, undefined, config, false, undefined, "normal-default");
+    const stationObservation = result.observedStations.get("station-16");
+    const stationTarget = result.targetChanges.find(item => item.target === "station-16");
+    const debrisReference = result.targetChanges.find(item => item.target === "station-11");
+    expect({ profile: result.profile, pursueRewards: result.args.pursueRewards, phase: result.initialState.phase,
+      tick: result.initialState.tick, y: result.initialState.duck.y, vy: result.initialState.duck.vy,
+      identity: result.args.configIdentity, horizon: result.initialState.config.pipes.horizon,
+      capacity: result.initialState.config.limits.maxActiveCollectibles, stars: result.initialState.config.starSchedule })
+      .toEqual({ profile: "normal-default", pursueRewards: false, phase: "READY", tick: 0, y: expectedInitial.duck.y, vy: 0,
+        identity: DEFAULT_CONFIG_ID, horizon: config.pipes.horizon, capacity: config.limits.maxActiveCollectibles,
+        stars: config.starSchedule });
+    expect(result.inputs[0]).toEqual({ tick: 0, flap: true });
+    expect(result.state.phase, `args=${JSON.stringify(result.args)} initial=READY/0/${result.initialState.duck.y}/0 final=${result.state.phase}/${result.state.tick}/${result.state.score}/${result.state.duck.y}/${result.state.duck.vy} passed=${JSON.stringify(result.passedTypes.slice(-8))} terminal=${JSON.stringify(result.terminal)} targets=${JSON.stringify(result.targetChanges.slice(-10))}`)
+      .toBe("RUNNING");
+    expect(result.state.score).toBeGreaterThanOrEqual(17);
+    expect(result.passedTypes.some(item => item.stationId === "station-16")).toBe(true);
+    expect(stationObservation).toBeDefined();
+    expect(stationObservation!.readyAt - stationObservation!.observedAt).toBe(18);
+    expect(stationObservation!.x).toBeLessThanOrEqual(360_000);
+    expect(stationTarget).toBeDefined();
+    expect(stationTarget!.tick).toBe(stationTarget!.readyAt);
+    expect(debrisReference).toMatchObject({ y: 35_001, readyAt: 1_020, tick: 1_020 });
+    expect(result.displacements.length).toBeGreaterThan(0);
+    expect(result.displacements.find(item => item.tick === 0)).toMatchObject({
+      stationId: "station-0", actual: worldSpeedAt(config, 1, 0), expected: worldSpeedAt(config, 1, 0),
+    });
+    expect(result.displacements.every(item => item.actual === item.expected), JSON.stringify(result.displacements.slice(0, 5))).toBe(true);
+  }, 30_000);
+
   it("survives the reverse half-pipe polarity transition at maximum speed", () => {
     const result = runPlannedWitness(0, 280_000, 0, 28, DEFAULT_CONFIG);
     expect(result.state.phase, `score=${result.state.score} y=${result.state.duck.y}/${result.state.duck.vy} plans=${result.planning.slice(-4).map(item => `${item.planner.stationId}:${item.planner.reason}@${item.tick}`).join(",")}`).toBe("RUNNING");
@@ -1036,6 +1247,39 @@ describe("wetland station contract", () => {
     expect(observed!.readyAt - observed!.observedAt).toBe(18);
     expect(result.state.phase, `score=${result.state.score} y=${result.state.duck.y}/${result.state.duck.vy}`).toBe("RUNNING");
     expect(result.passed).toEqual(["station-0", "station-1"]);
+  }, 30_000);
+
+  it("gates a 216000-by-42000 floating bar into a paired-pipe exit at cap speed", () => {
+    const config = DEFAULT_CONFIG;
+    const initial = createRun(createRunDescriptor({ runId: "m4a-wide-bar-exit", seed: 0 }, config), config);
+    const gapTop = 280_000 - Math.floor(config.pipes.gapHeight / 2);
+    const gapBottom = 280_000 + Math.floor(config.pipes.gapHeight / 2);
+    const stations = [
+      { ...initial.pipes[0]!, id: "m4a-bar", index: 0, stationId: "station-0", stationStep: 0, encounterFamily: "steady" as const,
+        x: 360_000, gapCenter: 280_000, obstacles: [{ typeId: "debris" as const, xOffset: 0, y: 69_000, width: 216_000, height: 42_000 }] },
+      { ...initial.pipes[0]!, id: "m4a-paired-pipe", index: 1, stationId: "station-1", stationStep: 1, encounterFamily: "steady" as const,
+        x: 720_000, gapCenter: 280_000, obstacles: [
+          { typeId: "pipes" as const, xOffset: 0, y: config.pipes.ceilingY, width: config.pipes.width, height: gapTop },
+          { typeId: "pipes" as const, xOffset: 0, y: gapBottom, width: config.pipes.width, height: config.pipes.floorY - gapBottom },
+        ] },
+    ];
+    const result = runGeometryExitWitness(config, stations);
+    const bar = stations[0]!.obstacles[0]!;
+    expect({ width: bar.width, height: bar.height, centerY: bar.y + Math.floor(bar.height / 2) })
+      .toEqual({ width: 216_000, height: 42_000, centerY: 90_000 });
+    const barObservation = result.observations.find(item => item.stationId === "station-0");
+    const pipeObservation = result.observations.find(item => item.stationId === "station-1");
+    expect(barObservation).toMatchObject({ observedAt: config.pipes.rampTicks, readyAt: config.pipes.rampTicks + 18 });
+    expect(barObservation!.readyAt - barObservation!.observedAt).toBe(18);
+    expect(pipeObservation).toBeDefined();
+    expect(pipeObservation!.readyAt - pipeObservation!.observedAt).toBe(18);
+    expect(result.activations).toContainEqual({ tick: barObservation!.readyAt, stations: ["station-0"] });
+    expect(result.activations).toContainEqual({ tick: pipeObservation!.readyAt, stations: ["station-1"] });
+    expect(result.state.phase, `seed=0 profile=custom-cap initial=RUNNING/${config.pipes.rampTicks}/280000/0 final=${result.state.phase}/${result.state.tick}/${result.state.score}/${result.state.duck.y}/${result.state.duck.vy} observed=${JSON.stringify(result.observations)} passed=${JSON.stringify(result.passed)}`)
+      .toBe("RUNNING");
+    expect(result.passed).toEqual(["station-0", "station-1"]);
+    expect(result.displacements.length).toBeGreaterThan(0);
+    expect(result.displacements.every(item => item.actual === item.expected), JSON.stringify(result.displacements.slice(0, 5))).toBe(true);
   }, 30_000);
 
   it("places varied-catalog coin and Star points inside realized free geometry", () => {
@@ -1442,13 +1686,30 @@ describe("wetland station contract", () => {
     const result = runRewardWitness(0, 280_000, 0, 13, undefined, DEFAULT_CONFIG, true, [3277, 3293]);
     const prefixFlaps = [2712, 2746, 2780, 2825, 2871, 2905, 2947, 2984, 3002, 3035, 3077, 3104, 3138, 3175, 3212, 3242, 3269];
     expect(result.inputs.filter(input => input.tick <= 3276 && input.flap).map(input => input.tick)).toEqual(prefixFlaps);
+    expect(result.inputs.filter(input => input.tick >= 3277 && input.tick <= 3293).every(input => input.flap),
+      "the accepted forced branch retains every authored flap after the world-safety guard").toBe(true);
     const branchReward = result.observedRewards.get("feather-trail-2-1");
     expect(branchReward).toBeDefined();
     expect(branchReward!.readyAt - branchReward!.observedAt).toBe(18);
+    expect(branchReward!.x).toBeLessThanOrEqual(360_000);
+    expect(result.targetChanges.find(item => item.target === "feather-trail-2-1")?.tick).toBe(branchReward!.readyAt);
     expect(3277).toBeGreaterThanOrEqual(branchReward!.readyAt);
     expect(result.branchCheckpoint?.tick).toBe(3294);
     expect(result.branchCheckpoint?.collectibles.find(item => item.id === "feather-trail-2-1")?.collected).toBe(false);
     expect(result.collectedAt.get("feather-trail-2-1")).toBe(3309);
+    const requiredTrail = [0, 1, 2, 3].map(step => `feather-trail-2-${step}`);
+    for (const id of requiredTrail) {
+      const pickup = result.observedRewards.get(id);
+      const ownerIndex = Number(id.split("-").at(-1)) + 8;
+      const owner = result.observedStations.get(`station-${ownerIndex}`);
+      expect(pickup, `${id} was observed`).toBeDefined();
+      expect(owner, `${id} has an observed owner`).toBeDefined();
+      expect(pickup!.readyAt - pickup!.observedAt, `${id} matures after 18 ticks`).toBe(18);
+      expect(owner!.readyAt, `${id} owner is mature by collection`).toBeLessThanOrEqual(result.collectedAt.get(id)!);
+      expect(result.collectionEvents.get(id), `${id} one 1-unit CurrencyCollected event`).toEqual({ count: 1, amount: 1 });
+    }
+    expect(result.displacements.length).toBeGreaterThan(0);
+    expect(result.displacements.every(item => item.actual === item.expected), JSON.stringify(result.displacements.slice(0, 5))).toBe(true);
     const owner = result.observedStations.get("station-9");
     expect(owner).toBeDefined();
     expect(owner!.readyAt - owner!.observedAt).toBe(18);

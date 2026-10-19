@@ -53,7 +53,13 @@ default identity, retaining 1:1 credit, the 30-coin run cap and existing Star
 rules. The full catalog-2 route matrix and final checks remain open, so these
 results do not mark the feature complete.
 
-Some bounded survival witnesses pass, but reward-route acceptance is still open.
+The witness harness gate passes four fixed cases: the accepted complete pressure
+trail and following station, a varied-entry cap-speed transition, a genuine
+READY/default/ramp run through the first recovery, and a 216-pixel floating bar
+with its following pipe. The harness uses matured snapshots, checks the full
+18-tick reaction delay and actual speed, and keeps reward and survival objectives
+separate. Type checking, lint and all 160 simulation tests passed for this gate.
+The full entry, boundary and reward matrix remains open.
 Earlier searched reward examples were invalidated by a hidden-owner-metadata
 issue in the test controller; their execution does not establish the required
 observation contract. Corrected cases must use only observations matured after
