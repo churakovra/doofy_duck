@@ -10,6 +10,10 @@ review, test assumptions, recovery, checkpoints or long jobs, read the relevant
 section of the [agent workflow reference](AGENT_WORKFLOW.md); it is not required
 reading in full for every task.
 
+Per-feature collaboration-state templates and the selected-run telemetry tool
+are documented in [agent-workflow templates](agent-workflow/README.md). The
+`.agent-workflow/` runtime records are local and ignored by Git.
+
 ## Product and current implementation
 
 | Document | Use it for |
@@ -18,7 +22,6 @@ reading in full for every task.
 | [Foundation](FOUNDATION.md) | Extension boundaries for rule configuration, cosmetics, events, and future statistics |
 | [Development plan](DEVELOPMENT_PLAN.md) | MVP finish line, prioritized feature backlog, next batch, dependencies, and release acceptance gates |
 | [MVP specifications](MVP_SPECIFICATIONS.md) | Proposed difficulty, run/continue/settlement and economy rules, acceptance scenarios, and owned product/release/infrastructure decision gates |
-| [Telegram bot setup](TELEGRAM_BOT_SETUP.md) | Launch-bound automatic identity, BotFather setup and local real-Telegram test configuration |
 | [Unified account game](UNIFIED_ACCOUNT_GAME.md) | Single account-backed entry, complete local startup and October 18 verification |
 | [SHOP implementation record](SHOP_IMPLEMENTATION_RESULTS.md) | Delivered code, default-off activation and current verification limits |
 | [SHOP implementation backlog](SHOP_IMPLEMENTATION_PLAN.md) | Item 6 tasks, WALLET prerequisites, decision gates and verification sequence |
@@ -29,6 +32,7 @@ reading in full for every task.
 | [Arcade simulation](ARCADE_SIMULATION.md) | Current mechanics, identities, bounds, and parity limits |
 | [Simulation contract](../contracts/simulation/README.md) | Shared fixtures and deliberate regeneration workflow |
 | [Local wallet](WALLET_UPDATE.md) | Record validation, settlement, tab ownership, and storage fallback |
+| [Telegram bot setup](TELEGRAM_BOT_SETUP.md) | Launch-bound automatic identity, BotFather setup and local real-Telegram test configuration |
 | [Audio implementation](AUDIO_IMPLEMENTATION.md) | Controller API, integration, and playback lifecycle |
 | [Flight feel](FLIGHT_FEEL.md) | Cosmetic motion, bounded effects, and reduced motion |
 | [Cosmetic authoring](COSMETICS.md) | Local wardrobe flow, stable catalog IDs, replaceable art, image conventions and fallback |
