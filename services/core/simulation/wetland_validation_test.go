@@ -10,6 +10,8 @@ type wetlandValidationCase struct {
 	Name            string `json:"name"`
 	Accepted        bool   `json:"accepted"`
 	Varied          bool   `json:"varied"`
+	Paired          bool   `json:"paired"`
+	Mutation        string `json:"mutation"`
 	WorldOffset     *int64 `json:"worldOffset"`
 	NoStars         bool   `json:"noStars"`
 	WithChallenges  bool   `json:"withChallenges"`
@@ -59,6 +61,9 @@ func TestSharedWetlandConfigurationValidationCorpus(t *testing.T) {
 	t.Run("catalog-2", func(t *testing.T) {
 		testWetlandConfigurationValidationCorpus(t, "../../../contracts/simulation/wetland-v2-config-validation.json")
 	})
+	t.Run("catalog-3", func(t *testing.T) {
+		testWetlandConfigurationValidationCorpus(t, "../../../contracts/simulation/wetland-v3-config-validation.json")
+	})
 }
 
 func testWetlandConfigurationValidationCorpus(t *testing.T, path string) {
@@ -78,6 +83,20 @@ func testWetlandConfigurationValidationCorpus(t *testing.T, path string) {
 			config := WetlandConfiguration()
 			if testCase.Varied {
 				config = VariedObstacleConfiguration()
+			}
+			if testCase.Paired {
+				config = PairedRoutesConfiguration()
+			}
+			switch testCase.Mutation {
+			case "custom-center":
+				config.Wetland.Families[0].GapCenters[0] = 290000
+			case "mixed-obstacle":
+				config.Wetland.Families[0].ObstacleTypes[1] = "vine"
+			case "varied-geometry":
+				config.Wetland.Geometry = &WetlandGeometryConfig{HalfPipeMinPercent: 70, HalfPipeMaxPercent: 90, FloatingBarMinWidth: 90000, FloatingBarMaxWidth: 216000, FloatingBarHeight: 42000}
+			case "zero-height-pipe":
+				config.Pipes.GapMinCenter = 78000
+				config.Wetland.Families[0].GapCenters = []int64{78000, 163000, 248000, 330000}
 			}
 			if testCase.WithChallenges {
 				config.Challenges = PriorDefaultConfiguration().Challenges

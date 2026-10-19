@@ -1,8 +1,8 @@
 import { configIdFor } from "./canonical.js";
 import { bonusY, generateNext, wetlandRewardPoint, worldSpeedAt } from "./generation.js";
 import { deepFreeze, incrementCounter } from "./internal.js";
-import { DEFAULT_CONFIG, LEGACY_DEFAULT_CONFIG, PRIOR_DEFAULT_CONFIG, WETLAND_DEFAULT_CONFIG, validateConfig, validateDescriptor } from "./config.js";
-import { mix32, SIMULATION_VERSION, GENERATOR_VERSION, LEGACY_DEFAULT_CONFIG_ID, LEGACY_SIMULATION_VERSION, LEGACY_GENERATOR_VERSION, PRIOR_DEFAULT_CONFIG_ID, PRIOR_SIMULATION_VERSION, PRIOR_GENERATOR_VERSION, WETLAND_DEFAULT_CONFIG_ID, WETLAND_GENERATOR_VERSION, WETLAND_SIMULATION_VERSION, type Collectible, type GameConfig, type InputFrame, type Phase, type RunDescriptor, type RunDescriptorIdentity, type RunState, type StepResult, type GameEvent } from "./types.js";
+import { DEFAULT_CONFIG, LEGACY_DEFAULT_CONFIG, PRIOR_DEFAULT_CONFIG, VARIED_OBSTACLE_DEFAULT_CONFIG, WETLAND_DEFAULT_CONFIG, validateConfig, validateDescriptor } from "./config.js";
+import { mix32, SIMULATION_VERSION, GENERATOR_VERSION, LEGACY_DEFAULT_CONFIG_ID, LEGACY_SIMULATION_VERSION, LEGACY_GENERATOR_VERSION, PRIOR_DEFAULT_CONFIG_ID, PRIOR_SIMULATION_VERSION, PRIOR_GENERATOR_VERSION, VARIED_OBSTACLE_DEFAULT_CONFIG_ID, VARIED_OBSTACLE_GENERATOR_VERSION, VARIED_OBSTACLE_SIMULATION_VERSION, WETLAND_DEFAULT_CONFIG_ID, WETLAND_GENERATOR_VERSION, WETLAND_SIMULATION_VERSION, type Collectible, type GameConfig, type InputFrame, type Phase, type RunDescriptor, type RunDescriptorIdentity, type RunState, type StepResult, type GameEvent } from "./types.js";
 
 export function createRunDescriptor(
   identity: RunDescriptorIdentity,
@@ -12,10 +12,11 @@ export function createRunDescriptor(
   const legacy = configId === LEGACY_DEFAULT_CONFIG_ID;
   const prior = configId === PRIOR_DEFAULT_CONFIG_ID;
   const wetland = configId === WETLAND_DEFAULT_CONFIG_ID;
+  const varied = config.wetland?.catalogVersion === 2;
   return {
     ...identity,
-    simulationVersion: legacy ? LEGACY_SIMULATION_VERSION : prior ? PRIOR_SIMULATION_VERSION : wetland ? WETLAND_SIMULATION_VERSION : SIMULATION_VERSION,
-    generatorVersion: legacy ? LEGACY_GENERATOR_VERSION : prior ? PRIOR_GENERATOR_VERSION : wetland ? WETLAND_GENERATOR_VERSION : GENERATOR_VERSION,
+    simulationVersion: legacy ? LEGACY_SIMULATION_VERSION : prior ? PRIOR_SIMULATION_VERSION : wetland ? WETLAND_SIMULATION_VERSION : varied ? VARIED_OBSTACLE_SIMULATION_VERSION : SIMULATION_VERSION,
+    generatorVersion: legacy ? LEGACY_GENERATOR_VERSION : prior ? PRIOR_GENERATOR_VERSION : wetland ? WETLAND_GENERATOR_VERSION : varied ? VARIED_OBSTACLE_GENERATOR_VERSION : GENERATOR_VERSION,
     configId,
   };
 }
@@ -25,13 +26,16 @@ export function createRun(
   config?: GameConfig,
 ): RunState {
   validateDescriptor(descriptor);
-  const resolvedConfig = config ?? (descriptor.configId === LEGACY_DEFAULT_CONFIG_ID ? LEGACY_DEFAULT_CONFIG : descriptor.configId === PRIOR_DEFAULT_CONFIG_ID ? PRIOR_DEFAULT_CONFIG : descriptor.configId === WETLAND_DEFAULT_CONFIG_ID ? WETLAND_DEFAULT_CONFIG : DEFAULT_CONFIG);
+  const resolvedConfig = config ?? (descriptor.configId === LEGACY_DEFAULT_CONFIG_ID ? LEGACY_DEFAULT_CONFIG : descriptor.configId === PRIOR_DEFAULT_CONFIG_ID ? PRIOR_DEFAULT_CONFIG : descriptor.configId === WETLAND_DEFAULT_CONFIG_ID ? WETLAND_DEFAULT_CONFIG : descriptor.configId === VARIED_OBSTACLE_DEFAULT_CONFIG_ID ? VARIED_OBSTACLE_DEFAULT_CONFIG : DEFAULT_CONFIG);
   validateConfig(resolvedConfig);
   if (descriptor.configId !== configIdFor(resolvedConfig))
     throw Error("configId does not identify supplied config");
   if (resolvedConfig.wetland?.catalogVersion === 2 &&
+      (descriptor.simulationVersion !== VARIED_OBSTACLE_SIMULATION_VERSION || descriptor.generatorVersion !== VARIED_OBSTACLE_GENERATOR_VERSION))
+    throw Error("catalog-2 wetland config requires the frozen varied-obstacle simulation and generator versions");
+  if (resolvedConfig.wetland?.catalogVersion === 3 &&
       (descriptor.simulationVersion !== SIMULATION_VERSION || descriptor.generatorVersion !== GENERATOR_VERSION))
-    throw Error("catalog-2 wetland config requires the current simulation and generator versions");
+    throw Error("catalog-3 wetland config requires the current simulation and generator versions");
   const ownedConfig = cloneConfig(resolvedConfig);
   const starSchedule = ownedConfig.starSchedule;
   const starInterval = starSchedule ? seededStarInterval(descriptor.seed, 0, starSchedule.minIntervalPipes, starSchedule.maxIntervalPipes) : undefined;

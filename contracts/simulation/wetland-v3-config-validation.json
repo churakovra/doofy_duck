@@ -1,0 +1,10 @@
+{
+  "fixtureRevision": "wetland-paired-config-1",
+  "cases": [
+    { "name": "paired-default", "paired": true, "accepted": true },
+    { "name": "paired-custom-center-within-rules", "paired": true, "accepted": true, "mutation": "custom-center" },
+    { "name": "paired-rejects-mixed-obstacle", "paired": true, "accepted": false, "mutation": "mixed-obstacle" },
+    { "name": "paired-rejects-varied-geometry", "paired": true, "accepted": false, "mutation": "varied-geometry" },
+    { "name": "paired-rejects-zero-height-pipe", "paired": true, "accepted": false, "mutation": "zero-height-pipe" }
+  ]
+}

@@ -1,14 +1,60 @@
 # Wetland challenges
 
-Status: the `2.1.0` geometry iteration on `feature/varied-obstacle-geometry`
-is incomplete. Shared simulation, account and settlement integration are implemented and
-reviewed. Technical completion still requires the full reward-route evidence
-and final checks. The
-`2.0.0` contract and dated verification below describe the frozen baseline.
+Status: the owner requested paired-pipe gameplay after local playtesting, while
+keeping varied spacing and authored coin/Star routes. The active implementation
+target is simulation/generator `2.2.0`, configuration
+`dd-v2-paired-routes-v1`, encounter catalog 3. Integration and technical checks
+are in progress; this is not a completed release.
 
-## Geometry iteration in progress
+The mixed obstacle implementations remain in the codebase under their frozen
+`2.1.0` and `2.0.0` identities. Existing flights retain their issued rules. The
+catalog-2 controller investigation is deferred: its declared 27-case maximum-speed
+matrix passed 26 cells and failed seed 9, entry Y 275000, velocity +500 at tick
+4656. A local counterfactual passed that obstacle and its following exit, but did
+not establish a general controller repair or complete matrix acceptance. These
+experiments are retained for future work and do not certify mixed gameplay.
+Resume that work from `VARIED_OBSTACLE_DEFAULT_CONFIG` / Go
+`VariedObstacleConfiguration()` and its frozen fixtures. Enable
+`RUN_MIXED_OBSTACLE_EXPERIMENTS=1` to reproduce the deferred controller cases;
+resolve the recorded matrix and reward-route gaps before returning mixed
+obstacles to new-run issuance.
 
-The approved target is simulation/generator `2.1.0`, configuration
+## Paired-route target
+
+Catalog 3 restores all four stations in every family to paired pipes. It retains
+the original wetland authored gap centers, the 156-pixel opening and
+240/300/360-pixel spacing. Recovery uses 360 pixels. The first two families lead
+into seeded pressure/recovery alternation without immediate pressure-family
+repetition. Each pipe pair scores once and stays visible until its complete
+silhouette scrolls offscreen.
+
+Coin opportunities retain two pickups on initial/recovery routes and four on
+quick-pair/pressure routes. Authored lateral and vertical offsets provide the
+optional routes; scheduled Stars retain their independent 8–16-station interval.
+The paired catalog-3 default authors its Star route at a 35-pixel vertical offset;
+frozen catalog-1 and catalog-2 defaults retain their 70-pixel authored offset.
+The new default uses the paired reward resolver rather than catalog-2 edge-lane
+geometry. Generation, collision, scoring and collection remain shared integer
+TypeScript/Go rules. Collecting or ignoring rewards cannot change later geometry.
+
+Issuance must remain on the supported older identity until shared replay,
+frontend recovery and settlement support for the new identity are ready. Policy
+`verified-pickups-v5-paired-routes` will accept only
+`2.2.0` / `2.2.0` / `dd-v2-paired-routes-v1`, retaining the 30-coin run cap, 1:1
+credit and existing Star rules. All older supported policies remain eligible.
+New paired fixtures supplement the frozen fixture files.
+
+Required current evidence is paired geometry and varied spacing, complete unique
+reward opportunities and Star capacity, fatal-tick ordering, once-only scoring,
+offscreen retention, deterministic lifecycle/refill, old-rule compatibility,
+shared raw JSON parity, bounded paired survival/reward witnesses, and real
+PostgreSQL settlement/deduplication/cap checks. Bounded controller witnesses do
+not prove universal reachability or human gameplay acceptance. Browser suites,
+visual playtesting and physical Telegram/mobile checks remain separate.
+
+## Retained catalog-2 geometry
+
+The retained geometry uses simulation/generator `2.1.0`, configuration
 `dd-v2-varied-obstacles-v1` and encounter catalog version 2.
 
 - Scored stations remain visible until their collision bodies and decorative
@@ -23,8 +69,8 @@ The approved target is simulation/generator `2.1.0`, configuration
 - Simulation rectangles govern collision, scoring, reward placement and rendering.
   Authored connectors establish high/low approaches before long barriers.
 - Existing `2.0.0` and older identities, serialized states and fixture expectations
-  remain frozen. New issuance uses catalog 2 after replay, frontend and settlement
-  support were integrated.
+  remain frozen. At the catalog-2 milestone, issuance changed only after replay, frontend and
+  settlement support were integrated.
 
 Catalog 2 starts with paired openings approaching one seeded edge lane. The low
 route uses centers 280/340/400/483 pixels; the high route mirrors them to
@@ -47,7 +93,7 @@ Shared simulation support is committed in `6068641`. Type checking, lint,
 Independent review found custom-version binding and translated-recovery defects;
 both were fixed and rechecked. Account integration also passed type/lint checks, 65 focused web tests, Core
 PostgreSQL tests, and Platform formatting/lint/mypy plus 66 tests with real
-PostgreSQL. Independent integration review found no blocker. New runs use
+PostgreSQL. Independent integration review found no blocker. At that milestone new runs used
 catalog 2; policy `verified-pickups-v4-varied-obstacles` accepts only its exact
 default identity, retaining 1:1 credit, the 30-coin run cap and existing Star
 rules. The full catalog-2 route matrix and final checks remain open, so these

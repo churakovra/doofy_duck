@@ -52,7 +52,7 @@ function authoredObstacles(typeId: "pipes" | "vine" | "rock" | "debris", gapCent
     { typeId, xOffset: 0, y: p.ceilingY, width, height: openingTop - p.ceilingY },
     { typeId, xOffset: 0, y: openingBottom, width, height: p.floorY - openingBottom },
   ];
-  if (config.wetland?.catalogVersion === 1) {
+  if (config.wetland?.catalogVersion !== 2) {
     if (typeId === "vine") return [{ typeId, xOffset: 0, y: p.ceilingY, width, height: openingTop - p.ceilingY }];
     if (typeId === "rock") return [{ typeId, xOffset: 0, y: openingBottom, width, height: p.floorY - openingBottom }];
     const height = 42000;

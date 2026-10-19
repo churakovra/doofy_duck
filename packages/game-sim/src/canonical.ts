@@ -1,5 +1,5 @@
-import { DEFAULT_CONFIG, LEGACY_DEFAULT_CONFIG, PATTERN_CATALOG, PRIOR_DEFAULT_CONFIG, WETLAND_DEFAULT_CONFIG, validateConfig } from "./config.js";
-import { DEFAULT_CONFIG_ID, LEGACY_DEFAULT_CONFIG_ID, PRIOR_DEFAULT_CONFIG_ID, WETLAND_DEFAULT_CONFIG_ID, type GameConfig, type RunState } from "./types.js";
+import { DEFAULT_CONFIG, LEGACY_DEFAULT_CONFIG, PATTERN_CATALOG, PRIOR_DEFAULT_CONFIG, VARIED_OBSTACLE_DEFAULT_CONFIG, WETLAND_DEFAULT_CONFIG, validateConfig } from "./config.js";
+import { DEFAULT_CONFIG_ID, LEGACY_DEFAULT_CONFIG_ID, PRIOR_DEFAULT_CONFIG_ID, VARIED_OBSTACLE_DEFAULT_CONFIG_ID, WETLAND_DEFAULT_CONFIG_ID, type GameConfig, type RunState } from "./types.js";
 
 export function canonicalJSON(value: unknown): string {
   if (typeof value === "number" && !Number.isSafeInteger(value))
@@ -24,6 +24,7 @@ export function configIdFor(config: GameConfig): string {
   };
   const content = encode(config);
   if (content === encode(DEFAULT_CONFIG)) return DEFAULT_CONFIG_ID;
+  if (content === encode(VARIED_OBSTACLE_DEFAULT_CONFIG)) return VARIED_OBSTACLE_DEFAULT_CONFIG_ID;
   if (content === encode(PRIOR_DEFAULT_CONFIG)) return PRIOR_DEFAULT_CONFIG_ID;
   if (content === encode(LEGACY_DEFAULT_CONFIG)) return LEGACY_DEFAULT_CONFIG_ID;
   if (content === encode(WETLAND_DEFAULT_CONFIG)) return WETLAND_DEFAULT_CONFIG_ID;

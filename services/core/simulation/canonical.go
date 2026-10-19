@@ -112,6 +112,10 @@ func ConfigIDFor(c Config) (string, error) {
 	if cur == def {
 		return DefaultConfigID, nil
 	}
+	varied, _ := CanonicalJSON(VariedObstacleConfiguration())
+	if cur == varied {
+		return VariedObstacleDefaultConfigID, nil
+	}
 	prior, _ := CanonicalJSON(canonicalPriorDefaultConfig)
 	if cur == prior {
 		return PriorDefaultConfigID, nil

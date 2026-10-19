@@ -264,7 +264,7 @@ func PatternCatalog() []Pattern {
 
 // DefaultConfiguration returns an independent copy of the default rules.
 func PriorDefaultConfiguration() Config  { return cloneConfig(canonicalPriorDefaultConfig) }
-func DefaultConfiguration() Config       { return VariedObstacleConfiguration() }
+func DefaultConfiguration() Config       { return PairedRoutesConfiguration() }
 func LegacyDefaultConfiguration() Config { return cloneConfig(canonicalLegacyDefaultConfig) }
 func WetlandConfiguration() Config {
 	c := cloneConfig(canonicalPriorDefaultConfig)
@@ -303,11 +303,24 @@ func VariedObstacleConfiguration() Config {
 	return c
 }
 
+func PairedRoutesConfiguration() Config {
+	c := WetlandConfiguration()
+	c.Wetland.CatalogVersion = 3
+	c.Wetland.StarRoute.YOffset = 35000
+	for i := range c.Wetland.Families {
+		c.Wetland.Families[i].ObstacleTypes = []string{"pipes", "pipes", "pipes", "pipes"}
+	}
+	return c
+}
+
 const MaxCounter int64 = 9007199254740990
 const maxSafeInteger int64 = 9007199254740991
-const SimulationVersion = "2.1.0"
-const GeneratorVersion = "2.1.0"
-const DefaultConfigID = "dd-v2-varied-obstacles-v1"
+const SimulationVersion = "2.2.0"
+const GeneratorVersion = "2.2.0"
+const DefaultConfigID = "dd-v2-paired-routes-v1"
+const VariedObstacleSimulationVersion = "2.1.0"
+const VariedObstacleGeneratorVersion = "2.1.0"
+const VariedObstacleDefaultConfigID = "dd-v2-varied-obstacles-v1"
 const PriorSimulationVersion = "1.4.0"
 const PriorGeneratorVersion = "1.3.0"
 const PriorDefaultConfigID = "dd-v1-star-interval-v1"

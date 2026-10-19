@@ -4,13 +4,23 @@ The deterministic game runs independently in TypeScript and Go. The modules expo
 
 ## Wetland rules
 
-The shared simulation default is simulation `2.1.0`, generator `2.1.0`,
-configuration `dd-v2-varied-obstacles-v1`, encounter catalog 2. New account runs use this identity. Existing runs retain the frozen
-`2.0.0` / `2.0.0` / `dd-v2-wetland-v1` identity or their earlier rules. See
+The new paired-route default is simulation `2.2.0`, generator `2.2.0`,
+configuration `dd-v2-paired-routes-v1`, encounter catalog 3. Integration is in
+progress; account issuance remains pinned to supported catalog 2 until replay,
+frontend and settlement consumers are ready. Existing runs retain their issued
+identity, including frozen `2.1.0` / `2.1.0` / `dd-v2-varied-obstacles-v1`,
+`2.0.0` / `2.0.0` / `dd-v2-wetland-v1` and earlier rules. See
 [wetland challenges](WETLAND_CHALLENGES.md) for current verification status.
 
-Four-station encounters combine paired pipes, ceiling vines, floor rocks/reeds and
-floating debris. Each station supplies authoritative collision rectangles,
+Catalog 3 generates paired pipes at every station. It uses the catalog-1 authored
+gap centers and paired pickup resolver, the 156-pixel opening and varied
+240/300/360-pixel spacing. It omits catalog-2 edge-lane and variable obstacle
+geometry. Its scored stations retain their silhouettes until offscreen, as in
+catalog 2. Mixed obstacle generation remains supported under its frozen identities
+for existing flights and future development.
+
+Frozen catalogs 1 and 2 combine paired pipes, ceiling vines, floor rocks/reeds and
+floating debris in four-station encounters. Each station supplies authoritative collision rectangles,
 encounter metadata and authored horizontal spacing. The existing `pipes` array
 remains the station container for compatibility. Clear a station once to emit
 `ObstaclePassed` and gain one point; paired pipes count once. Death takes priority
@@ -83,8 +93,8 @@ incompatible selectable family boundaries before play starts. Thus validated
 challenge centers retain their authored shape; the bounds clamp still protects
 the gap-only path. The legacy catalog above does not select these new families.
 
-Descriptor validation accepts the varied, wetland, prior and legacy simulation/generator
-versions. Each default config ID is bound to its matching version pair; custom
+Descriptor validation accepts the paired, varied, wetland, prior and legacy
+simulation/generator versions. Each default config ID is bound to its matching version pair; custom
 configuration IDs carry canonical configuration content. A legacy descriptor
 without an explicit config resolves to the legacy default, whose serialized state
 omits Star schedule fields so replay remains unchanged.

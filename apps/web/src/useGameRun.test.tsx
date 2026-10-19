@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useGameRun } from './useGameRun';
 import { LocaleProvider, useLocale } from './locale';
-import { DEFAULT_CONFIG, PRIOR_DEFAULT_CONFIG, WETLAND_DEFAULT_CONFIG, createRun, createRunDescriptor, type GameConfig, type GameEvent, type RunDescriptorIdentity, type RunState } from '@doofy-duck/game-sim';
+import { DEFAULT_CONFIG, PRIOR_DEFAULT_CONFIG, VARIED_OBSTACLE_DEFAULT_CONFIG, WETLAND_DEFAULT_CONFIG, createRun, createRunDescriptor, type GameConfig, type GameEvent, type RunDescriptorIdentity, type RunState } from '@doofy-duck/game-sim';
 
 let run: ReturnType<typeof useGameRun>;
 let frameId: number;
@@ -63,13 +63,23 @@ afterEach(() => {
 });
 
 describe('run clock integration', () => {
-  it('restarts a fresh default run with the varied-obstacle identity', () => {
+  it('restarts a fresh default run with the paired-routes identity', () => {
     act(() => run.restart());
+    expect(run.getState().config.wetland?.catalogVersion).toBe(3);
+    expect(run.getState().descriptor).toMatchObject({
+      simulationVersion: '2.2.0', generatorVersion: '2.2.0', configId: 'dd-v2-paired-routes-v1',
+    });
+    expect(run.getState().config).toEqual(DEFAULT_CONFIG);
+  });
+
+  it('recovers an existing catalog-2 varied-obstacle run without changing its identity', () => {
+    const state = createRun(createRunDescriptor({ runId: 'retained-varied-obstacles-v2', seed: 3 }, VARIED_OBSTACLE_DEFAULT_CONFIG), VARIED_OBSTACLE_DEFAULT_CONFIG);
+    options = { config: VARIED_OBSTACLE_DEFAULT_CONFIG, initialState: state };
+    act(() => root.render(<LocaleProvider><Harness key="retained-varied-obstacles-v2" /></LocaleProvider>));
     expect(run.getState().config.wetland?.catalogVersion).toBe(2);
     expect(run.getState().descriptor).toMatchObject({
       simulationVersion: '2.1.0', generatorVersion: '2.1.0', configId: 'dd-v2-varied-obstacles-v1',
     });
-    expect(run.getState().config).toEqual(DEFAULT_CONFIG);
   });
 
   it('recovers an existing catalog-1 run without changing its identity', () => {

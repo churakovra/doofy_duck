@@ -13,11 +13,11 @@ func TestReplayCheckpointRoundTripsVariedObstacleState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	state, err := sim.CreateRun(sim.Descriptor{RunID: "varied-replay", Seed: 7, SimulationVersion: sim.SimulationVersion, GeneratorVersion: sim.GeneratorVersion, ConfigID: configID}, config)
+	state, err := sim.CreateRun(sim.Descriptor{RunID: "varied-replay", Seed: 7, SimulationVersion: sim.VariedObstacleSimulationVersion, GeneratorVersion: sim.VariedObstacleGeneratorVersion, ConfigID: configID}, config)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if state.Descriptor.ConfigID != "dd-v2-varied-obstacles-v1" || state.Config.Wetland.CatalogVersion != 2 {
+	if state.Descriptor.ConfigID != sim.VariedObstacleDefaultConfigID || state.Config.Wetland.CatalogVersion != 2 {
 		t.Fatalf("unexpected varied run identity/catalog: %+v", state.Descriptor)
 	}
 	var recovered sim.State

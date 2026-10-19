@@ -268,6 +268,8 @@ func CreateRun(d Descriptor, configurations ...Config) (State, error) {
 		c = configurations[0]
 	} else if d.ConfigID == DefaultConfigID {
 		c = DefaultConfiguration()
+	} else if d.ConfigID == VariedObstacleDefaultConfigID {
+		c = VariedObstacleConfiguration()
 	} else if d.ConfigID == WetlandDefaultConfigID {
 		c = WetlandConfiguration()
 	} else if d.ConfigID == PriorDefaultConfigID {
@@ -285,8 +287,11 @@ func CreateRun(d Descriptor, configurations ...Config) (State, error) {
 		return State{}, fmt.Errorf("configId mismatch")
 	}
 	if c.Wetland != nil {
-		if c.Wetland.CatalogVersion == 2 && (d.SimulationVersion != SimulationVersion || d.GeneratorVersion != GeneratorVersion) {
-			return State{}, fmt.Errorf("catalog-2 wetland config requires current simulation and generator versions")
+		if c.Wetland.CatalogVersion == 2 && (d.SimulationVersion != VariedObstacleSimulationVersion || d.GeneratorVersion != VariedObstacleGeneratorVersion) {
+			return State{}, fmt.Errorf("catalog-2 wetland config requires frozen varied-obstacle simulation and generator versions")
+		}
+		if c.Wetland.CatalogVersion == 3 && (d.SimulationVersion != SimulationVersion || d.GeneratorVersion != GeneratorVersion) {
+			return State{}, fmt.Errorf("catalog-3 wetland config requires current simulation and generator versions")
 		}
 	}
 	s := State{Descriptor: d, Config: cloneConfig(c), Phase: Ready, Duck: Duck{X: c.Flight.DuckX, Y: floorHalf(c.Pipes.FloorY + c.Pipes.CeilingY)}, Pipes: []Pipe{}, Collectibles: []Collectible{}, Totals: map[string]int64{}, RNGState: uint32(d.Seed), LastGapCenter: floorHalf(c.Pipes.GapMinCenter + c.Pipes.GapMaxCenter), LastCollectiblePipe: -1000000, InputHistory: []Input{}}
@@ -357,7 +362,7 @@ func generateNextOwned(s State) (Result, error) {
 			}
 			stationSpacing = &spacing
 			raw = familySpec.GapCenters[stationStep]
-			if wetland.CatalogVersion >= 2 {
+			if wetland.CatalogVersion == 2 {
 				if varied, ok := variedWetlandGapCenter(uint32(s.Descriptor.Seed), index/4, stationStep, family, s.Config); ok {
 					raw = varied
 				}
@@ -387,7 +392,7 @@ func generateNextOwned(s State) (Result, error) {
 		}
 		lo, hi = max64(lo, p.GapMinCenter), min64(hi, p.GapMaxCenter)
 		gap := max64(lo, min64(hi, raw))
-		if wetland := s.Config.Wetland; wetland != nil && wetland.CatalogVersion >= 2 {
+		if wetland := s.Config.Wetland; wetland != nil && wetland.CatalogVersion == 2 {
 			if _, ok := variedWetlandGapCenter(uint32(s.Descriptor.Seed), index/4, stationStep, family, s.Config); ok {
 				gap = raw
 			}
@@ -412,7 +417,7 @@ func generateNextOwned(s State) (Result, error) {
 					break
 				}
 			}
-			if wetland := s.Config.Wetland; wetland.CatalogVersion >= 2 && (typeID == "vine" || typeID == "rock") {
+			if wetland := s.Config.Wetland; wetland.CatalogVersion == 2 && (typeID == "vine" || typeID == "rock") {
 				polarityBlock := index / 4
 				if polarityBlock == 1 {
 					polarityBlock = 2

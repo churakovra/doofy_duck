@@ -32,13 +32,14 @@ func validateDescriptor(d Descriptor) error {
 		return fmt.Errorf("invalid seed")
 	}
 	currentRules := d.SimulationVersion == SimulationVersion && d.GeneratorVersion == GeneratorVersion
+	variedRules := d.SimulationVersion == VariedObstacleSimulationVersion && d.GeneratorVersion == VariedObstacleGeneratorVersion
 	priorRules := d.SimulationVersion == PriorSimulationVersion && d.GeneratorVersion == PriorGeneratorVersion
 	legacyRules := d.SimulationVersion == LegacySimulationVersion && d.GeneratorVersion == LegacyGeneratorVersion
 	wetlandRules := d.SimulationVersion == WetlandSimulationVersion && d.GeneratorVersion == WetlandGeneratorVersion
 	customConfig := strings.HasPrefix(d.ConfigID, "dd-v1-config:") && len(d.ConfigID) > len("dd-v1-config:")
-	if strings.TrimSpace(d.RunID) == "" || !(currentRules || wetlandRules || priorRules || legacyRules) ||
-		!(d.ConfigID == DefaultConfigID || d.ConfigID == WetlandDefaultConfigID || d.ConfigID == PriorDefaultConfigID || d.ConfigID == LegacyDefaultConfigID || customConfig) ||
-		(d.ConfigID == DefaultConfigID && !currentRules) || (d.ConfigID == PriorDefaultConfigID && !priorRules) || (d.ConfigID == LegacyDefaultConfigID && !legacyRules) {
+	if strings.TrimSpace(d.RunID) == "" || !(currentRules || variedRules || wetlandRules || priorRules || legacyRules) ||
+		!(d.ConfigID == DefaultConfigID || d.ConfigID == VariedObstacleDefaultConfigID || d.ConfigID == WetlandDefaultConfigID || d.ConfigID == PriorDefaultConfigID || d.ConfigID == LegacyDefaultConfigID || customConfig) ||
+		(d.ConfigID == DefaultConfigID && !currentRules) || (d.ConfigID == VariedObstacleDefaultConfigID && !variedRules) || (d.ConfigID == PriorDefaultConfigID && !priorRules) || (d.ConfigID == LegacyDefaultConfigID && !legacyRules) {
 		return fmt.Errorf("invalid descriptor")
 	}
 	if d.ConfigID == WetlandDefaultConfigID && !wetlandRules {
@@ -219,14 +220,14 @@ func ValidateConfig(c Config) error {
 		if c.Challenges != nil {
 			return fmt.Errorf("wetland and legacy challenge modes are mutually exclusive")
 		}
-		if (wetland.CatalogVersion != 1 && wetland.CatalogVersion != 2) || len(wetland.StationSpacing) != 3 || wetland.RecoverySpacing != 360000 || len(wetland.IntroFamilies) != 2 || len(wetland.PressureFamilies) != 3 || len(wetland.Families) != 5 {
+		if (wetland.CatalogVersion != 1 && wetland.CatalogVersion != 2 && wetland.CatalogVersion != 3) || len(wetland.StationSpacing) != 3 || wetland.RecoverySpacing != 360000 || len(wetland.IntroFamilies) != 2 || len(wetland.PressureFamilies) != 3 || len(wetland.Families) != 5 {
 			return fmt.Errorf("wetland catalog")
 		}
 		if wetland.CatalogVersion == 1 {
 			if wetland.Geometry != nil || wetland.IntroLaneCenters != nil {
 				return fmt.Errorf("legacy wetland catalog cannot contain varied geometry")
 			}
-		} else {
+		} else if wetland.CatalogVersion == 2 {
 			g := wetland.Geometry
 			if g == nil || g.HalfPipeMinPercent < 70 || g.HalfPipeMinPercent > 88 || !variedRecoveryCentersValid(p) ||
 				g.HalfPipeMaxPercent < g.HalfPipeMinPercent || g.HalfPipeMaxPercent > 90 ||
@@ -239,6 +240,8 @@ func ValidateConfig(c Config) error {
 					return fmt.Errorf("wetland intro lane bounds")
 				}
 			}
+		} else if wetland.Geometry != nil || wetland.IntroLaneCenters != nil {
+			return fmt.Errorf("paired wetland catalog cannot contain varied geometry")
 		}
 		if strings.Join(wetland.IntroFamilies, ",") != "steady,quick-pairs" || strings.Join(wetland.PressureFamilies, ",") != "dive-climb,climb-dive,slalom" {
 			return fmt.Errorf("wetland families")
@@ -287,9 +290,15 @@ func ValidateConfig(c Config) error {
 				if center < p.GapMinCenter || center > p.GapMaxCenter || !spacingAllowed(family.StationSpacing[i]) || i > 0 && abs(center-family.GapCenters[i-1]) > p.MaxGapDelta {
 					return fmt.Errorf("wetland family bounds")
 				}
+				if wetland.CatalogVersion == 3 && (center-p.GapHeight/2 <= p.CeilingY || center+p.GapHeight/2 >= p.FloorY) {
+					return fmt.Errorf("paired wetland obstacle geometry must have positive rectangles")
+				}
 				typeID := family.ObstacleTypes[i]
 				if typeID != "pipes" && typeID != "vine" && typeID != "rock" && typeID != "debris" {
 					return fmt.Errorf("wetland obstacle type")
+				}
+				if wetland.CatalogVersion == 3 && typeID != "pipes" {
+					return fmt.Errorf("paired wetland catalog requires pipe obstacles")
 				}
 				obstacleTypes[typeID] = true
 			}
@@ -308,7 +317,7 @@ func ValidateConfig(c Config) error {
 		for _, family := range wetland.Families {
 			for i, typeID := range family.ObstacleTypes {
 				if wetland.CatalogVersion == 2 && (!validWetlandRoutePoint(family.RewardRoute[i], false) || !validWetlandRoutePoint(wetland.StarRoute, true)) ||
-					wetland.CatalogVersion == 1 && (!validWetlandRoute(c, family.ID, int64(i), family.GapCenters[i], typeID, family.RewardRoute[i], featherRadius, false, 0, int64(i)) ||
+					wetland.CatalogVersion != 2 && (!validWetlandRoute(c, family.ID, int64(i), family.GapCenters[i], typeID, family.RewardRoute[i], featherRadius, false, 0, int64(i)) ||
 						!validWetlandRoute(c, family.ID, int64(i), family.GapCenters[i], typeID, wetland.StarRoute, starDefinition, true, 0, int64(i))) {
 					return fmt.Errorf("wetland reward route intersects obstacle or leaves flight bounds")
 				}
@@ -322,9 +331,19 @@ func ValidateConfig(c Config) error {
 				return fmt.Errorf("wetland family IDs")
 			}
 		}
-		for _, typeID := range []string{"pipes", "vine", "rock", "debris"} {
-			if !obstacleTypes[typeID] {
-				return fmt.Errorf("wetland obstacle catalog incomplete")
+		if wetland.CatalogVersion == 3 {
+			for _, family := range wetland.Families {
+				for _, typeID := range family.ObstacleTypes {
+					if typeID != "pipes" {
+						return fmt.Errorf("paired wetland catalog requires pipe obstacles")
+					}
+				}
+			}
+		} else {
+			for _, typeID := range []string{"pipes", "vine", "rock", "debris"} {
+				if !obstacleTypes[typeID] {
+					return fmt.Errorf("wetland obstacle catalog incomplete")
+				}
 			}
 		}
 		boundary := func(from, to WetlandFamily) bool { return abs(to.GapCenters[0]-from.GapCenters[3]) <= p.MaxGapDelta }

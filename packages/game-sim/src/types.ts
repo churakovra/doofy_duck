@@ -7,9 +7,12 @@ export interface RunDescriptor {
   readonly generatorVersion: string;
   readonly configId: string;
 }
-export const SIMULATION_VERSION = "2.1.0";
-export const GENERATOR_VERSION = "2.1.0";
-export const DEFAULT_CONFIG_ID = "dd-v2-varied-obstacles-v1";
+export const SIMULATION_VERSION = "2.2.0";
+export const GENERATOR_VERSION = "2.2.0";
+export const DEFAULT_CONFIG_ID = "dd-v2-paired-routes-v1";
+export const VARIED_OBSTACLE_SIMULATION_VERSION = "2.1.0";
+export const VARIED_OBSTACLE_GENERATOR_VERSION = "2.1.0";
+export const VARIED_OBSTACLE_DEFAULT_CONFIG_ID = "dd-v2-varied-obstacles-v1";
 export const PRIOR_SIMULATION_VERSION = "1.4.0";
 export const PRIOR_GENERATOR_VERSION = "1.3.0";
 export const PRIOR_DEFAULT_CONFIG_ID = "dd-v1-star-interval-v1";

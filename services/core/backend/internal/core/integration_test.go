@@ -91,7 +91,7 @@ func TestPostgresRunCheckpointsAreOwnedIdempotentAndFenced(t *testing.T) {
 	if first.WriterToken == "" {
 		t.Fatal("new run did not return writer token")
 	}
-	if first.SimulationVersion != sim.SimulationVersion || first.GeneratorVersion != sim.GeneratorVersion ||
+	if first.SimulationVersion != sim.VariedObstacleSimulationVersion || first.GeneratorVersion != sim.VariedObstacleGeneratorVersion ||
 		first.ConfigID != "dd-v2-varied-obstacles-v1" || first.State.Config.Wetland == nil || first.State.Config.Wetland.CatalogVersion != 2 {
 		t.Fatalf("new run identity/catalog mismatch: %s/%s/%s", first.SimulationVersion, first.GeneratorVersion, first.ConfigID)
 	}
@@ -399,7 +399,7 @@ func TestPostgresCompletionOutboxRetriesAndOutageGrace(t *testing.T) {
 		t.Fatalf("create status=%d", resp.StatusCode)
 	}
 	state := run.State
-	if state.Descriptor.SimulationVersion != sim.SimulationVersion || state.Descriptor.GeneratorVersion != sim.GeneratorVersion || state.Descriptor.ConfigID != "dd-v2-varied-obstacles-v1" || state.Config.Wetland == nil || state.Config.Wetland.CatalogVersion != 2 {
+	if state.Descriptor.SimulationVersion != sim.VariedObstacleSimulationVersion || state.Descriptor.GeneratorVersion != sim.VariedObstacleGeneratorVersion || state.Descriptor.ConfigID != "dd-v2-varied-obstacles-v1" || state.Config.Wetland == nil || state.Config.Wetland.CatalogVersion != 2 {
 		t.Fatalf("new run did not pin varied-obstacle rules: %+v", state.Descriptor)
 	}
 	var ticks [][]sim.Input
