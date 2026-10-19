@@ -97,8 +97,23 @@ Policy verified-pickups-v2-stars accepts simulation 1.4.0, generator 1.3.0,
 config dd-v1-star-interval-v1. It credits verified FEATHER and GAME_STAR
 collections at 1:1. FEATHER remains capped at 30 per run; GAME_STAR has no hard
 settlement cap. Its ledger entries use policy version
-verified-pickups-v2-stars. Other simulation identities become actionable_failure
-and receive no currency.
+verified-pickups-v2-stars.
+
+Policy verified-pickups-v3-wetland accepts simulation 2.0.0, generator 2.0.0,
+config dd-v2-wetland-v1. It preserves 1:1 FEATHER/GAME_STAR credit, the 30-coin
+cap across lives and uncapped in-game Stars. Existing runs retain this policy.
+
+Policy verified-pickups-v4-varied-obstacles accepts exactly simulation 2.1.0,
+generator 2.1.0, config dd-v2-varied-obstacles-v1 for existing runs. Policy
+verified-pickups-v5-paired-routes accepts exactly simulation 2.2.0, generator
+2.2.0, config dd-v2-paired-routes-v1. Both preserve 1:1 FEATHER/GAME_STAR
+credit, the 30-FEATHER run cap and existing Star rules; no cap migration is
+required. Custom configurations and mismatched version/config tuples are
+ineligible. Core issues the paired identity for new runs. Integration
+verification is recorded in
+[wetland challenges](../../docs/WETLAND_CHALLENGES.md).
+
+Other simulation identities become actionable_failure and receive no currency.
 
 Life indices settle in increasing order starting at zero. A later life remains
 pending with waiting_for_prior_life until every lower index is committed or

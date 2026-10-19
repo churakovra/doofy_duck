@@ -108,8 +108,10 @@ services, verified runs, wallet settlement and a cosmetic shop. Local startup us
 a persistent development Telegram identity and PostgreSQL; production requires
 real Telegram sign-in. There is no anonymous practice mode. Browser-only balances
 are never imported into account wallets. Payments, paid continues and gift
-redemption remain unimplemented. Local difficulty uses seeded stepped challenge
-families and recovery sections alongside a speed ramp. Tuning, production economy
+redemption remain unimplemented. Local difficulty uses seeded wetland obstacle
+encounters and recovery sections alongside a speed ramp, with optional authored
+reward routes. See [wetland challenges](WETLAND_CHALLENGES.md) for current
+verification and acceptance status. Tuning, production economy
 activation, hosted acceptance and real-device evidence remain separate work.
 
 [Current simulation rules](ARCADE_SIMULATION.md) describe what runs today.

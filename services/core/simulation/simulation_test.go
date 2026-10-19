@@ -2,25 +2,198 @@ package simulation
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"testing"
 )
 
 func TestCurrentContractIdentity(t *testing.T) {
-	if SimulationVersion != "1.4.0" || GeneratorVersion != "1.3.0" || DefaultConfigID != "dd-v1-star-interval-v1" {
-		t.Fatalf("unexpected contract identity: %s/%s/%s", SimulationVersion, GeneratorVersion, DefaultConfigID)
+	if SimulationVersion != "2.2.0" || GeneratorVersion != "2.2.0" || DefaultConfigID != "dd-v2-paired-routes-v1" {
+		t.Fatalf("unexpected paired-routes identity: %s/%s/%s", SimulationVersion, GeneratorVersion, DefaultConfigID)
 	}
-	config := DefaultConfiguration()
+	current, err := CreateRun(Descriptor{RunID: "current", Seed: 4, SimulationVersion: SimulationVersion, GeneratorVersion: GeneratorVersion, ConfigID: DefaultConfigID})
+	if err != nil || current.Config.Wetland == nil || current.Config.Wetland.CatalogVersion != 3 || current.NextPipeX == nil {
+		t.Fatalf("paired-routes default run missing catalog/cursor: err=%v", err)
+	}
+	if current.Config.Wetland.StarRoute != (WetlandRewardPoint{XOffset: 100000, YOffset: 35000}) {
+		t.Fatalf("paired-routes Star route=%+v, want paired offset 100000/35000", current.Config.Wetland.StarRoute)
+	}
+	for _, pipe := range current.Pipes {
+		if len(pipe.Obstacles) != 2 || pipe.Obstacles[0].TypeID != "pipes" || pipe.Obstacles[1].TypeID != "pipes" || pipe.Obstacles[0].Height <= 0 || pipe.Obstacles[1].Height <= 0 {
+			t.Fatalf("paired default produced invalid obstacle geometry: %+v", pipe.Obstacles)
+		}
+		for _, family := range current.Config.Wetland.Families {
+			if family.ID == pipe.EncounterFamily && *pipe.StationSpacing != family.StationSpacing[*pipe.StationStep] {
+				t.Fatalf("station spacing=%d, want authored %d for %s/%d", *pipe.StationSpacing, family.StationSpacing[*pipe.StationStep], family.ID, *pipe.StationStep)
+			}
+		}
+	}
+	varied, err := CreateRun(Descriptor{RunID: "varied", Seed: 4, SimulationVersion: VariedObstacleSimulationVersion, GeneratorVersion: VariedObstacleGeneratorVersion, ConfigID: VariedObstacleDefaultConfigID})
+	if err != nil || varied.Config.Wetland == nil || varied.Config.Wetland.CatalogVersion != 2 {
+		t.Fatalf("frozen varied-obstacle identity is unavailable: err=%v", err)
+	}
+	legacyWetland, err := CreateRun(Descriptor{RunID: "wetland-v2", Seed: 4, SimulationVersion: WetlandSimulationVersion, GeneratorVersion: WetlandGeneratorVersion, ConfigID: WetlandDefaultConfigID})
+	if err != nil || legacyWetland.Config.Wetland == nil || legacyWetland.Config.Wetland.CatalogVersion != 1 {
+		t.Fatalf("frozen wetland v2 identity is unavailable: err=%v", err)
+	}
+	if legacyWetland.Config.Wetland.StarRoute != (WetlandRewardPoint{XOffset: 100000, YOffset: 70000}) {
+		t.Fatalf("frozen catalog-1 Star route changed: %+v", legacyWetland.Config.Wetland.StarRoute)
+	}
+	if PriorSimulationVersion != "1.4.0" || PriorGeneratorVersion != "1.3.0" || PriorDefaultConfigID != "dd-v1-star-interval-v1" {
+		t.Fatalf("unexpected contract identity: %s/%s/%s", PriorSimulationVersion, PriorGeneratorVersion, PriorDefaultConfigID)
+	}
+	config := PriorDefaultConfiguration()
 	id, err := ConfigIDFor(config)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if id != DefaultConfigID {
-		t.Fatalf("default config ID = %q, want %q", id, DefaultConfigID)
+	if id != PriorDefaultConfigID {
+		t.Fatalf("default config ID = %q, want %q", id, PriorDefaultConfigID)
 	}
 	legacyID, err := ConfigIDFor(LegacyDefaultConfiguration())
 	if err != nil || legacyID != LegacyDefaultConfigID {
 		t.Fatalf("legacy default config ID = %q, err=%v", legacyID, err)
+	}
+	prior, err := CreateRun(Descriptor{RunID: "prior", Seed: 4, SimulationVersion: PriorSimulationVersion, GeneratorVersion: PriorGeneratorVersion, ConfigID: PriorDefaultConfigID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(prior)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var priorObject map[string]json.RawMessage
+	if err := json.Unmarshal(encoded, &priorObject); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := priorObject["nextPipeX"]; ok {
+		t.Fatal("prior state gained wetland spawn cursor")
+	}
+	if prior.Config.Wetland != nil {
+		t.Fatal("prior config gained wetland catalog")
+	}
+	if _, ok := priorObject["pipes"]; !ok {
+		t.Fatal("prior state lost pipes")
+	}
+}
+
+func TestCatalogVersionAndDescriptorPairBinding(t *testing.T) {
+	config := VariedObstacleConfiguration()
+	config.Pipes.Width++
+	id, err := ConfigIDFor(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	descriptor := Descriptor{RunID: "catalog-2-custom", Seed: 1, SimulationVersion: VariedObstacleSimulationVersion, GeneratorVersion: VariedObstacleGeneratorVersion, ConfigID: id}
+	if _, err := CreateRun(descriptor, config); err != nil {
+		t.Fatalf("catalog-2 custom config rejected under current pair: %v", err)
+	}
+	for _, pair := range [][2]string{{SimulationVersion, GeneratorVersion}, {WetlandSimulationVersion, WetlandGeneratorVersion}, {PriorSimulationVersion, PriorGeneratorVersion}, {LegacySimulationVersion, LegacyGeneratorVersion}} {
+		wrong := descriptor
+		wrong.SimulationVersion, wrong.GeneratorVersion = pair[0], pair[1]
+		if _, err := CreateRun(wrong, config); err == nil {
+			t.Errorf("catalog-2 custom config accepted under frozen pair %s/%s", pair[0], pair[1])
+		}
+	}
+	legacy := WetlandConfiguration()
+	legacy.Pipes.Width++
+	legacyID, err := ConfigIDFor(legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacyDescriptor := Descriptor{RunID: "catalog-1-custom", Seed: 1, SimulationVersion: WetlandSimulationVersion, GeneratorVersion: WetlandGeneratorVersion, ConfigID: legacyID}
+	for _, pair := range [][2]string{{SimulationVersion, GeneratorVersion}, {VariedObstacleSimulationVersion, VariedObstacleGeneratorVersion}, {WetlandSimulationVersion, WetlandGeneratorVersion}, {PriorSimulationVersion, PriorGeneratorVersion}, {LegacySimulationVersion, LegacyGeneratorVersion}} {
+		legacyDescriptor.SimulationVersion, legacyDescriptor.GeneratorVersion = pair[0], pair[1]
+		if _, err := CreateRun(legacyDescriptor, legacy); err != nil {
+			t.Errorf("catalog-1 custom run rejected under formerly accepted pair %s/%s: %v", pair[0], pair[1], err)
+		}
+	}
+}
+
+func TestCatalogThreeAcceptsPairedRoutesAndRejectsMixedObstacles(t *testing.T) {
+	config := PairedRoutesConfiguration()
+	for _, family := range config.Wetland.Families {
+		for _, typeID := range family.ObstacleTypes {
+			if typeID != "pipes" {
+				t.Fatalf("test config still has non-pipe obstacle %q", typeID)
+			}
+		}
+	}
+	if err := ValidateConfig(config); err != nil {
+		t.Fatalf("catalog-3 paired routes rejected: %v", err)
+	}
+	if config.Wetland.StarRoute != (WetlandRewardPoint{XOffset: 100000, YOffset: 35000}) {
+		t.Fatalf("catalog-3 Star route=%+v, want paired offset 100000/35000", config.Wetland.StarRoute)
+	}
+	id, err := ConfigIDFor(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := CreateRun(Descriptor{RunID: "catalog-3-paired", Seed: 3, SimulationVersion: SimulationVersion, GeneratorVersion: GeneratorVersion, ConfigID: id}); err != nil {
+		t.Fatalf("catalog-3 default-pair run rejected: %v", err)
+	}
+	mixed := cloneConfig(config)
+	mixed.Wetland.Families[0].ObstacleTypes[1] = "vine"
+	if err := ValidateConfig(mixed); err == nil {
+		t.Fatal("catalog-3 mixed obstacle family accepted")
+	}
+}
+
+func TestVariedRecoveryGeometryTracksShiftedWorld(t *testing.T) {
+	const offset int64 = 600000
+	cases := []struct {
+		seed   uint32
+		recipe []int64
+	}{{0, []int64{430000, 310000, 190000, 78000}}, {2, []int64{100000, 220000, 340000, 460000}}}
+	for _, testCase := range cases {
+		t.Run(fmt.Sprintf("seed-%d", testCase.seed), func(t *testing.T) {
+			config := VariedObstacleConfiguration()
+			config.Pipes.CeilingY += offset
+			config.Pipes.FloorY += offset
+			config.Pipes.GapMinCenter += offset
+			config.Pipes.GapMaxCenter += offset
+			for i := range config.Wetland.IntroLaneCenters {
+				config.Wetland.IntroLaneCenters[i] += offset
+			}
+			for i := range config.Wetland.Families {
+				for j := range config.Wetland.Families[i].GapCenters {
+					config.Wetland.Families[i].GapCenters[j] += offset
+				}
+			}
+			if err := ValidateConfig(config); err != nil {
+				t.Fatal(err)
+			}
+			id, err := ConfigIDFor(config)
+			if err != nil {
+				t.Fatal(err)
+			}
+			descriptor := Descriptor{RunID: "shifted-recovery", Seed: int64(testCase.seed), SimulationVersion: VariedObstacleSimulationVersion, GeneratorVersion: VariedObstacleGeneratorVersion, ConfigID: id}
+			initial, err := CreateRun(descriptor, config)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for i, wantCenter := range testCase.recipe {
+				nextX := config.Pipes.SafeLeadIn
+				state := initial
+				state.Pipes = []Pipe{}
+				state.NextPipeIndex = int64(12 + i)
+				state.NextPipeX = &nextX
+				state.LastGapCenter = 280000 + offset
+				generated, err := GenerateNext(state)
+				if err != nil {
+					t.Fatal(err)
+				}
+				pipe := generated.State.Pipes[0]
+				if want := wantCenter + offset; pipe.GapCenter != want {
+					t.Errorf("station %d gap=%d want=%d", pipe.Index, pipe.GapCenter, want)
+				}
+				for _, obstacle := range pipe.Obstacles {
+					if obstacle.Height < 0 || obstacle.Y < config.Pipes.CeilingY || obstacle.Y+obstacle.Height > config.Pipes.FloorY {
+						t.Errorf("station %d obstacle outside world: %+v", pipe.Index, obstacle)
+					}
+				}
+			}
+		})
 	}
 }
 
@@ -79,16 +252,448 @@ func TestFoundationSpeedFullFixtureParity(t *testing.T) {
 	}
 }
 
+func TestWetlandRawFullStateAndEventFixtureParity(t *testing.T) {
+	if err := VerifyWetlandFixtures("../../../contracts/simulation/wetland-v1.json"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestWetlandStepAdvancesSpawnCursorAfterEveryStationWasPruned(t *testing.T) {
+	state, err := CreateRun(Descriptor{RunID: "wetland-refill", Seed: 32, SimulationVersion: SimulationVersion, GeneratorVersion: GeneratorVersion, ConfigID: DefaultConfigID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	state.Phase, state.Tick = Running, 2700
+	state.Pipes = []Pipe{}
+	state.NextPipeIndex, state.NextSpawnPipeIndex = 2, 2
+	nextX := int64(500000)
+	state.NextPipeX = &nextX
+	state.Duck.Y, state.Duck.VY = 280000, 0
+	result, err := Step(state, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.State.Pipes) == 0 || result.State.Pipes[0].Index != 2 || result.State.Pipes[0].X != 495200 {
+		t.Fatalf("refilled station = %+v, want index 2 at 495200", result.State.Pipes)
+	}
+	if len(result.State.Pipes) != 2 || result.State.Pipes[1].X != 795200 {
+		t.Fatalf("refill did not fill the visible horizon: %+v", result.State.Pipes)
+	}
+	if result.State.NextPipeX == nil || *result.State.NextPipeX != 1095200 {
+		t.Fatalf("next spawn cursor = %v, want 1095200", result.State.NextPipeX)
+	}
+}
+
 func TestExportedDefaultsAreIndependentCopies(t *testing.T) {
 	patterns := PatternCatalog()
-	config := DefaultConfiguration()
+	config := PriorDefaultConfiguration()
 	patterns[0].Gaps[0]++
 	config.Collectibles[0].Amount++
 	if PatternCatalog()[0].Gaps[0] == patterns[0].Gaps[0] {
 		t.Fatal("pattern accessor exposed canonical gaps")
 	}
-	if DefaultConfiguration().Collectibles[0].Amount == config.Collectibles[0].Amount {
+	if PriorDefaultConfiguration().Collectibles[0].Amount == config.Collectibles[0].Amount {
 		t.Fatal("config accessor exposed canonical definitions")
+	}
+}
+
+func TestReviewedWetlandStationFixture(t *testing.T) {
+	data, err := os.ReadFile("../../../contracts/simulation/wetland-v1.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture struct {
+		FixtureRevision   string          `json:"fixtureRevision"`
+		SimulationVersion string          `json:"simulationVersion"`
+		GeneratorVersion  string          `json:"generatorVersion"`
+		ConfigID          string          `json:"configId"`
+		Seed              int64           `json:"seed"`
+		FamilySequence    []string        `json:"familySequence"`
+		Catalog           []WetlandFamily `json:"catalog"`
+	}
+	if err := json.Unmarshal(data, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	if fixture.FixtureRevision != "wetland-stations-1" || fixture.SimulationVersion != WetlandSimulationVersion || fixture.GeneratorVersion != WetlandGeneratorVersion || fixture.ConfigID != WetlandDefaultConfigID {
+		t.Fatalf("unexpected wetland fixture identity: %+v", fixture)
+	}
+	config := WetlandConfiguration()
+	if len(config.Wetland.Families) != len(fixture.Catalog) {
+		t.Fatal("catalog length differs from reviewed fixture")
+	}
+	for i, family := range config.Wetland.Families {
+		want, _ := json.Marshal(fixture.Catalog[i])
+		got, _ := json.Marshal(family)
+		if string(got) != string(want) {
+			t.Fatalf("catalog family %d differs: %s != %s", i, got, want)
+		}
+	}
+	config.Pipes.Horizon = 10000000
+	config.Limits.MaxActivePipes = 28
+	config.Limits.MaxActiveCollectibles = 29
+	config.StarSchedule = nil
+	id, err := ConfigIDFor(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	descriptor := Descriptor{RunID: "wetland-fixture", Seed: fixture.Seed, SimulationVersion: WetlandSimulationVersion, GeneratorVersion: WetlandGeneratorVersion, ConfigID: id}
+	state, err := CreateRun(descriptor, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var families []string
+	for index := int64(0); index < int64(len(fixture.FamilySequence))*4; index++ {
+		pipe := state.Pipes[index]
+		family := config.Wetland.Families[0]
+		for _, candidate := range config.Wetland.Families {
+			if candidate.ID == pipe.EncounterFamily {
+				family = candidate
+				break
+			}
+		}
+		step := *pipe.StationStep
+		if pipe.GapCenter != family.GapCenters[step] || len(pipe.Obstacles) == 0 || pipe.Obstacles[0].TypeID != family.ObstacleTypes[step] {
+			t.Fatalf("station %d geometry differs from catalog", index)
+		}
+		wantSpacing := family.StationSpacing[step]
+		block := pipe.Index / 4
+		if pipe.EncounterFamily == "steady" && block >= 2 && block%2 == 1 {
+			wantSpacing = config.Wetland.RecoverySpacing
+		}
+		if pipe.StationSpacing == nil || *pipe.StationSpacing != wantSpacing {
+			t.Fatalf("station %d spacing = %v, want %d", index, pipe.StationSpacing, wantSpacing)
+		}
+		if step == 0 {
+			families = append(families, pipe.EncounterFamily)
+		}
+	}
+	if len(families) != len(fixture.FamilySequence) {
+		t.Fatal("incomplete family sequence")
+	}
+	for i, family := range families {
+		if family != fixture.FamilySequence[i] {
+			t.Fatalf("family %d = %s, want %s", i, family, fixture.FamilySequence[i])
+		}
+	}
+	for i := 2; i < len(families); i += 2 {
+		if families[i] == families[i-2] {
+			t.Fatalf("pressure family repeated at block %d", i)
+		}
+	}
+	state.Pipes = []Pipe{}
+	nextX := int64(9500000)
+	state.NextPipeX = &nextX
+	state.NextPipeIndex = 28
+	refilled, err := GenerateNext(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(refilled.State.Pipes) == 0 || refilled.State.Pipes[0].Index != 28 || refilled.State.Pipes[0].X != nextX {
+		t.Fatalf("pruned refill restarted: %+v", refilled.State.Pipes)
+	}
+}
+
+func TestReviewedVariedWetlandFixture(t *testing.T) {
+	if err := VerifyWetlandFixtures("../../../contracts/simulation/wetland-v2.json"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestReviewedPairedRoutesFixture(t *testing.T) {
+	if err := VerifyWetlandFixtures("../../../contracts/simulation/wetland-v3.json"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestWetlandObstacleRectanglesAreLethal(t *testing.T) {
+	config := WetlandConfiguration()
+	config.StarSchedule = nil
+	config.Pipes.Horizon = 3000000
+	config.Limits.MaxActivePipes = 8
+	id, err := ConfigIDFor(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	descriptor := Descriptor{RunID: "wetland-collision", Seed: 9, SimulationVersion: WetlandSimulationVersion, GeneratorVersion: WetlandGeneratorVersion, ConfigID: id}
+	initial, err := CreateRun(descriptor, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]bool{}
+	for _, pipe := range initial.Pipes {
+		for _, obstacle := range pipe.Obstacles {
+			if seen[obstacle.TypeID] {
+				continue
+			}
+			seen[obstacle.TypeID] = true
+			state := cloneState(initial)
+			state.Phase = Running
+			state.Duck.Y = obstacle.Y + obstacle.Height/2
+			state.Duck.VY = 0
+			state.Pipes = []Pipe{pipe}
+			state.Pipes[0].X = state.Duck.X
+			state.Pipes[0].Obstacles = []ObstacleDefinition{obstacle}
+			result, stepErr := Step(state, nil)
+			if stepErr != nil {
+				t.Fatalf("%s step: %v", obstacle.TypeID, stepErr)
+			}
+			if result.State.Phase != Dead {
+				t.Errorf("%s rectangle did not collide", obstacle.TypeID)
+			}
+		}
+	}
+	for _, typeID := range []string{"pipes", "vine", "rock", "debris"} {
+		if !seen[typeID] {
+			t.Errorf("missing obstacle type %s", typeID)
+		}
+	}
+	pairedPipes := false
+	for _, pipe := range initial.Pipes {
+		if len(pipe.Obstacles) > 0 && pipe.Obstacles[0].TypeID == "pipes" {
+			if len(pipe.Obstacles) != 2 {
+				t.Fatalf("paired pipes have %d rectangles, want two", len(pipe.Obstacles))
+			}
+			pairedPipes = true
+			break
+		}
+	}
+	if !pairedPipes {
+		t.Fatal("catalog did not generate paired pipes")
+	}
+}
+
+func TestWetlandTrailsSpawnWholeAndStable(t *testing.T) {
+	config := WetlandConfiguration()
+	config.StarSchedule = nil
+	config.Pipes.Horizon = 4000000
+	config.Limits.MaxActivePipes = 12
+	config.Limits.MaxActiveCollectibles = 13
+	id, err := ConfigIDFor(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, err := CreateRun(Descriptor{RunID: "wetland-trails", Seed: 11, SimulationVersion: WetlandSimulationVersion, GeneratorVersion: WetlandGeneratorVersion, ConfigID: id}, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state.Phase = Running
+	result, err := Step(state, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"feather-trail-0-1", "feather-trail-0-3", "feather-trail-1-0", "feather-trail-1-1", "feather-trail-1-2", "feather-trail-1-3", "feather-trail-2-0", "feather-trail-2-1", "feather-trail-2-2", "feather-trail-2-3"}
+	if len(result.State.Collectibles) != len(want) {
+		t.Fatalf("spawned %d rewards, want complete ten-item route", len(result.State.Collectibles))
+	}
+	for i, collectible := range result.State.Collectibles {
+		if collectible.ID != want[i] || collectible.TypeID != "FEATHER" || collectible.Amount != 1 {
+			t.Errorf("reward %d = %+v, want ID %s one FEATHER", i, collectible, want[i])
+		}
+	}
+}
+
+func TestWetlandStarCapacityReservesWholeTrail(t *testing.T) {
+	config := WetlandConfiguration()
+	config.Pipes.Horizon = 1700000
+	config.Limits.MaxActivePipes, config.Limits.MaxActiveCollectibles = 8, 10
+	config.StarSchedule = &StarSchedule{MinIntervalPipes: 8, MaxIntervalPipes: 8}
+	id, err := ConfigIDFor(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, err := CreateRun(Descriptor{RunID: "wetland-star-route", Seed: 11, SimulationVersion: WetlandSimulationVersion, GeneratorVersion: WetlandGeneratorVersion, ConfigID: id}, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state.Phase = Running
+	ordinal := int64(0)
+	state.NextStarPipeIndex, state.StarScheduleOrdinal = 1, &ordinal
+	result, err := Step(state, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stars, feathers := 0, 0
+	for _, item := range result.State.Collectibles {
+		if item.TypeID == "GAME_STAR" && item.ID == "star-1" {
+			stars++
+		}
+		if item.TypeID == "FEATHER" {
+			feathers++
+		}
+	}
+	if stars != 1 || feathers != 3 || int64(len(result.State.Collectibles)) > config.Limits.MaxActiveCollectibles {
+		t.Fatalf("star route was dropped or exceeded reserve: stars=%d feathers=%d items=%d", stars, feathers, len(result.State.Collectibles))
+	}
+}
+
+func TestPairedRoutesRewardLifecycleAndCapacity(t *testing.T) {
+	config := DefaultConfiguration()
+	config.Pipes.Horizon = 4000000
+	config.Limits.MaxActivePipes, config.Limits.MaxActiveCollectibles = 12, 13
+	config.StarSchedule = nil
+	id, err := ConfigIDFor(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, err := CreateRun(Descriptor{RunID: "paired-trails", Seed: 11, SimulationVersion: SimulationVersion, GeneratorVersion: GeneratorVersion, ConfigID: id}, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state.Phase = Running
+	spawned, err := Step(state, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"feather-trail-0-1", "feather-trail-0-3", "feather-trail-1-0", "feather-trail-1-1", "feather-trail-1-2", "feather-trail-1-3", "feather-trail-2-0", "feather-trail-2-1", "feather-trail-2-2", "feather-trail-2-3"}
+	if len(spawned.State.Collectibles) != len(want) {
+		t.Fatalf("paired run spawned %d rewards, want complete ten-item route", len(spawned.State.Collectibles))
+	}
+	seen := map[string]bool{}
+	for i, collectible := range spawned.State.Collectibles {
+		if collectible.ID != want[i] || collectible.TypeID != "FEATHER" || collectible.Amount != 1 || seen[collectible.ID] {
+			t.Errorf("paired reward %d = %+v, want unique ID %s and one FEATHER", i, collectible, want[i])
+		}
+		seen[collectible.ID] = true
+	}
+
+	config.Pipes.Horizon = 1700000
+	config.Limits.MaxActivePipes, config.Limits.MaxActiveCollectibles = 8, 10
+	config.StarSchedule = &StarSchedule{MinIntervalPipes: 8, MaxIntervalPipes: 8}
+	id, err = ConfigIDFor(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	starState, err := CreateRun(Descriptor{RunID: "paired-star-route", Seed: 11, SimulationVersion: SimulationVersion, GeneratorVersion: GeneratorVersion, ConfigID: id}, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	starState.Phase = Running
+	ordinal := int64(0)
+	starState.NextStarPipeIndex, starState.StarScheduleOrdinal = 1, &ordinal
+	starred, err := Step(starState, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stars, feathers := 0, 0
+	seen = map[string]bool{}
+	for _, item := range starred.State.Collectibles {
+		if seen[item.ID] {
+			t.Errorf("duplicate collectible ID %q", item.ID)
+		}
+		seen[item.ID] = true
+		if item.TypeID == "GAME_STAR" && item.ID == "star-1" {
+			stars++
+		}
+		if item.TypeID == "FEATHER" {
+			feathers++
+		}
+	}
+	if stars != 1 || feathers != 3 || int64(len(starred.State.Collectibles)) > config.Limits.MaxActiveCollectibles {
+		t.Fatalf("paired Star reserve dropped route or exceeded cap: stars=%d feathers=%d items=%d cap=%d", stars, feathers, len(starred.State.Collectibles), config.Limits.MaxActiveCollectibles)
+	}
+}
+
+func TestPairedRoutesScoringFatalOrderingAndRetention(t *testing.T) {
+	config := DefaultConfiguration()
+	config.Pipes.Width = 100000
+	config.Pipes.Horizon = 600000
+	id, err := ConfigIDFor(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, err := CreateRun(Descriptor{RunID: "paired-retention", Seed: 8, SimulationVersion: SimulationVersion, GeneratorVersion: GeneratorVersion, ConfigID: id}, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(state.Pipes) == 0 || len(state.Pipes[0].Obstacles) != 2 {
+		t.Fatalf("paired geometry missing: %+v", state.Pipes)
+	}
+	station := state.Pipes[0]
+	station.X, station.Scored = 20000, false
+	station.GapCenter = 310000
+	station.Obstacles = []ObstacleDefinition{
+		{TypeID: "pipes", XOffset: 50000, Y: config.Pipes.CeilingY, Width: 100000, Height: 190000},
+		{TypeID: "pipes", XOffset: 50000, Y: 360000, Width: 100000, Height: config.Pipes.FloorY - 360000},
+	}
+	state.Phase = Running
+	state.Tick = config.Pipes.RampTicks
+	state.Pipes = []Pipe{station}
+	state.Duck.Y, state.Duck.VY = 310000, 0
+	passed := 0
+	wasScored := false
+	retainedAfterScore := false
+	for tick := 0; tick < 100; tick++ {
+		result, stepErr := Step(state, nil)
+		if stepErr != nil {
+			t.Fatal(stepErr)
+		}
+		for _, event := range result.Events {
+			if event.Type == "ObstaclePassed" {
+				passed++
+			}
+		}
+		state = result.State
+		state.Duck.Y, state.Duck.VY = 310000, 0
+		stationPresent := false
+		for _, pipe := range state.Pipes {
+			if pipe.StationID == station.StationID && pipe.Scored {
+				stationPresent = true
+				wasScored = true
+				retainedAfterScore = true
+				rightmost := int64(0)
+				for _, obstacle := range pipe.Obstacles {
+					candidate := obstacle.XOffset + obstacle.Width/2
+					if candidate > rightmost {
+						rightmost = candidate
+					}
+				}
+				if pipe.X+rightmost+config.Pipes.Width < 0 {
+					t.Fatalf("station retained after every rectangle cleared: x=%d rightmost=%d", pipe.X, rightmost)
+				}
+			}
+		}
+		if wasScored && !stationPresent {
+			break
+		}
+	}
+	stationPresent := false
+	for _, pipe := range state.Pipes {
+		stationPresent = stationPresent || pipe.StationID == station.StationID
+	}
+	if passed != 1 || !wasScored || !retainedAfterScore || stationPresent {
+		t.Fatalf("paired station lifecycle: passed=%d scored=%v retained=%v stationPresent=%v", passed, wasScored, retainedAfterScore, stationPresent)
+	}
+
+	for _, obstacle := range station.Obstacles {
+		lethal := cloneState(state)
+		lethal.Phase = Running
+		lethal.Duck.Y = obstacle.Y + obstacle.Height/2
+		lethal.Duck.VY = 0
+		lethal.Pipes = []Pipe{station}
+		lethal.Pipes[0].X = lethal.Duck.X
+		lethal.Pipes[0].Obstacles = []ObstacleDefinition{obstacle}
+		result, stepErr := Step(lethal, nil)
+		if stepErr != nil {
+			t.Fatal(stepErr)
+		}
+		if result.State.Phase != Dead {
+			t.Errorf("paired %s rectangle did not collide", obstacle.TypeID)
+		}
+	}
+	fatal := cloneState(state)
+	fatal.Phase = Running
+	fatal.Duck.Y = config.Pipes.FloorY - config.Flight.DuckHalfHeight - 1
+	fatal.Duck.VY = 0
+	fatal.Pipes = []Pipe{station}
+	fatal.Pipes[0].X = 60000
+	result, err := Step(fatal, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, event := range result.Events {
+		if event.Type == "ObstaclePassed" {
+			t.Fatal("fatal paired tick emitted an obstacle score")
+		}
 	}
 }
 
@@ -99,7 +704,7 @@ func TestValidateConfigRejectsNumbersOutsideJavaScriptSafeIntegerDomain(t *testi
 		"version": func(c *Config) { c.Collectibles[0].Version = 1 << 53 },
 	} {
 		t.Run(name, func(t *testing.T) {
-			c := DefaultConfiguration()
+			c := PriorDefaultConfiguration()
 			mutate(&c)
 			if err := ValidateConfig(c); err == nil {
 				t.Fatal("accepted unsafe integer")
@@ -109,7 +714,7 @@ func TestValidateConfigRejectsNumbersOutsideJavaScriptSafeIntegerDomain(t *testi
 }
 
 func TestValidateConfigRejectsInt64MinValue(t *testing.T) {
-	config := DefaultConfiguration()
+	config := PriorDefaultConfiguration()
 	config.Flight.DuckX = -1 << 63
 	if err := ValidateConfig(config); err == nil {
 		t.Fatal("ValidateConfig accepted MinInt64")
@@ -128,12 +733,12 @@ func TestCanonicalJSONRejectsNonSafeOrFractionalNumbers(t *testing.T) {
 }
 
 func TestRunEndedTotalsPresentAndIndependentFromState(t *testing.T) {
-	config := DefaultConfiguration()
+	config := PriorDefaultConfiguration()
 	id, err := ConfigIDFor(config)
 	if err != nil {
 		t.Fatal(err)
 	}
-	s, err := CreateRun(Descriptor{"totals-test", 1, SimulationVersion, GeneratorVersion, id}, config)
+	s, err := CreateRun(Descriptor{"totals-test", 1, PriorSimulationVersion, PriorGeneratorVersion, id}, config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -160,7 +765,7 @@ func TestRunEndedTotalsPresentAndIndependentFromState(t *testing.T) {
 }
 
 func TestGenerateNextKeepsInputAndResultIndependent(t *testing.T) {
-	input := foundationRun(t, DefaultConfiguration())
+	input := foundationRun(t, PriorDefaultConfiguration())
 	result, err := GenerateNext(input)
 	if err != nil {
 		t.Fatal(err)

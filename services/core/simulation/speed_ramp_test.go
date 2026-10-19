@@ -3,7 +3,7 @@ package simulation
 import "testing"
 
 func TestScoreAddsSpeedAtPipeBoundariesAndCapsSafely(t *testing.T) {
-	c := DefaultConfiguration()
+	c := PriorDefaultConfiguration()
 	for _, tc := range []struct{ score, want int64 }{{0, 3000}, {9, 3000}, {10, 3300}, {20, 3600}, {40, 4200}, {1000, 4800}} {
 		got, err := WorldSpeedAt(c, 1, tc.score)
 		if err != nil || got != tc.want {
@@ -16,7 +16,7 @@ func TestScoreAddsSpeedAtPipeBoundariesAndCapsSafely(t *testing.T) {
 }
 
 func TestWorldSpeedAtBoundaries(t *testing.T) {
-	config := DefaultConfiguration()
+	config := PriorDefaultConfiguration()
 	for _, test := range []struct{ tick, want int64 }{{0, 3000}, {1, 3000}, {2, 3000}, {1351, 3900}, {2700, 4799}, {2701, 4800}, {5401, 4800}} {
 		got, err := WorldSpeedAt(config, test.tick)
 		if err != nil || got != test.want {
@@ -26,13 +26,13 @@ func TestWorldSpeedAtBoundaries(t *testing.T) {
 }
 
 func TestSpeedRampChangesActualStepDisplacement(t *testing.T) {
-	config := DefaultConfiguration()
+	config := PriorDefaultConfiguration()
 	config.Pipes.MaxSpeed, config.Pipes.RampTicks = 4800, 5400
 	id, err := ConfigIDFor(config)
 	if err != nil {
 		t.Fatal(err)
 	}
-	state, err := CreateRun(Descriptor{"speed-test", 3, SimulationVersion, GeneratorVersion, id}, config)
+	state, err := CreateRun(Descriptor{"speed-test", 3, PriorSimulationVersion, PriorGeneratorVersion, id}, config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +61,7 @@ func TestSpeedRampRejectsUnsafeConfiguration(t *testing.T) {
 		"unsafe ramp":          func(c *Config) { c.Pipes.MaxSpeed = 4800; c.Pipes.RampTicks = 1 << 53 },
 	} {
 		t.Run(name, func(t *testing.T) {
-			c := DefaultConfiguration()
+			c := PriorDefaultConfiguration()
 			mutate(&c)
 			if ValidateConfig(c) == nil {
 				t.Fatal("accepted invalid speed tuning")

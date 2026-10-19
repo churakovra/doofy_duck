@@ -23,10 +23,12 @@ and real Telegram acceptance remain open; see the
 - [Code map](docs/ARCHITECTURE.md): runtime flow, file ownership, and checks by task.
 - [Foundation](docs/FOUNDATION.md): extension points for rules, cosmetics, and event consumers.
 - [Documentation map](docs/README.md): current rules, product vision, future architecture, and supporting research.
+- [Telegram bot setup](docs/TELEGRAM_BOT_SETUP.md): automatic launch identity and first real-bot test.
 - [Unified account game](docs/UNIFIED_ACCOUNT_GAME.md): single game path, complete local startup and verification.
 - [SHOP implementation](docs/SHOP_IMPLEMENTATION_RESULTS.md): delivered wallet/inventory/purchase code and verification limits.
 - [Backend verification](docs/BACKEND_FOUNDATION.md): ACCOUNT/RUN checks, capacity measurements and external acceptance gates.
 - [Challenge verification](docs/CHALLENGE_RESULTS.md): October 17 challenge checks and bounded physics evidence.
+- [Wetland challenges](docs/WETLAND_CHALLENGES.md): varied obstacles, collectible routes, compatibility and current verification status.
 
 ## Requirements
 
@@ -56,8 +58,8 @@ and settlement worker, then keeps Vite in the foreground. Ctrl-C stops Vite;
 `make stop` stops the containers while preserving PostgreSQL data. `make status`
 shows service status and `make logs SERVICE=platform` follows one service.
 `make run-account` is a compatibility alias for the same startup. Use
-`make run DEV_USER_ID=123456` to configure another development identity; sign out
-first if the browser already has a session for a different account.
+`make run DEV_USER_ID=123456` to configure another development identity. The
+configured identity is connected automatically; there is no in-game account selector.
 
 The API and local static build are at `http://127.0.0.1:8080/`. Vite proxies the
 same API. `npm run dev` starts only the frontend; use `make run` for the complete
@@ -86,10 +88,13 @@ Device takeover requires confirmation. A flight ends after at most one hour of
 active time; pauses do not consume active ticks.
 
 Automatic session refresh requires browser Web Locks and writable local storage.
-Otherwise explicit sign-in remains available; pending runs stay on the server.
+If refresh cannot complete, the app reconnects the same launch identity where
+possible; pending runs stay on the server.
 IndexedDB failure separately warns that closing the page may lose unsent inputs.
-Verified results can be reopened after sign-in or reload, including on another
-device. Signing out leaves the sign-in screen visible.
+Verified results can be reopened after automatic connection or reload, including on another
+device. The game has no sign-in or logout controls. Outside Telegram, the normal
+build requires a Telegram launch; a saved cookie does not bypass this. See
+[bot setup](docs/TELEGRAM_BOT_SETUP.md) for the first real Telegram test.
 
 Run the cross-service smoke after startup:
 
@@ -109,12 +114,13 @@ capacity and real Telegram/device acceptance are separate gates.
 
 - Wallet balances, purchases and equipment belong to the signed-in account. Verified completed-run pickups become spendable after settlement; pending rewards are shown separately. In-game Stars are not Telegram Stars or redeemable rewards.
 - One writer controls an active account run. Another tab or device must explicitly take over; account ownership and server verification govern persistent progress.
-- Seeded four-pipe challenge families introduce steady, rising, falling and offset routes, with recovery blocks after pressure sections. The schedule advances with pipe encounter order; pause freezes play and restart resets the schedule.
-- Active-time world speed ramps from180 to288pixels/second over45seconds. Score adds speed in10% steps per10 passed pipes until the same cap, which can be reached earlier. Default pipe spacing is300pixels.
+- Seeded four-station wetland encounters use paired pipes with authored 240/300/360-pixel spacing. Two introductory families lead into alternating pressure and recovery routes. Optional coin trails and scheduled Stars reward harder flight paths. Pause freezes play and restart resets the schedule. Mixed obstacles remain supported by their frozen legacy identities for future development.
+- Active-time world speed ramps from 180 to 288 pixels/second over 45 seconds. Score adds speed in 10% steps per 10 cleared obstacle stations until the same cap, which can be reached earlier. Each station scores once, including a pair of pipes.
+- Optional coin routes and seeded Stars reward harder flight paths. Verified coin credit retains its 30-per-run wallet cap; collecting more does not raise that cap. See the wetland record for controller evidence and remaining owner playtesting.
 - Velocity tilt, wing/flap motion, restrained squash/stretch and bounded visual effects improve feedback without changing authoritative hitboxes. Extra motion respects the reduced-motion setting.
 - Original synthesized flap/pickup/death sounds and a quiet music loop unlock from a user gesture. Separate sound/music controls are saved locally; backgrounding and pause silence playback.
 
-The current rules use simulation version1.4.0, generator version1.3.0, and default config ID `dd-v1-star-interval-v1`. Existing 1.3.0/1.2.0 runs retain the prior `dd-v1-stepped-v1` rules. See [`docs/ARCADE_SIMULATION.md`](docs/ARCADE_SIMULATION.md) for the rules.
+The shared simulation default uses version 2.2.0, generator 2.2.0 and config ID `dd-v2-paired-routes-v1`. New account runs use that identity; existing catalog-2 `2.1.0`, wetland `2.0.0`, and earlier runs retain their original rules. See [`docs/ARCADE_SIMULATION.md`](docs/ARCADE_SIMULATION.md) for the rules and [wetland challenges](docs/WETLAND_CHALLENGES.md) for verification status.
 
 ## Verification commands
 

@@ -28,9 +28,11 @@ are documented in [agent-workflow templates](agent-workflow/README.md). The
 | [Backend foundation](BACKEND_FOUNDATION.md) | Approved ACCOUNT/RUN scope, implementation evidence and outstanding hosted acceptance |
 | [Backend operations](BACKEND_OPERATIONS.md) | Hosted acceptance, outage response, durable delivery, restore and rollback runbook |
 | [Challenge verification](CHALLENGE_RESULTS.md) | Feature 1 implementation, executed checks dated 2026-10-17, bounded physics/replay evidence and open playtest/device acceptance |
+| [Wetland challenges](WETLAND_CHALLENGES.md) | Varied static obstacles, authored reward routes, ruleset compatibility and current verification status |
 | [Arcade simulation](ARCADE_SIMULATION.md) | Current mechanics, identities, bounds, and parity limits |
 | [Simulation contract](../contracts/simulation/README.md) | Shared fixtures and deliberate regeneration workflow |
 | [Local wallet](WALLET_UPDATE.md) | Record validation, settlement, tab ownership, and storage fallback |
+| [Telegram bot setup](TELEGRAM_BOT_SETUP.md) | Launch-bound automatic identity, BotFather setup and local real-Telegram test configuration |
 | [Audio implementation](AUDIO_IMPLEMENTATION.md) | Controller API, integration, and playback lifecycle |
 | [Flight feel](FLIGHT_FEEL.md) | Cosmetic motion, bounded effects, and reduced motion |
 | [Cosmetic authoring](COSMETICS.md) | Local wardrobe flow, stable catalog IDs, replaceable art, image conventions and fallback |

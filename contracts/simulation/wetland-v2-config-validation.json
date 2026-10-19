@@ -1,0 +1,98 @@
+{
+  "cases": [
+    {
+      "name": "varied-obstacle-default",
+      "accepted": true,
+      "varied": true
+    },
+    {
+      "name": "varied-obstacle-shifted-world",
+      "accepted": true,
+      "varied": true,
+      "worldOffset": 600000
+    },
+    {
+      "name": "varied-obstacle-no-stars",
+      "accepted": true,
+      "varied": true,
+      "noStars": true,
+      "limits": {
+        "maxActivePipes": 8,
+        "maxActiveCollectibles": 10
+      }
+    },
+    {
+      "name": "varied-obstacle-missing-geometry",
+      "accepted": false,
+      "varied": true,
+      "removeGeometry": true
+    },
+    {
+      "name": "varied-obstacle-height-below-minimum",
+      "accepted": false,
+      "varied": true,
+      "geometry": {
+        "halfPipeMinPercent": 69
+      }
+    },
+    {
+      "name": "varied-obstacle-height-above-maximum",
+      "accepted": false,
+      "varied": true,
+      "geometry": {
+        "halfPipeMaxPercent": 91
+      }
+    },
+    {
+      "name": "varied-obstacle-ceiling-min-above-effective-cap",
+      "accepted": false,
+      "varied": true,
+      "geometry": {
+        "halfPipeMinPercent": 89
+      }
+    },
+    {
+      "name": "varied-obstacle-half-height-order",
+      "accepted": false,
+      "varied": true,
+      "geometry": {
+        "halfPipeMinPercent": 88,
+        "halfPipeMaxPercent": 87
+      }
+    },
+    {
+      "name": "varied-obstacle-bar-width",
+      "accepted": false,
+      "varied": true,
+      "geometry": {
+        "floatingBarMinWidth": 89999
+      }
+    },
+    {
+      "name": "varied-obstacle-bar-height",
+      "accepted": false,
+      "varied": true,
+      "geometry": {
+        "floatingBarHeight": 41999
+      }
+    },
+    {
+      "name": "varied-obstacle-intro-center-outside-world",
+      "accepted": false,
+      "varied": true,
+      "introLaneCenter": {
+        "index": 3,
+        "value": 483001
+      }
+    },
+    {
+      "name": "varied-obstacle-intro-delta-too-large",
+      "accepted": false,
+      "varied": true,
+      "introLaneCenter": {
+        "index": 1,
+        "value": 400001
+      }
+    }
+  ]
+}

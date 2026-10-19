@@ -1,4 +1,4 @@
-import { createRunDescriptor, createRun, DEFAULT_CONFIG } from '@doofy-duck/game-sim';
+import { createRunDescriptor, createRun, PRIOR_DEFAULT_CONFIG } from '@doofy-duck/game-sim';
 import { describe, expect, it } from 'vitest';
 import { createFxPool, duckPose, flapEnvelope, fxPosition, pushFx, type Fx } from './feel';
 
@@ -45,7 +45,7 @@ describe('flight feel', () => {
   });
 
   it('does not mutate the authoritative run state while deriving presentation pose', () => {
-    const state = createRun(createRunDescriptor({ runId: 'feel-test', seed: 1 }, DEFAULT_CONFIG));
+    const state = createRun(createRunDescriptor({ runId: 'feel-test', seed: 1 }, PRIOR_DEFAULT_CONFIG));
     const before = JSON.stringify(state);
     duckPose(state.duck.vy, flapEnvelope(0.1, false), false);
     expect(JSON.stringify(state)).toBe(before);

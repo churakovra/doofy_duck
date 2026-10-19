@@ -314,7 +314,8 @@ func (s *Server) createRun(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 500, "internal", "simulation configuration invalid")
 		return
 	}
-	state, e := sim.CreateRun(sim.Descriptor{RunID: id, Seed: seed, SimulationVersion: sim.SimulationVersion, GeneratorVersion: sim.GeneratorVersion, ConfigID: configID}, config)
+	simulationVersion, generatorVersion := sim.SimulationVersion, sim.GeneratorVersion
+	state, e := sim.CreateRun(sim.Descriptor{RunID: id, Seed: seed, SimulationVersion: simulationVersion, GeneratorVersion: generatorVersion, ConfigID: configID}, config)
 	if e != nil {
 		writeError(w, 500, "internal", "could not create simulation")
 		return
@@ -331,7 +332,7 @@ func (s *Server) createRun(w http.ResponseWriter, r *http.Request) {
 	}
 	hash := sha256.Sum256([]byte(token))
 	now := s.now()
-	_, e = tx.Exec(ctx, `INSERT INTO core_runs(id,account_id,seed,simulation_version,generator_version,config_id,state,status,writer_token_hash,last_contact) VALUES($1,$2,$3,$4,$5,$6,$7,'active',$8,$9)`, id, account, seed, sim.SimulationVersion, sim.GeneratorVersion, configID, raw, hash[:], now)
+	_, e = tx.Exec(ctx, `INSERT INTO core_runs(id,account_id,seed,simulation_version,generator_version,config_id,state,status,writer_token_hash,last_contact) VALUES($1,$2,$3,$4,$5,$6,$7,'active',$8,$9)`, id, account, seed, simulationVersion, generatorVersion, configID, raw, hash[:], now)
 	if e != nil {
 		writeError(w, 409, "active_run_exists", "an active or pending run already exists")
 		return
@@ -341,7 +342,7 @@ func (s *Server) createRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Location", "/api/v1/runs/"+id)
-	writeJSON(w, 201, Snapshot{RunID: id, AccountID: account, LifeIndex: 0, Seed: seed, SimulationVersion: sim.SimulationVersion, GeneratorVersion: sim.GeneratorVersion, ConfigID: configID, State: state, Status: "active", VerificationStatus: "in_progress", DeliveryStatus: "not_ready", CheckpointSequence: -1, WriterGeneration: 1, ActiveTicks: 0, ActiveTickLimit: ActiveTickLimit, SubmissionDeadline: now.Add(time.Hour), WriterToken: token})
+	writeJSON(w, 201, Snapshot{RunID: id, AccountID: account, LifeIndex: 0, Seed: seed, SimulationVersion: simulationVersion, GeneratorVersion: generatorVersion, ConfigID: configID, State: state, Status: "active", VerificationStatus: "in_progress", DeliveryStatus: "not_ready", CheckpointSequence: -1, WriterGeneration: 1, ActiveTicks: 0, ActiveTickLimit: ActiveTickLimit, SubmissionDeadline: now.Add(time.Hour), WriterToken: token})
 }
 func (s *Server) currentRun(w http.ResponseWriter, r *http.Request) {
 	account := principal(r).AccountID

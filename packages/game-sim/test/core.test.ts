@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
-  DEFAULT_CONFIG, createRunDescriptor, createRun, step, pauseRun, resumeRun, restartRun,
+  PRIOR_DEFAULT_CONFIG, createRunDescriptor, createRun, step, pauseRun, resumeRun, restartRun,
   makeInput, validateConfig, validateDescriptor, mix32, generateNext,
   Feather, GameStar, collectibleFromDefinition, canonicalState,
   SIMULATION_VERSION, GENERATOR_VERSION, DEFAULT_CONFIG_ID,
 } from '../src/index.js';
 import type { RunDescriptor, InputFrame } from '../src/index.js';
 
-const descriptor: RunDescriptor = createRunDescriptor({ runId: 'run-001', seed: 1 });
+const descriptor: RunDescriptor = createRunDescriptor({ runId: 'run-001', seed: 1 }, PRIOR_DEFAULT_CONFIG);
 const press = (sequence: number): InputFrame => makeInput(sequence, 'FLAP');
 
 describe('public contract validation', () => {
@@ -22,14 +22,14 @@ describe('public contract validation', () => {
     expect(createRun(current).descriptor).toEqual(current);
   });
   it('accepts the immutable default config and rejects invalid physics', () => {
-    expect(validateConfig(DEFAULT_CONFIG)).toEqual(DEFAULT_CONFIG);
-    expect(Object.isFrozen(DEFAULT_CONFIG)).toBe(true);
-    expect(() => validateConfig({ ...DEFAULT_CONFIG, flight: { ...DEFAULT_CONFIG.flight, gravity: -1 } })).toThrow(/gravity/i);
+    expect(validateConfig(PRIOR_DEFAULT_CONFIG)).toEqual(PRIOR_DEFAULT_CONFIG);
+    expect(Object.isFrozen(PRIOR_DEFAULT_CONFIG)).toBe(true);
+    expect(() => validateConfig({ ...PRIOR_DEFAULT_CONFIG, flight: { ...PRIOR_DEFAULT_CONFIG.flight, gravity: -1 } })).toThrow(/gravity/i);
   });
   it('rejects invalid geometry and a custom config under the default identity', () => {
     expect(() => validateConfig({
-      ...DEFAULT_CONFIG,
-      flight: { ...DEFAULT_CONFIG.flight, duckHalfHeight: -1 },
+      ...PRIOR_DEFAULT_CONFIG,
+      flight: { ...PRIOR_DEFAULT_CONFIG.flight, duckHalfHeight: -1 },
     })).toThrow(/geometry|extent/i);
     expect(() => createRun({ ...descriptor, configId: 'unregistered-config' })).toThrow(/config/i);
   });
@@ -48,7 +48,7 @@ describe('deterministic flight and lifecycle', () => {
     const a = step(initial, [press(0)]);
     const b = step(createRun(descriptor), [press(0)]);
     expect(a.state.phase).toBe('RUNNING');
-    expect(a.state.duck.vy).toBe(DEFAULT_CONFIG.flight.flapVelocity + DEFAULT_CONFIG.flight.gravity);
+    expect(a.state.duck.vy).toBe(PRIOR_DEFAULT_CONFIG.flight.flapVelocity + PRIOR_DEFAULT_CONFIG.flight.gravity);
     expect(canonicalState(a.state)).toBe(canonicalState(b.state));
     expect(a.events.map(e => e.type)).toContain('RunStarted');
   });
@@ -62,7 +62,7 @@ describe('deterministic flight and lifecycle', () => {
     expect(state.phase).toBe('RUNNING');
   });
   it('boundary edge contact kills once and post-death ticks are inert', () => {
-    const cfg = { ...DEFAULT_CONFIG, flight: { ...DEFAULT_CONFIG.flight, gravity: 1000, maxFallSpeed: 1000, flapVelocity: -1 } };
+    const cfg = { ...PRIOR_DEFAULT_CONFIG, flight: { ...PRIOR_DEFAULT_CONFIG.flight, gravity: 1000, maxFallSpeed: 1000, flapVelocity: -1 } };
     let state = step(createRun(createRunDescriptor({ runId: descriptor.runId, seed: descriptor.seed }, cfg), cfg), [press(0)]).state;
     for (let i = 0; i < 400 && state.phase !== 'DEAD'; i++) state = step(state, []).state;
     expect(state.phase).toBe('DEAD');
@@ -109,20 +109,20 @@ describe('score and bounded generated world', () => {
   });
   it('generates stable monotonically identified pipes in a bounded horizon', () => {
     const result = generateNext(createRun(descriptor));
-    expect(result.state.pipes.length).toBeLessThanOrEqual(DEFAULT_CONFIG.limits.maxActivePipes);
+    expect(result.state.pipes.length).toBeLessThanOrEqual(PRIOR_DEFAULT_CONFIG.limits.maxActivePipes);
     expect(result.state.pipes[0]?.id).toBe('pipe-0');
     expect(result.state.pipes.map(p => p.x)).toEqual([...result.state.pipes.map(p => p.x)].sort((a,b) => a-b));
     expect(generateNext(createRun(descriptor)).state.pipes).toEqual(result.state.pipes);
   });
   it('maintains bounded live world on a known surviving flap sequence', () => {
-    const config = { ...DEFAULT_CONFIG, flight: { ...DEFAULT_CONFIG.flight, gravity: 1, flapVelocity: -11, maxFallSpeed: 100 }, pipes: { ...DEFAULT_CONFIG.pipes, speed: 100, gapHeight: 300000 } };
+    const config = { ...PRIOR_DEFAULT_CONFIG, flight: { ...PRIOR_DEFAULT_CONFIG.flight, gravity: 1, flapVelocity: -11, maxFallSpeed: 100 }, pipes: { ...PRIOR_DEFAULT_CONFIG.pipes, speed: 100, gapHeight: 300000 } };
     let state = createRun(createRunDescriptor({ runId: descriptor.runId, seed: descriptor.seed }, config), config);
     let flapSeq = 0;
     for (let t = 0; t < 24000 && state.phase !== 'DEAD'; t++) {
       const input = t % 20 === 0 ? [press(flapSeq++)] : [];
       state = step(state, input).state;
-      expect(state.pipes.length).toBeLessThanOrEqual(DEFAULT_CONFIG.limits.maxActivePipes);
-      expect(state.collectibles.length).toBeLessThanOrEqual(DEFAULT_CONFIG.limits.maxActiveCollectibles);
+      expect(state.pipes.length).toBeLessThanOrEqual(PRIOR_DEFAULT_CONFIG.limits.maxActivePipes);
+      expect(state.collectibles.length).toBeLessThanOrEqual(PRIOR_DEFAULT_CONFIG.limits.maxActiveCollectibles);
       expect(state.inputHistory.length).toBe(0);
     }
     expect(state.tick).toBeGreaterThan(1200);
@@ -139,7 +139,7 @@ describe('collectible definitions and pickup', () => {
   });
   it('consumes each eligible pipe opportunity once, even when NONE wins', () => {
     const config = {
-      ...DEFAULT_CONFIG,
+      ...PRIOR_DEFAULT_CONFIG,
       collectibles: [],
       spawnNoneWeight: 1,
       starSchedule: null,
@@ -155,8 +155,8 @@ describe('collectible definitions and pickup', () => {
 
   it('treats an all-disabled spawn table as NONE', () => {
     const config = {
-      ...DEFAULT_CONFIG,
-      collectibles: DEFAULT_CONFIG.collectibles.map(definition => ({ ...definition, weight: 0 })),
+      ...PRIOR_DEFAULT_CONFIG,
+      collectibles: PRIOR_DEFAULT_CONFIG.collectibles.map(definition => ({ ...definition, weight: 0 })),
       spawnNoneWeight: 10,
     };
     const state = createRun(createRunDescriptor({ runId: descriptor.runId, seed: descriptor.seed }, config), config);
@@ -164,7 +164,7 @@ describe('collectible definitions and pickup', () => {
     expect(started.state.collectibles).toEqual([]);
   });
   it('preserves supplied amount when constructing a feather definition', () => {
-    const definition = { ...DEFAULT_CONFIG.collectibles[0]!, amount: 31 };
+    const definition = { ...PRIOR_DEFAULT_CONFIG.collectibles[0]!, amount: 31 };
     expect(collectibleFromDefinition(definition).definition.amount).toBe(31);
   });
 });

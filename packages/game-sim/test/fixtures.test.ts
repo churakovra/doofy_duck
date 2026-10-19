@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_CONFIG, DEFAULT_CONFIG_ID, GENERATOR_VERSION, LEGACY_DEFAULT_CONFIG, LEGACY_DEFAULT_CONFIG_ID, LEGACY_GENERATOR_VERSION, LEGACY_SIMULATION_VERSION, SIMULATION_VERSION, canonicalState, createRun, createRunDescriptor, makeInput, mix32, pauseRun, restartRun, resumeRun, step } from '../src/index.js';
+import { PRIOR_DEFAULT_CONFIG, PRIOR_DEFAULT_CONFIG_ID, DEFAULT_CONFIG, DEFAULT_CONFIG_ID, GENERATOR_VERSION, LEGACY_DEFAULT_CONFIG, LEGACY_DEFAULT_CONFIG_ID, LEGACY_GENERATOR_VERSION, LEGACY_SIMULATION_VERSION, PRIOR_GENERATOR_VERSION, PRIOR_SIMULATION_VERSION, SIMULATION_VERSION, VARIED_OBSTACLE_DEFAULT_CONFIG, VARIED_OBSTACLE_DEFAULT_CONFIG_ID, VARIED_OBSTACLE_GENERATOR_VERSION, VARIED_OBSTACLE_SIMULATION_VERSION, WETLAND_DEFAULT_CONFIG, WETLAND_DEFAULT_CONFIG_ID, WETLAND_GENERATOR_VERSION, WETLAND_SIMULATION_VERSION, canonicalState, createRun, createRunDescriptor, makeInput, mix32, pauseRun, restartRun, resumeRun, step } from '../src/index.js';
 import type { GameConfig, GameEvent, InputFrame, RunDescriptor, RunState } from '../src/index.js';
 type Operation = { kind: string; frames?: InputFrame[]; ticks?: number; flapTicks?: number[]; descriptor?: RunDescriptor; expectedState: RunState; expectedEvents: GameEvent[] };
 type Case = { name: string; syntheticInitialState: boolean; initialState: RunState; operations: Operation[] };
@@ -11,10 +11,34 @@ describe('shared contract fixtures', () => {
     expect(fixture.fixtureRevision).toBe('stepped-challenges-1');
     expect(fixture.contractVersion).toBe(LEGACY_SIMULATION_VERSION);
     expect(fixture.defaultConfig).toEqual(LEGACY_DEFAULT_CONFIG);
-    expect(DEFAULT_CONFIG_ID).toBe('dd-v1-star-interval-v1');
+    expect(DEFAULT_CONFIG_ID).toBe('dd-v2-paired-routes-v1');
     expect(createRunDescriptor({ runId: 'fixture-contract', seed: 1 }).configId).toBe(DEFAULT_CONFIG_ID);
+    expect(DEFAULT_CONFIG.wetland?.catalogVersion).toBe(3);
+    expect(DEFAULT_CONFIG.wetland?.families.every(family => family.obstacleTypes.every(type => type === 'pipes'))).toBe(true);
+    expect(createRunDescriptor({ runId: 'varied-v2-contract', seed: 1 }, VARIED_OBSTACLE_DEFAULT_CONFIG)).toMatchObject({
+      simulationVersion: VARIED_OBSTACLE_SIMULATION_VERSION, generatorVersion: VARIED_OBSTACLE_GENERATOR_VERSION,
+      configId: VARIED_OBSTACLE_DEFAULT_CONFIG_ID,
+    });
+    expect(VARIED_OBSTACLE_DEFAULT_CONFIG.wetland?.catalogVersion).toBe(2);
+    expect(createRunDescriptor({ runId: 'wetland-v2-contract', seed: 1 }, WETLAND_DEFAULT_CONFIG)).toMatchObject({
+      simulationVersion: WETLAND_SIMULATION_VERSION, generatorVersion: WETLAND_GENERATOR_VERSION, configId: WETLAND_DEFAULT_CONFIG_ID,
+    });
+    expect(createRunDescriptor({ runId: 'prior-fixture-contract', seed: 1 }, PRIOR_DEFAULT_CONFIG)).toMatchObject({
+      simulationVersion: PRIOR_SIMULATION_VERSION, generatorVersion: PRIOR_GENERATOR_VERSION, configId: PRIOR_DEFAULT_CONFIG_ID,
+    });
     expect(LEGACY_DEFAULT_CONFIG_ID).toBe('dd-v1-stepped-v1');
     expect(fixture.rules.speed).toContain('rampTicks');
+  });
+  it('serializes new wetland fields only for wetland rules', () => {
+    const current = createRun(createRunDescriptor({ runId: 'wetland-state', seed: 7 }));
+    expect(current.nextPipeX).toBeDefined();
+    expect(current.config.wetland).toBeDefined();
+    expect(current.config.wetland?.catalogVersion).toBe(3);
+    const priorDescriptor = createRunDescriptor({ runId: 'prior-state', seed: 7 }, PRIOR_DEFAULT_CONFIG);
+    const prior = createRun(priorDescriptor, PRIOR_DEFAULT_CONFIG);
+    expect(prior).not.toHaveProperty('nextPipeX');
+    expect(prior.config).not.toHaveProperty('wetland');
+    expect(prior.pipes[0]).not.toHaveProperty('obstacles');
   });
   it('keeps the shared run descriptor schema aligned with exported versions', () => {
     const schema = JSON.parse(readFileSync('contracts/simulation/run-descriptor.schema.json', 'utf8')) as {
@@ -26,7 +50,7 @@ describe('shared contract fixtures', () => {
     ]));
   });
   it('pins the actual safe opening instead of obsolete tuning', () => {
-    expect(fixture.rules.generation.firstPipeX).toBe(DEFAULT_CONFIG.pipes.safeLeadIn);
+    expect(fixture.rules.generation.firstPipeX).toBe(PRIOR_DEFAULT_CONFIG.pipes.safeLeadIn);
   });
   for (const vector of fixture.mixerVectors) it(`mixer ${vector.input}`, () => expect(mix32(vector.input)).toBe(vector.output));
   for (const example of fixture.cases) it(`replays complete canonical states and events: ${example.name}`, () => {

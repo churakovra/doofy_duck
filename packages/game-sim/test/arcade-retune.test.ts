@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_CONFIG, LEGACY_DEFAULT_CONFIG, createRunDescriptor, createRun, generateNext, makeInput, step, worldSpeedAt } from '../src/index.js';
+import { PRIOR_DEFAULT_CONFIG, LEGACY_DEFAULT_CONFIG, createRunDescriptor, createRun, generateNext, makeInput, step, worldSpeedAt } from '../src/index.js';
 
-const descriptor = (seed = 1, config = DEFAULT_CONFIG) => createRunDescriptor({ runId: `retune-${seed}`, seed }, config);
+const descriptor = (seed = 1, config = PRIOR_DEFAULT_CONFIG) => createRunDescriptor({ runId: `retune-${seed}`, seed }, config);
 
 describe('focused arcade retune', () => {
   it('uses a sharper default flap arc', () => {
-    const config = DEFAULT_CONFIG;
+    const config = PRIOR_DEFAULT_CONFIG;
     expect(config.flight).toMatchObject({ gravity: 320, flapVelocity: -5600, maxFallSpeed: 8500, duckX: 100000 });
     let state = createRun(descriptor());
     state = step(state, [makeInput(0, 'FLAP')]).state;
@@ -30,8 +30,8 @@ describe('focused arcade retune', () => {
   });
 
   it('adds score-based speed steps at each configured pipe-count boundary', () => {
-    const config = DEFAULT_CONFIG;
-    expect([9, 10, 20, 40].map(score => worldSpeedAt(DEFAULT_CONFIG, 1, score)))
+    const config = PRIOR_DEFAULT_CONFIG;
+    expect([9, 10, 20, 40].map(score => worldSpeedAt(PRIOR_DEFAULT_CONFIG, 1, score)))
       .toEqual([3000, 3300, 3600, 4200]);
     expect(config.pipes).toMatchObject({ speed: 3000, maxSpeed: 4800, speedEveryPipes: 10, speedStepPercent: 10 });
   });
@@ -71,7 +71,7 @@ describe('focused arcade retune', () => {
   });
 
   it('places a generated pickup off-center but safely inside its opening', () => {
-    const config = DEFAULT_CONFIG;
+    const config = PRIOR_DEFAULT_CONFIG;
     const state = createRun(descriptor(7));
     const started = step(state, [makeInput(0, 'FLAP')]).state;
     for (const collectible of started.collectibles) {

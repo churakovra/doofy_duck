@@ -1,23 +1,23 @@
 import { describe, expect, it } from 'vitest';
 import {
-  DEFAULT_CONFIG, canonicalJSON, createRun, createRunDescriptor, step,
+  PRIOR_DEFAULT_CONFIG, canonicalJSON, createRun, createRunDescriptor, step,
 } from '../src/index.js';
 import type { GameConfig, RunState } from '../src/index.js';
 
 const baseDescriptor = { runId: 'foundation-edge', seed: 1 };
 const customConfig = (changes: Partial<GameConfig> = {}): GameConfig => ({
-  ...DEFAULT_CONFIG,
+  ...PRIOR_DEFAULT_CONFIG,
   ...changes,
-  flight: { ...DEFAULT_CONFIG.flight, ...changes.flight },
-  pipes: { ...DEFAULT_CONFIG.pipes, ...changes.pipes },
-  limits: { ...DEFAULT_CONFIG.limits, ...changes.limits },
-  collectibles: changes.collectibles ?? DEFAULT_CONFIG.collectibles,
-  ...(changes.collectibles ? { starSchedule: null } : DEFAULT_CONFIG.starSchedule == null ? {} : { starSchedule: DEFAULT_CONFIG.starSchedule }),
+  flight: { ...PRIOR_DEFAULT_CONFIG.flight, ...changes.flight },
+  pipes: { ...PRIOR_DEFAULT_CONFIG.pipes, ...changes.pipes },
+  limits: { ...PRIOR_DEFAULT_CONFIG.limits, ...changes.limits },
+  collectibles: changes.collectibles ?? PRIOR_DEFAULT_CONFIG.collectibles,
+  ...(changes.collectibles ? { starSchedule: null } : PRIOR_DEFAULT_CONFIG.starSchedule == null ? {} : { starSchedule: PRIOR_DEFAULT_CONFIG.starSchedule }),
 });
 
 describe('foundation edge cases', () => {
   it.each(['__proto__', 'constructor', 'toString'])('counts collectible type ID %s as an own total', typeId => {
-    const config = customConfig({ collectibles: [{ ...DEFAULT_CONFIG.collectibles[0]!, typeId }] });
+    const config = customConfig({ collectibles: [{ ...PRIOR_DEFAULT_CONFIG.collectibles[0]!, typeId }] });
     const descriptor = createRunDescriptor(baseDescriptor, config);
     const initial = createRun(descriptor, config);
     const running: RunState = Object.freeze({
@@ -41,7 +41,7 @@ describe('foundation edge cases', () => {
   it('accepts a spawn table whose total is Number.MAX_SAFE_INTEGER', () => {
     const config = customConfig({
       spawnNoneWeight: Number.MAX_SAFE_INTEGER,
-      collectibles: DEFAULT_CONFIG.collectibles.map(d => ({ ...d, weight: 0 })),
+      collectibles: PRIOR_DEFAULT_CONFIG.collectibles.map(d => ({ ...d, weight: 0 })),
     });
     expect(() => createRun(createRunDescriptor(baseDescriptor, config), config)).not.toThrow();
   });
@@ -55,12 +55,12 @@ describe('foundation edge cases', () => {
     expect(Object.isFrozen(config.pipes)).toBe(false);
     (config.pipes as { speed: number }).speed++;
     expect(state.config).toBe(stateConfig);
-    expect(state.config.pipes.speed).toBe(DEFAULT_CONFIG.pipes.speed);
+    expect(state.config.pipes.speed).toBe(PRIOR_DEFAULT_CONFIG.pipes.speed);
   });
 
   it('rejects non-string collectible type IDs and appearances at runtime', () => {
     for (const [field, value] of [['typeId', 4], ['appearance', null]] as const) {
-      const definition = { ...DEFAULT_CONFIG.collectibles[0]!, [field]: value };
+      const definition = { ...PRIOR_DEFAULT_CONFIG.collectibles[0]!, [field]: value };
       const config = customConfig({ collectibles: [definition] as unknown as GameConfig['collectibles'] });
       expect(() => createRunDescriptor(baseDescriptor, config)).toThrow();
     }
@@ -69,7 +69,7 @@ describe('foundation edge cases', () => {
   it('uses floor for negative half-way run and first-gap centers', () => {
     const config = customConfig({
       challenges: null,
-      pipes: { ...DEFAULT_CONFIG.pipes, ceilingY: -1000000, floorY: -439001, gapMinCenter: -840000, gapMaxCenter: -599999 },
+      pipes: { ...PRIOR_DEFAULT_CONFIG.pipes, ceilingY: -1000000, floorY: -439001, gapMinCenter: -840000, gapMaxCenter: -599999 },
     });
     const state = createRun(createRunDescriptor(baseDescriptor, config), config);
     expect(state.duck.y).toBe(-719501);

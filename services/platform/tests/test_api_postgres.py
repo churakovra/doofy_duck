@@ -588,6 +588,270 @@ def test_new_settlement_policy_credits_uncapped_stars_and_keeps_coins_capped(cli
     assert status.json()["credited"] == {"FEATHER": "10", "GAME_STAR": "700"}
 
 
+def test_wetland_settlement_is_idempotent_caps_only_feathers_and_preserves_legacy_policy(client):
+    from app import database
+    from app.economy.models import CompletionSettlement
+    from app.economy.settlement import process_settlement_batch
+    from app.economy.wallet.models import Wallet, WalletLedgerEntry
+
+    token, account_id = _login(client, 420033)
+    wetland_run = UUID(int=434)
+    first = _completion_event(
+        account_id=account_id,
+        run_id=wetland_run,
+        life_index=0,
+        feathers=20,
+        stars=900,
+        simulation_version="2.0.0",
+        generator_version="2.0.0",
+        config_id="dd-v2-wetland-v1",
+    )
+    duplicate = dict(first)
+    _accept_completion(client, first)
+    _accept_completion(client, duplicate)
+    _accept_completion(
+        client,
+        _completion_event(
+            account_id=account_id,
+            run_id=wetland_run,
+            life_index=1,
+            feathers=20,
+            stars=700,
+            simulation_version="2.0.0",
+            generator_version="2.0.0",
+            config_id="dd-v2-wetland-v1",
+        ),
+    )
+    legacy_run = UUID(int=435)
+    _accept_completion(
+        client,
+        _completion_event(
+            account_id=account_id,
+            run_id=legacy_run,
+            life_index=0,
+            feathers=5,
+            stars=500,
+            simulation_version="1.3.0",
+            generator_version="1.2.0",
+            config_id="dd-v1-stepped-v1",
+        ),
+    )
+    settings = replace(
+        client.app.state.settings,
+        economy_settlement_enabled=True,
+        economy_settlement_activated_at=datetime.now(UTC) - timedelta(minutes=1),
+    )
+    with database.EconomySession.begin() as session:
+        assert process_settlement_batch(session, settings=settings, limit=10) == 3
+    with database.EconomySession() as session:
+        wetland_rows = session.scalars(
+            select(CompletionSettlement)
+            .where(CompletionSettlement.run_id == wetland_run)
+            .order_by(CompletionSettlement.life_index)
+        ).all()
+        legacy = session.scalar(select(CompletionSettlement).where(CompletionSettlement.run_id == legacy_run))
+        assert [
+            (row.status, row.policy_version, row.feathers_credited, row.stars_credited) for row in wetland_rows
+        ] == [
+            ("committed", "verified-pickups-v3-wetland", 20, 900),
+            ("committed", "verified-pickups-v3-wetland", 10, 700),
+        ]
+        assert legacy is not None and legacy.policy_version == "verified-pickups-v1"
+        assert legacy.feathers_credited == 5 and legacy.stars_credited == 0
+        assert (
+            session.scalar(select(Wallet.balance).where(Wallet.account_id == account_id, Wallet.currency == "FEATHER"))
+            == 35
+        )
+        assert (
+            session.scalar(
+                select(Wallet.balance).where(Wallet.account_id == account_id, Wallet.currency == "GAME_STAR")
+            )
+            == 1600
+        )
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(WalletLedgerEntry)
+                .where(WalletLedgerEntry.policy_version == "verified-pickups-v3-wetland")
+            )
+            == 4
+        )
+
+
+def test_varied_obstacle_policy_deduplicates_delivery_caps_feathers_and_preserves_v3(client):
+    from app import database
+    from app.economy.models import CompletionSettlement
+    from app.economy.settlement import process_settlement_batch
+    from app.economy.wallet.models import Wallet, WalletLedgerEntry
+
+    token, account_id = _login(client, 420034)
+    varied_run = UUID(int=438)
+    first = _completion_event(
+        account_id=account_id,
+        run_id=varied_run,
+        life_index=0,
+        feathers=20,
+        stars=900,
+        simulation_version="2.1.0",
+        generator_version="2.1.0",
+        config_id="dd-v2-varied-obstacles-v1",
+    )
+    _accept_completion(client, first)
+    _accept_completion(client, dict(first))
+    _accept_completion(
+        client,
+        _completion_event(
+            account_id=account_id,
+            run_id=varied_run,
+            life_index=1,
+            feathers=20,
+            stars=700,
+            simulation_version="2.1.0",
+            generator_version="2.1.0",
+            config_id="dd-v2-varied-obstacles-v1",
+        ),
+    )
+    legacy_run = UUID(int=439)
+    _accept_completion(
+        client,
+        _completion_event(
+            account_id=account_id,
+            run_id=legacy_run,
+            life_index=0,
+            feathers=5,
+            stars=50,
+            simulation_version="2.0.0",
+            generator_version="2.0.0",
+            config_id="dd-v2-wetland-v1",
+        ),
+    )
+    settings = replace(
+        client.app.state.settings,
+        economy_settlement_enabled=True,
+        economy_settlement_activated_at=datetime.now(UTC) - timedelta(minutes=1),
+    )
+    with database.EconomySession.begin() as session:
+        assert process_settlement_batch(session, settings=settings, limit=10) == 3
+    with database.EconomySession() as session:
+        rows = session.scalars(
+            select(CompletionSettlement)
+            .where(CompletionSettlement.run_id == varied_run)
+            .order_by(CompletionSettlement.life_index)
+        ).all()
+        legacy = session.scalar(select(CompletionSettlement).where(CompletionSettlement.run_id == legacy_run))
+        assert [(row.status, row.policy_version, row.feathers_credited, row.stars_credited) for row in rows] == [
+            ("committed", "verified-pickups-v4-varied-obstacles", 20, 900),
+            ("committed", "verified-pickups-v4-varied-obstacles", 10, 700),
+        ]
+        assert legacy is not None and legacy.policy_version == "verified-pickups-v3-wetland"
+        assert legacy.feathers_credited == 5 and legacy.stars_credited == 50
+        assert (
+            session.scalar(select(Wallet.balance).where(Wallet.account_id == account_id, Wallet.currency == "FEATHER"))
+            == 35
+        )
+        assert (
+            session.scalar(
+                select(Wallet.balance).where(Wallet.account_id == account_id, Wallet.currency == "GAME_STAR")
+            )
+            == 1650
+        )
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(WalletLedgerEntry)
+                .where(WalletLedgerEntry.policy_version == "verified-pickups-v4-varied-obstacles")
+            )
+            == 4
+        )
+
+
+def test_paired_routes_policy_deduplicates_delivery_caps_feathers_and_preserves_v4(client):
+    from app import database
+    from app.economy.models import CompletionSettlement
+    from app.economy.settlement import process_settlement_batch
+    from app.economy.wallet.models import Wallet, WalletLedgerEntry
+
+    token, account_id = _login(client, 420035)
+    paired_run = UUID(int=440)
+    first = _completion_event(
+        account_id=account_id,
+        run_id=paired_run,
+        life_index=0,
+        feathers=20,
+        stars=900,
+        simulation_version="2.2.0",
+        generator_version="2.2.0",
+        config_id="dd-v2-paired-routes-v1",
+    )
+    _accept_completion(client, first)
+    _accept_completion(client, dict(first))
+    _accept_completion(
+        client,
+        _completion_event(
+            account_id=account_id,
+            run_id=paired_run,
+            life_index=1,
+            feathers=20,
+            stars=700,
+            simulation_version="2.2.0",
+            generator_version="2.2.0",
+            config_id="dd-v2-paired-routes-v1",
+        ),
+    )
+    varied_run = UUID(int=441)
+    _accept_completion(
+        client,
+        _completion_event(
+            account_id=account_id,
+            run_id=varied_run,
+            life_index=0,
+            feathers=5,
+            stars=50,
+            simulation_version="2.1.0",
+            generator_version="2.1.0",
+            config_id="dd-v2-varied-obstacles-v1",
+        ),
+    )
+    settings = replace(
+        client.app.state.settings,
+        economy_settlement_enabled=True,
+        economy_settlement_activated_at=datetime.now(UTC) - timedelta(minutes=1),
+    )
+    with database.EconomySession.begin() as session:
+        assert process_settlement_batch(session, settings=settings, limit=10) == 3
+    with database.EconomySession() as session:
+        rows = session.scalars(
+            select(CompletionSettlement)
+            .where(CompletionSettlement.run_id == paired_run)
+            .order_by(CompletionSettlement.life_index)
+        ).all()
+        varied = session.scalar(select(CompletionSettlement).where(CompletionSettlement.run_id == varied_run))
+        assert [(row.status, row.policy_version, row.feathers_credited, row.stars_credited) for row in rows] == [
+            ("committed", "verified-pickups-v5-paired-routes", 20, 900),
+            ("committed", "verified-pickups-v5-paired-routes", 10, 700),
+        ]
+        assert varied is not None and varied.policy_version == "verified-pickups-v4-varied-obstacles"
+        assert varied.feathers_credited == 5 and varied.stars_credited == 50
+        assert (
+            session.scalar(select(Wallet.balance).where(Wallet.account_id == account_id, Wallet.currency == "FEATHER"))
+            == 35
+        )
+        assert (
+            session.scalar(
+                select(Wallet.balance).where(Wallet.account_id == account_id, Wallet.currency == "GAME_STAR")
+            )
+            == 1650
+        )
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(WalletLedgerEntry)
+                .where(WalletLedgerEntry.policy_version == "verified-pickups-v5-paired-routes")
+            )
+            == 4
+        )
+
+
 def test_historical_backfill_credits_coins_for_both_known_profiles_and_no_stars(client):
     from app import database
     from app.economy.models import CompletionSettlement
@@ -613,8 +877,19 @@ def test_historical_backfill_credits_coins_for_both_known_profiles_and_no_stars(
         generator_version="1.3.0",
         config_id="dd-v1-star-interval-v1",
     )
+    preactivation_wetland_event = _completion_event(
+        account_id=account_id,
+        run_id=UUID(int=436),
+        feathers=20,
+        stars=700,
+        completed_at=cutoff - timedelta(minutes=10),
+        simulation_version="2.0.0",
+        generator_version="2.0.0",
+        config_id="dd-v2-wetland-v1",
+    )
     _accept_completion(client, old_identity_event)
     _accept_completion(client, new_identity_event)
+    _accept_completion(client, preactivation_wetland_event)
     settings = replace(
         client.app.state.settings,
         economy_settlement_enabled=True,
@@ -623,18 +898,24 @@ def test_historical_backfill_credits_coins_for_both_known_profiles_and_no_stars(
     with database.EconomySession() as session:
         plan = plan_historical_backfill(session, activated_at=cutoff, limit=100)
         assert plan.completion_count == 2
+        assert plan.unsupported_count == 1
         assert plan.feathers_to_credit == 40
         assert plan.game_stars_to_credit == 0
     with database.EconomySession.begin() as session:
         result = execute_historical_backfill(session, settings=settings, limit=100, execute=True)
+        assert result.completions_considered == 3
         assert result.feathers_credited == 40
         assert result.game_stars_credited == 0
+        assert result.unsupported_count == 1
     with database.EconomySession() as session:
         settlements = session.scalars(select(CompletionSettlement).order_by(CompletionSettlement.run_id)).all()
         assert [row.policy_version for row in settlements] == [
             "verified-pickups-v1",
             "verified-pickups-v2-historical-coins",
+            None,
         ]
+        assert settlements[2].status == "actionable_failure"
+        assert settlements[2].reason == "unsupported_simulation_identity"
         assert all(row.stars_credited == 0 for row in settlements)
         assert (
             session.scalar(select(Wallet.balance).where(Wallet.account_id == account_id, Wallet.currency == "FEATHER"))
@@ -716,19 +997,74 @@ def test_settlement_does_not_issue_pre_activation_or_unknown_simulation_facts(cl
         completed_at=cutoff + timedelta(seconds=1),
         simulation_version="99.0.0",
     )
+    mismatched_pair_event = _completion_event(
+        account_id=account_id,
+        run_id=UUID(int=425),
+        feathers=8,
+        completed_at=cutoff + timedelta(seconds=1),
+        simulation_version="2.1.0",
+        generator_version="2.0.0",
+        config_id="dd-v2-varied-obstacles-v1",
+    )
+    custom_identity_event = _completion_event(
+        account_id=account_id,
+        run_id=UUID(int=426),
+        feathers=8,
+        completed_at=cutoff + timedelta(seconds=1),
+        simulation_version="2.1.0",
+        generator_version="2.1.0",
+        config_id="dd-v1-config:custom-content",
+    )
+    mismatched_paired_event = _completion_event(
+        account_id=account_id,
+        run_id=UUID(int=427),
+        feathers=8,
+        completed_at=cutoff + timedelta(seconds=1),
+        simulation_version="2.2.0",
+        generator_version="2.1.0",
+        config_id="dd-v2-paired-routes-v1",
+    )
+    wrong_paired_config_event = _completion_event(
+        account_id=account_id,
+        run_id=UUID(int=428),
+        feathers=8,
+        completed_at=cutoff + timedelta(seconds=1),
+        simulation_version="2.2.0",
+        generator_version="2.2.0",
+        config_id="dd-v2-varied-obstacles-v1",
+    )
+    custom_paired_identity_event = _completion_event(
+        account_id=account_id,
+        run_id=UUID(int=429),
+        feathers=8,
+        completed_at=cutoff + timedelta(seconds=1),
+        simulation_version="2.2.0",
+        generator_version="2.2.0",
+        config_id="dd-v1-config:custom-content",
+    )
     _accept_completion(client, old_event)
     _accept_completion(client, unknown_event)
+    _accept_completion(client, mismatched_pair_event)
+    _accept_completion(client, custom_identity_event)
+    _accept_completion(client, mismatched_paired_event)
+    _accept_completion(client, wrong_paired_config_event)
+    _accept_completion(client, custom_paired_identity_event)
     settings = replace(
         client.app.state.settings,
         economy_settlement_enabled=True,
         economy_settlement_activated_at=cutoff,
     )
     with database.EconomySession.begin() as session:
-        assert process_settlement_batch(session, settings=settings, limit=10) == 1
+        assert process_settlement_batch(session, settings=settings, limit=10) == 6
     with database.EconomySession() as session:
         rows = session.scalars(select(CompletionSettlement).order_by(CompletionSettlement.run_id)).all()
         assert [(row.status, row.reason) for row in rows] == [
             ("pending", "settlement_disabled"),
+            ("actionable_failure", "unsupported_simulation_identity"),
+            ("actionable_failure", "unsupported_simulation_identity"),
+            ("actionable_failure", "unsupported_simulation_identity"),
+            ("actionable_failure", "unsupported_simulation_identity"),
+            ("actionable_failure", "unsupported_simulation_identity"),
             ("actionable_failure", "unsupported_simulation_identity"),
         ]
     old_status = client.get(

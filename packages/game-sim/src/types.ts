@@ -7,12 +7,21 @@ export interface RunDescriptor {
   readonly generatorVersion: string;
   readonly configId: string;
 }
-export const SIMULATION_VERSION = "1.4.0";
-export const GENERATOR_VERSION = "1.3.0";
-export const DEFAULT_CONFIG_ID = "dd-v1-star-interval-v1";
+export const SIMULATION_VERSION = "2.2.0";
+export const GENERATOR_VERSION = "2.2.0";
+export const DEFAULT_CONFIG_ID = "dd-v2-paired-routes-v1";
+export const VARIED_OBSTACLE_SIMULATION_VERSION = "2.1.0";
+export const VARIED_OBSTACLE_GENERATOR_VERSION = "2.1.0";
+export const VARIED_OBSTACLE_DEFAULT_CONFIG_ID = "dd-v2-varied-obstacles-v1";
+export const PRIOR_SIMULATION_VERSION = "1.4.0";
+export const PRIOR_GENERATOR_VERSION = "1.3.0";
+export const PRIOR_DEFAULT_CONFIG_ID = "dd-v1-star-interval-v1";
 export const LEGACY_SIMULATION_VERSION = "1.3.0";
 export const LEGACY_GENERATOR_VERSION = "1.2.0";
 export const LEGACY_DEFAULT_CONFIG_ID = "dd-v1-stepped-v1";
+export const WETLAND_SIMULATION_VERSION = "2.0.0";
+export const WETLAND_GENERATOR_VERSION = "2.0.0";
+export const WETLAND_DEFAULT_CONFIG_ID = "dd-v2-wetland-v1";
 export interface RunDescriptorIdentity {
   readonly runId: string;
   readonly seed: number;
@@ -68,6 +77,36 @@ export interface GameConfig {
   readonly spawnNoneWeight: number;
   readonly starSchedule?: StarScheduleConfig | null;
   readonly challenges?: ChallengeSet | null;
+  readonly wetland?: WetlandConfig | null;
+}
+export type ObstacleType = "pipes" | "vine" | "rock" | "debris";
+export interface ObstacleDefinition { readonly typeId: ObstacleType; readonly xOffset: number; readonly y: number; readonly width: number; readonly height: number; }
+export type EncounterFamilyId = "steady" | "quick-pairs" | "dive-climb" | "climb-dive" | "slalom";
+export interface WetlandConfig {
+  readonly stationSpacing: readonly number[];
+  readonly recoverySpacing: number;
+  readonly pressureFamilies: readonly EncounterFamilyId[];
+  readonly introFamilies: readonly EncounterFamilyId[];
+  readonly families: readonly WetlandEncounterFamily[];
+  readonly starRoute: WetlandRewardPoint;
+  readonly catalogVersion: number;
+  readonly geometry?: WetlandGeometryConfig;
+  readonly introLaneCenters?: readonly number[];
+}
+export interface WetlandGeometryConfig {
+  readonly halfPipeMinPercent: number;
+  readonly halfPipeMaxPercent: number;
+  readonly floatingBarMinWidth: number;
+  readonly floatingBarMaxWidth: number;
+  readonly floatingBarHeight: number;
+}
+export interface WetlandRewardPoint { readonly xOffset: number; readonly yOffset: number; }
+export interface WetlandEncounterFamily {
+  readonly id: EncounterFamilyId;
+  readonly gapCenters: readonly number[];
+  readonly obstacleTypes: readonly ObstacleType[];
+  readonly stationSpacing: readonly number[];
+  readonly rewardRoute: readonly WetlandRewardPoint[];
 }
 export interface StarScheduleConfig {
   readonly minIntervalPipes: number;
@@ -114,6 +153,11 @@ export interface Pipe {
   readonly scored: boolean;
   readonly challengeId?: string;
   readonly challengeStep?: number;
+  readonly stationId?: string;
+  readonly stationStep?: number;
+  readonly encounterFamily?: EncounterFamilyId;
+  readonly stationSpacing?: number;
+  readonly obstacles?: readonly ObstacleDefinition[];
 }
 export interface Collectible {
   readonly id: string;
@@ -136,6 +180,8 @@ export interface RunState {
   readonly totals: Readonly<Record<string, number>>;
   readonly rngState: number;
   readonly nextPipeIndex: number;
+  /** Absolute spawn cursor; present only for rulesets that require refill after pruning. */
+  readonly nextPipeX?: number;
   readonly lastGapCenter: number;
   readonly nextInputSequence: number;
   readonly lastCollectiblePipe: number;
@@ -155,6 +201,13 @@ export type GameEvent =
       readonly type: "PipePassed";
       readonly runId: string;
       readonly pipeId: string;
+      readonly score: number;
+      readonly tick: number;
+    }
+  | {
+      readonly type: "ObstaclePassed";
+      readonly runId: string;
+      readonly stationId: string;
       readonly score: number;
       readonly tick: number;
     }

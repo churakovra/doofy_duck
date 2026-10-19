@@ -1,7 +1,10 @@
 # Unified account game
 
 October 18, 2026. The owner requested one game across local development and
-Telegram, replacing the optional browser-practice/account split.
+Telegram, replacing the optional browser-practice/account split. Authentication
+controls described below were subsequently superseded by
+[automatic launch identity](TELEGRAM_BOT_SETUP.md); its verification evidence is
+recorded separately.
 
 ## Delivered behavior
 

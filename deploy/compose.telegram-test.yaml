@@ -1,0 +1,13 @@
+services:
+  platform:
+    environment:
+      DD_ENV: development
+      DEV_AUTH_ENABLED: "false"
+      DEV_AUTH_USER_ID: "0"
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN_REAL:?set TELEGRAM_BOT_TOKEN_REAL in .env.telegram-test}
+
+  web:
+    build:
+      args:
+        DD_LOCAL_DEV_AUTH: "false"
+

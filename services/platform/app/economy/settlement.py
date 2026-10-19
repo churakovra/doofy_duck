@@ -18,12 +18,25 @@ from app.settings import Settings
 POLICY_VERSION = "verified-pickups-v1"
 STAR_POLICY_VERSION = "verified-pickups-v2-stars"
 HISTORICAL_STAR_POLICY_VERSION = "verified-pickups-v2-historical-coins"
+WETLAND_POLICY_VERSION = "verified-pickups-v3-wetland"
+VARIED_OBSTACLE_POLICY_VERSION = "verified-pickups-v4-varied-obstacles"
+PAIRED_ROUTES_POLICY_VERSION = "verified-pickups-v5-paired-routes"
 COIN_RUN_CAP = 30
 SUPPORTED_SIMULATION_IDENTITY = ("1.3.0", "1.2.0", "dd-v1-stepped-v1")
 STAR_SIMULATION_IDENTITY = ("1.4.0", "1.3.0", "dd-v1-star-interval-v1")
+WETLAND_SIMULATION_IDENTITY = ("2.0.0", "2.0.0", "dd-v2-wetland-v1")
+VARIED_OBSTACLE_SIMULATION_IDENTITY = ("2.1.0", "2.1.0", "dd-v2-varied-obstacles-v1")
+PAIRED_ROUTES_SIMULATION_IDENTITY = ("2.2.0", "2.2.0", "dd-v2-paired-routes-v1")
 SUPPORTED_SIMULATION_IDENTITIES = {
     SUPPORTED_SIMULATION_IDENTITY: POLICY_VERSION,
     STAR_SIMULATION_IDENTITY: STAR_POLICY_VERSION,
+    WETLAND_SIMULATION_IDENTITY: WETLAND_POLICY_VERSION,
+    VARIED_OBSTACLE_SIMULATION_IDENTITY: VARIED_OBSTACLE_POLICY_VERSION,
+    PAIRED_ROUTES_SIMULATION_IDENTITY: PAIRED_ROUTES_POLICY_VERSION,
+}
+HISTORICAL_SIMULATION_IDENTITIES = {
+    SUPPORTED_SIMULATION_IDENTITY,
+    STAR_SIMULATION_IDENTITY,
 }
 TERMINAL_STATUSES = ("committed", "ineligible")
 
@@ -370,7 +383,7 @@ def plan_historical_backfill(
         if not _prior_indexes_done(evidence.run_id, evidence.life_index, done):
             waiting += 1
             continue
-        if _simulation_identity(evidence.payload) not in SUPPORTED_SIMULATION_IDENTITIES:
+        if _simulation_identity(evidence.payload) not in HISTORICAL_SIMULATION_IDENTITIES:
             unsupported += 1
             continue
         supported += 1
@@ -437,7 +450,7 @@ def execute_historical_backfill(
             waiting += 1
             continue
         identity = _simulation_identity(evidence.payload)
-        if identity not in SUPPORTED_SIMULATION_IDENTITIES:
+        if identity not in HISTORICAL_SIMULATION_IDENTITIES:
             settlement.status = "actionable_failure"
             settlement.reason = "unsupported_simulation_identity"
             settlement.settled_at = datetime.now(UTC)
@@ -551,7 +564,8 @@ def _lock_backfill_batch_resources(
     eligible = [
         evidence
         for evidence, status in rows
-        if status not in TERMINAL_STATUSES and _simulation_identity(evidence.payload) in SUPPORTED_SIMULATION_IDENTITIES
+        if status not in TERMINAL_STATUSES
+        and _simulation_identity(evidence.payload) in HISTORICAL_SIMULATION_IDENTITIES
     ]
     run_accounts = {evidence.run_id: UUID(str(evidence.payload["account_id"])) for evidence in eligible}
     caps = {
@@ -614,7 +628,12 @@ def settlement_rewards(
     """Return approved live rewards for a simulation identity, or None if unsupported."""
     if identity == SUPPORTED_SIMULATION_IDENTITY:
         return min(feathers, max(feathers_remaining, 0)), 0
-    if identity == STAR_SIMULATION_IDENTITY:
+    if identity in (
+        STAR_SIMULATION_IDENTITY,
+        WETLAND_SIMULATION_IDENTITY,
+        VARIED_OBSTACLE_SIMULATION_IDENTITY,
+        PAIRED_ROUTES_SIMULATION_IDENTITY,
+    ):
         return min(feathers, max(feathers_remaining, 0)), game_stars
     return None
 
