@@ -36,6 +36,10 @@ behavior, dated verification, hosted acceptance and future work.
    the complete diff and failure paths, fix gaps and run affected checks.
 
 Separate required acceptance from optional improvements; identify scope changes.
+Separate uncertain feasibility work from implementation. Deliver small, complete
+milestones with their affected checks; do not bundle unresolved research with
+simulation parity and backend integration. See
+[delegation](docs/AGENT_WORKFLOW.md#delegation) for the feasibility gate.
 Before expanding controller, simulation or load-test coverage, read
 [test assumptions](docs/AGENT_WORKFLOW.md#test-assumptions) and validate the harness.
 
@@ -80,6 +84,7 @@ and self-review, including revisions. Do not split ordinary tests/implementation
 | Code, tests, implementation fixes | `gpt-6-luna` | `high` |
 | Delegated documentation | `gpt-6-luna` | `medium` |
 | Planning, coordination, routine review | Main agent | Current setting |
+| Read-only feasibility analysis and escalated diagnosis | `gpt-6.1-sol` | `medium` |
 | Independent review | `gpt-6.1-sol` | `low`; `medium` for high-risk changes |
 
 Do not delegate code writing to Sol. If Luna cannot finish, clarify/narrow the task
@@ -102,9 +107,11 @@ concurrency changes. Routine work needs worker and main review only.
 ## Recovery and reporting
 
 After two unsuccessful revisions of the same acceptance failure, stop and read
-[reassessment](docs/AGENT_WORKFLOW.md#reassessment). Write the failing case,
-attempts, evidence, likely cause and revised approach before another attempt.
-Renaming a test/controller does not reset the count. Ask the user only if the
+[reassessment](docs/AGENT_WORKFLOW.md#reassessment). Stop implementation and obtain
+an independent diagnosis before another attempt. Record the failing case,
+attempts, evidence and materially revised approach with a bounded next check.
+Renaming a test/controller or diagnosing a new subproblem does not reset the
+unresolved acceptance failure. Ask the user only if the
 approach changes approved requirements/scope or needs a missing user decision.
 
 For multi-stage work, use [checkpoints](docs/AGENT_WORKFLOW.md#checkpoints).
