@@ -92,7 +92,7 @@ func TestPostgresRunCheckpointsAreOwnedIdempotentAndFenced(t *testing.T) {
 		t.Fatal("new run did not return writer token")
 	}
 	if first.SimulationVersion != sim.SimulationVersion || first.GeneratorVersion != sim.GeneratorVersion ||
-		first.ConfigID != sim.DefaultConfigID || first.State.Config.Wetland == nil || first.State.Config.Wetland.CatalogVersion != 3 {
+		first.ConfigID != sim.DefaultConfigID || first.State.Config.Wetland == nil || first.State.Config.Wetland.CatalogVersion != 4 {
 		t.Fatalf("new run identity/catalog mismatch: %s/%s/%s", first.SimulationVersion, first.GeneratorVersion, first.ConfigID)
 	}
 	statuses := make(chan int, 2)
@@ -117,7 +117,7 @@ func TestPostgresRunCheckpointsAreOwnedIdempotentAndFenced(t *testing.T) {
 	resp.Body.Close()
 	if ack.ActiveTicks != 2 || ack.CheckpointSequence != 0 || ack.WriterToken != "" ||
 		ack.SimulationVersion != sim.SimulationVersion || ack.GeneratorVersion != sim.GeneratorVersion || ack.ConfigID != sim.DefaultConfigID ||
-		ack.State.Descriptor.SimulationVersion != sim.SimulationVersion || ack.State.Config.Wetland == nil || ack.State.Config.Wetland.CatalogVersion != 3 {
+		ack.State.Descriptor.SimulationVersion != sim.SimulationVersion || ack.State.Config.Wetland == nil || ack.State.Config.Wetland.CatalogVersion != 4 {
 		t.Fatalf("bad checkpoint snapshot: %+v", ack)
 	}
 	resp = request(t, httpServer.Client(), http.MethodGet, httpServer.URL+"/api/v1/runs/current", token, nil)
@@ -128,7 +128,7 @@ func TestPostgresRunCheckpointsAreOwnedIdempotentAndFenced(t *testing.T) {
 	_ = json.NewDecoder(resp.Body).Decode(&recoveredRun)
 	resp.Body.Close()
 	if recoveredRun.RunID != first.RunID || recoveredRun.SimulationVersion != sim.SimulationVersion || recoveredRun.GeneratorVersion != sim.GeneratorVersion ||
-		recoveredRun.ConfigID != sim.DefaultConfigID || recoveredRun.State.Descriptor.ConfigID != sim.DefaultConfigID || recoveredRun.State.Config.Wetland == nil || recoveredRun.State.Config.Wetland.CatalogVersion != 3 {
+		recoveredRun.ConfigID != sim.DefaultConfigID || recoveredRun.State.Descriptor.ConfigID != sim.DefaultConfigID || recoveredRun.State.Config.Wetland == nil || recoveredRun.State.Config.Wetland.CatalogVersion != 4 {
 		t.Fatalf("checkpoint recovery changed paired identity: %+v", recoveredRun)
 	}
 	resp = request(t, httpServer.Client(), http.MethodPost, httpServer.URL+"/api/v1/runs/"+first.RunID+"/checkpoints", token, checkpoint)
@@ -451,7 +451,7 @@ func TestPostgresCompletionOutboxRetriesAndOutageGrace(t *testing.T) {
 		t.Fatalf("create status=%d", resp.StatusCode)
 	}
 	state := run.State
-	if state.Descriptor.SimulationVersion != sim.SimulationVersion || state.Descriptor.GeneratorVersion != sim.GeneratorVersion || state.Descriptor.ConfigID != sim.DefaultConfigID || state.Config.Wetland == nil || state.Config.Wetland.CatalogVersion != 3 {
+	if state.Descriptor.SimulationVersion != sim.SimulationVersion || state.Descriptor.GeneratorVersion != sim.GeneratorVersion || state.Descriptor.ConfigID != sim.DefaultConfigID || state.Config.Wetland == nil || state.Config.Wetland.CatalogVersion != 4 {
 		t.Fatalf("new run did not pin paired-route rules: %+v", state.Descriptor)
 	}
 	var ticks [][]sim.Input

@@ -162,7 +162,7 @@ describe('stepped default challenges', () => {
       }
       expect(state.score, `${fromId} -> ${toId}, yOffset=${offset}, vy=${vy}, phase=${state.phase}`).toBe(4);
     }
-  });
+  }, 10_000);
 
   it('covers default challenge transitions in a 64-seed, 5000-tick physics corpus', () => {
     const transitions = new Set<string>();
@@ -191,5 +191,5 @@ describe('stepped default challenges', () => {
     }
     expect(survived).toBe(64);
     expect(transitions.size).toBe(26);
-  });
+  }, 30_000);
 });

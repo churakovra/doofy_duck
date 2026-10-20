@@ -4,10 +4,11 @@ The deterministic game runs independently in TypeScript and Go. The modules expo
 
 ## Wetland rules
 
-The new paired-route default is simulation `2.2.0`, generator `2.2.0`,
-configuration `dd-v2-paired-routes-v1`, encounter catalog 3. Core issues this
-identity for new runs after replay, frontend and settlement support were
-integrated. Existing runs retain their issued
+The current currency-formations default is simulation `2.3.0`, generator
+`2.3.0`, configuration `dd-v2-currency-formations-v1`, encounter catalog 4.
+Core issues this identity for new runs. The prior paired-route rules remain
+frozen at simulation/generator `2.2.0`, configuration
+`dd-v2-paired-routes-v1`, encounter catalog 3. Existing runs retain their issued
 identity, including frozen `2.1.0` / `2.1.0` / `dd-v2-varied-obstacles-v1`,
 `2.0.0` / `2.0.0` / `dd-v2-wetland-v1` and earlier rules. See
 [wetland challenges](WETLAND_CHALLENGES.md) for current verification status.
@@ -18,6 +19,16 @@ gap centers and paired pickup resolver, the 156-pixel opening and varied
 geometry. Its scored stations retain their silhouettes until offscreen, as in
 catalog 2. Mixed obstacle generation remains supported under its frozen identities
 for existing flights and future development.
+
+Catalog 4 keeps the paired obstacle geometry and schedules deterministic reward
+formations. Each eligible coin route contains three individual FEATHER pickups;
+each scheduled Star route contains five individual GAME_STAR pickups laid out
+as a star. Every member has its own stable ID, amount 1, normal collision test
+and `CurrencyCollected` event. Group value is the number of members. Seeded
+orientation and inside/outside pipe placement vary between routes. The runtime
+capacity is 29 active individual pickups, covering eight active stations with
+three coins each plus one five-member Star formation. Wallet payout and the
+30-FEATHER run cap are unchanged.
 
 Frozen catalogs 1 and 2 combine paired pipes, ceiling vines, floor rocks/reeds and
 floating debris in four-station encounters. Each station supplies authoritative collision rectangles,

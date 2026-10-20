@@ -120,7 +120,7 @@ capacity and real Telegram/device acceptance are separate gates.
 - Velocity tilt, wing/flap motion, restrained squash/stretch and bounded visual effects improve feedback without changing authoritative hitboxes. Extra motion respects the reduced-motion setting.
 - Original synthesized flap/pickup/death sounds and a quiet music loop unlock from a user gesture. Separate sound/music controls are saved locally; backgrounding and pause silence playback.
 
-The shared simulation default uses version 2.2.0, generator 2.2.0 and config ID `dd-v2-paired-routes-v1`. New account runs use that identity; existing catalog-2 `2.1.0`, wetland `2.0.0`, and earlier runs retain their original rules. See [`docs/ARCADE_SIMULATION.md`](docs/ARCADE_SIMULATION.md) for the rules and [wetland challenges](docs/WETLAND_CHALLENGES.md) for verification status.
+The shared simulation default uses version 2.3.0, generator 2.3.0 and config ID `dd-v2-currency-formations-v1`. New account runs use that identity; existing paired-route 2.2.0, catalog-2 `2.1.0`, wetland `2.0.0`, and earlier runs retain their original rules. See [`docs/ARCADE_SIMULATION.md`](docs/ARCADE_SIMULATION.md) for the rules and [wetland challenges](docs/WETLAND_CHALLENGES.md) for verification status.
 
 ## Verification commands
 

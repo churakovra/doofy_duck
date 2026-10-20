@@ -138,13 +138,13 @@ afterEach(() => {
 });
 
 describe('account run transport', () => {
-  it('starts and checkpoints the paired-route descriptor supplied by Core', async () => {
+  it('starts and checkpoints the currency-formations descriptor supplied by Core', async () => {
     await act(async () => { host.querySelector<HTMLButtonElement>('.account-panel .primary-button')?.click(); });
     await vi.waitFor(() => expect(harness.createRun).toHaveBeenCalled());
 
     expect(harness.runOptions?.initialState).toMatchObject({
-      descriptor: { simulationVersion: '2.2.0', generatorVersion: '2.2.0', configId: 'dd-v2-paired-routes-v1' },
-      config: { wetland: { catalogVersion: 3 } },
+      descriptor: { simulationVersion: '2.3.0', generatorVersion: '2.3.0', configId: 'dd-v2-currency-formations-v1' },
+      config: { wetland: { catalogVersion: 4 } },
     });
   });
 
@@ -665,8 +665,8 @@ describe('account run transport', () => {
     for (let tick = 121; tick <= 127; tick++) act(() => onTick({ phase: 'RUNNING', tick } as never, []));
     await act(async () => { finishRequest(runSnapshot({ checkpointSequence: 0, activeTicks: 120 })); });
     expect(harness.runOptions?.initialState).toMatchObject({
-      descriptor: { simulationVersion: '2.2.0', generatorVersion: '2.2.0', configId: 'dd-v2-paired-routes-v1' },
-      config: { wetland: { catalogVersion: 3 } },
+      descriptor: { simulationVersion: '2.3.0', generatorVersion: '2.3.0', configId: 'dd-v2-currency-formations-v1' },
+      config: { wetland: { catalogVersion: 4 } },
     });
     await vi.waitFor(() => {
       const trace = harness.traceRecords.get(`${account.account_id}:${initialState.descriptor.runId}`) as { activeTicks: number; unsentTicks: unknown[]; pending: unknown[] };

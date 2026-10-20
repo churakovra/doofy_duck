@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { PRIOR_DEFAULT_CONFIG, PRIOR_DEFAULT_CONFIG_ID, DEFAULT_CONFIG, DEFAULT_CONFIG_ID, GENERATOR_VERSION, LEGACY_DEFAULT_CONFIG, LEGACY_DEFAULT_CONFIG_ID, LEGACY_GENERATOR_VERSION, LEGACY_SIMULATION_VERSION, PRIOR_GENERATOR_VERSION, PRIOR_SIMULATION_VERSION, SIMULATION_VERSION, VARIED_OBSTACLE_DEFAULT_CONFIG, VARIED_OBSTACLE_DEFAULT_CONFIG_ID, VARIED_OBSTACLE_GENERATOR_VERSION, VARIED_OBSTACLE_SIMULATION_VERSION, WETLAND_DEFAULT_CONFIG, WETLAND_DEFAULT_CONFIG_ID, WETLAND_GENERATOR_VERSION, WETLAND_SIMULATION_VERSION, canonicalState, createRun, createRunDescriptor, makeInput, mix32, pauseRun, restartRun, resumeRun, step } from '../src/index.js';
+import { PRIOR_DEFAULT_CONFIG, PRIOR_DEFAULT_CONFIG_ID, DEFAULT_CONFIG, DEFAULT_CONFIG_ID, PAIRED_ROUTES_DEFAULT_CONFIG, PAIRED_ROUTES_CONFIG_ID, PAIRED_ROUTES_GENERATOR_VERSION, PAIRED_ROUTES_SIMULATION_VERSION, GENERATOR_VERSION, LEGACY_DEFAULT_CONFIG, LEGACY_DEFAULT_CONFIG_ID, LEGACY_GENERATOR_VERSION, LEGACY_SIMULATION_VERSION, PRIOR_GENERATOR_VERSION, PRIOR_SIMULATION_VERSION, SIMULATION_VERSION, VARIED_OBSTACLE_DEFAULT_CONFIG, VARIED_OBSTACLE_DEFAULT_CONFIG_ID, VARIED_OBSTACLE_GENERATOR_VERSION, VARIED_OBSTACLE_SIMULATION_VERSION, WETLAND_DEFAULT_CONFIG, WETLAND_DEFAULT_CONFIG_ID, WETLAND_GENERATOR_VERSION, WETLAND_SIMULATION_VERSION, canonicalState, createRun, createRunDescriptor, makeInput, mix32, pauseRun, restartRun, resumeRun, step } from '../src/index.js';
 import type { GameConfig, GameEvent, InputFrame, RunDescriptor, RunState } from '../src/index.js';
 type Operation = { kind: string; frames?: InputFrame[]; ticks?: number; flapTicks?: number[]; descriptor?: RunDescriptor; expectedState: RunState; expectedEvents: GameEvent[] };
 type Case = { name: string; syntheticInitialState: boolean; initialState: RunState; operations: Operation[] };
@@ -11,9 +11,12 @@ describe('shared contract fixtures', () => {
     expect(fixture.fixtureRevision).toBe('stepped-challenges-1');
     expect(fixture.contractVersion).toBe(LEGACY_SIMULATION_VERSION);
     expect(fixture.defaultConfig).toEqual(LEGACY_DEFAULT_CONFIG);
-    expect(DEFAULT_CONFIG_ID).toBe('dd-v2-paired-routes-v1');
+    expect(DEFAULT_CONFIG_ID).toBe('dd-v2-currency-formations-v1');
     expect(createRunDescriptor({ runId: 'fixture-contract', seed: 1 }).configId).toBe(DEFAULT_CONFIG_ID);
-    expect(DEFAULT_CONFIG.wetland?.catalogVersion).toBe(3);
+    expect(DEFAULT_CONFIG.wetland?.catalogVersion).toBe(4);
+    expect(createRunDescriptor({ runId: 'paired-contract', seed: 1 }, PAIRED_ROUTES_DEFAULT_CONFIG)).toMatchObject({
+      simulationVersion: PAIRED_ROUTES_SIMULATION_VERSION, generatorVersion: PAIRED_ROUTES_GENERATOR_VERSION, configId: PAIRED_ROUTES_CONFIG_ID,
+    });
     expect(DEFAULT_CONFIG.wetland?.families.every(family => family.obstacleTypes.every(type => type === 'pipes'))).toBe(true);
     expect(createRunDescriptor({ runId: 'varied-v2-contract', seed: 1 }, VARIED_OBSTACLE_DEFAULT_CONFIG)).toMatchObject({
       simulationVersion: VARIED_OBSTACLE_SIMULATION_VERSION, generatorVersion: VARIED_OBSTACLE_GENERATOR_VERSION,
@@ -33,7 +36,7 @@ describe('shared contract fixtures', () => {
     const current = createRun(createRunDescriptor({ runId: 'wetland-state', seed: 7 }));
     expect(current.nextPipeX).toBeDefined();
     expect(current.config.wetland).toBeDefined();
-    expect(current.config.wetland?.catalogVersion).toBe(3);
+    expect(current.config.wetland?.catalogVersion).toBe(4);
     const priorDescriptor = createRunDescriptor({ runId: 'prior-state', seed: 7 }, PRIOR_DEFAULT_CONFIG);
     const prior = createRun(priorDescriptor, PRIOR_DEFAULT_CONFIG);
     expect(prior).not.toHaveProperty('nextPipeX');

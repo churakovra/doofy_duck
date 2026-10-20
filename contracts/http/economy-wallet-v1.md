@@ -108,8 +108,12 @@ generator 2.1.0, config dd-v2-varied-obstacles-v1 for existing runs. Policy
 verified-pickups-v5-paired-routes accepts exactly simulation 2.2.0, generator
 2.2.0, config dd-v2-paired-routes-v1. Both preserve 1:1 FEATHER/GAME_STAR
 credit, the 30-FEATHER run cap and existing Star rules; no cap migration is
-required. Custom configurations and mismatched version/config tuples are
-ineligible. Core issues the paired identity for new runs. Integration
+required. Policy verified-pickups-v6-currency-formations accepts exactly
+simulation 2.3.0, generator 2.3.0, config dd-v2-currency-formations-v1. It
+credits each individual FEATHER and GAME_STAR member at 1:1 under the same
+30-FEATHER run cap and uncapped in-game Star policy. Formations do not combine
+member values. Custom configurations and mismatched version/config tuples are
+ineligible. Core issues the currency-formations identity for new runs. Integration
 verification is recorded in
 [wetland challenges](../../docs/WETLAND_CHALLENGES.md).
 

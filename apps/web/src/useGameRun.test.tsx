@@ -63,11 +63,11 @@ afterEach(() => {
 });
 
 describe('run clock integration', () => {
-  it('restarts a fresh default run with the paired-routes identity', () => {
+  it('restarts a fresh default run with the currency-formations identity', () => {
     act(() => run.restart());
-    expect(run.getState().config.wetland?.catalogVersion).toBe(3);
+    expect(run.getState().config.wetland?.catalogVersion).toBe(4);
     expect(run.getState().descriptor).toMatchObject({
-      simulationVersion: '2.2.0', generatorVersion: '2.2.0', configId: 'dd-v2-paired-routes-v1',
+      simulationVersion: '2.3.0', generatorVersion: '2.3.0', configId: 'dd-v2-currency-formations-v1',
     });
     expect(run.getState().config).toEqual(DEFAULT_CONFIG);
   });

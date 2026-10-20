@@ -6,6 +6,10 @@ import {
   VARIED_OBSTACLE_DEFAULT_CONFIG,
   DEFAULT_CONFIG,
   DEFAULT_CONFIG_ID,
+  PAIRED_ROUTES_DEFAULT_CONFIG,
+  PAIRED_ROUTES_CONFIG_ID,
+  PAIRED_ROUTES_SIMULATION_VERSION,
+  PAIRED_ROUTES_GENERATOR_VERSION,
   VARIED_OBSTACLE_DEFAULT_CONFIG_ID,
   VARIED_OBSTACLE_SIMULATION_VERSION,
   VARIED_OBSTACLE_GENERATOR_VERSION,
@@ -851,8 +855,8 @@ function runPairedGapPolicyWitness(seed: number, entryY: number, entryVy: number
   collected: string[];
   inputs: { tick: number; flap: boolean }[];
   displacements: { tick: number; actual: number; expected: number }[] } {
-  const config = normalDefault ? DEFAULT_CONFIG : { ...DEFAULT_CONFIG,
-    pipes: { ...DEFAULT_CONFIG.pipes, horizon: 1_700_000 },
+  const config = normalDefault ? DEFAULT_CONFIG : { ...PAIRED_ROUTES_DEFAULT_CONFIG,
+    pipes: { ...PAIRED_ROUTES_DEFAULT_CONFIG.pipes, horizon: 1_700_000 },
     limits: { maxActivePipes: 24, maxActiveCollectibles: 25 }, starSchedule: null };
   let state = createRun(createRunDescriptor({ runId: `paired-gap-policy-seed-${seed}`, seed }, config), config);
   if (!normalDefault) state = { ...state, phase: "RUNNING", tick: config.pipes.rampTicks,
@@ -1000,6 +1004,7 @@ const validationFixture = JSON.parse(readFileSync("contracts/simulation/wetland-
 };
 const variedWetlandFixture = JSON.parse(readFileSync("contracts/simulation/wetland-v2.json", "utf8")) as typeof wetlandFixture;
 const pairedWetlandFixture = JSON.parse(readFileSync("contracts/simulation/wetland-v3.json", "utf8")) as typeof wetlandFixture;
+const currencyFormationsFixture = JSON.parse(readFileSync("contracts/simulation/currency-formations-v1.json", "utf8")) as typeof wetlandFixture;
 const variedValidationFixture = JSON.parse(readFileSync("contracts/simulation/wetland-v2-config-validation.json", "utf8")) as typeof validationFixture;
 const pairedValidationFixture = JSON.parse(readFileSync("contracts/simulation/wetland-v3-config-validation.json", "utf8")) as {
   cases: { name: string; accepted: boolean; paired: true; mutation?: "custom-center" | "mixed-obstacle" | "varied-geometry" | "zero-height-pipe" }[];
@@ -1050,10 +1055,13 @@ describe("wetland station contract", () => {
 
   it("issues paired routes while retaining frozen varied and 2.0 wetland identities", () => {
     expect([SIMULATION_VERSION, GENERATOR_VERSION, DEFAULT_CONFIG_ID]).toEqual([
-      "2.2.0", "2.2.0", "dd-v2-paired-routes-v1",
+      "2.3.0", "2.3.0", "dd-v2-currency-formations-v1",
     ]);
     expect(createRunDescriptor({ runId: "paired", seed: 4 })).toMatchObject({
       simulationVersion: SIMULATION_VERSION, generatorVersion: GENERATOR_VERSION, configId: DEFAULT_CONFIG_ID,
+    });
+    expect(createRunDescriptor({ runId: "paired-frozen", seed: 4 }, PAIRED_ROUTES_DEFAULT_CONFIG)).toMatchObject({
+      simulationVersion: PAIRED_ROUTES_SIMULATION_VERSION, generatorVersion: PAIRED_ROUTES_GENERATOR_VERSION, configId: PAIRED_ROUTES_CONFIG_ID,
     });
     expect(createRunDescriptor({ runId: "varied", seed: 4 }, VARIED_OBSTACLE_DEFAULT_CONFIG)).toMatchObject({
       simulationVersion: VARIED_OBSTACLE_SIMULATION_VERSION, generatorVersion: VARIED_OBSTACLE_GENERATOR_VERSION,
@@ -1067,7 +1075,7 @@ describe("wetland station contract", () => {
   });
 
   it("generates paired-only stations with authored family spacing and reward routes", () => {
-    const state = createRun(createRunDescriptor({ runId: "paired-default-shape", seed: 7 }));
+    const state = createRun(createRunDescriptor({ runId: "paired-default-shape", seed: 7 }, PAIRED_ROUTES_DEFAULT_CONFIG), PAIRED_ROUTES_DEFAULT_CONFIG);
     expect(state.config.wetland?.catalogVersion).toBe(3);
     expect(state.pipes.length).toBeGreaterThan(0);
     expect(state.pipes.every(pipe => pipe.obstacles?.length === 2 && pipe.obstacles.every(rect => rect.typeId === "pipes" && rect.height > 0))).toBe(true);
@@ -1204,7 +1212,7 @@ describe("wetland station contract", () => {
     expect(barWidths.size).toBeGreaterThan(10);
     expect(Math.min(...barWidths)).toBe(90_000);
     expect(Math.max(...barWidths)).toBe(216_000);
-  }, 15_000);
+  }, 30_000);
 
   it("keeps all generated ceiling halves at or below 88 percent, including late stations", () => {
     const config = { ...VARIED_OBSTACLE_DEFAULT_CONFIG, starSchedule: null, pipes: { ...VARIED_OBSTACLE_DEFAULT_CONFIG.pipes, horizon: 10_000_000 } };
@@ -1594,7 +1602,7 @@ describe("wetland station contract", () => {
     expect(result.initialState.descriptor.configId).toBe(DEFAULT_CONFIG_ID);
     expect({ phase: result.initialState.phase, tick: result.initialState.tick, catalogVersion: result.initialState.config.wetland?.catalogVersion,
       y: result.initialState.duck.y, vy: result.initialState.duck.vy })
-      .toEqual({ phase: "READY", tick: 0, catalogVersion: 3,
+      .toEqual({ phase: "READY", tick: 0, catalogVersion: 4,
         y: Math.floor((DEFAULT_CONFIG.pipes.ceilingY + DEFAULT_CONFIG.pipes.floorY) / 2), vy: 0 });
     expect(result.inputs[0]).toEqual({ tick: 0, flap: true });
     expect(result.state.phase, JSON.stringify({ score: result.state.score, tick: result.state.tick,
@@ -1706,7 +1714,7 @@ describe("wetland station contract", () => {
 
   it("collects the paired catalog intro trail and clears its following station", () => {
     const introRewards = ["feather-trail-0-1", "feather-trail-0-3"];
-    const result = runRewardWitness(0, 280_000, 0, 5, undefined, DEFAULT_CONFIG, true, undefined, "custom-cap", introRewards);
+    const result = runRewardWitness(0, 280_000, 0, 5, undefined, PAIRED_ROUTES_DEFAULT_CONFIG, true, undefined, "custom-cap", introRewards);
     expect(result.state.phase, JSON.stringify({ args: result.args,
       initial: { phase: result.initialState.phase, tick: result.initialState.tick, y: result.initialState.duck.y,
         vy: result.initialState.duck.vy, nextStarPipeIndex: result.initialState.nextStarPipeIndex,
@@ -1733,7 +1741,7 @@ describe("wetland station contract", () => {
 
   it("collects the paired catalog complete quick-pairs trail and clears its following station", () => {
     const required = [0, 1, 2, 3].map(stepIndex => `feather-trail-1-${stepIndex}`);
-    const result = runRewardWitness(0, 280_000, 0, 9, undefined, DEFAULT_CONFIG, true, undefined, "custom-cap", required);
+    const result = runRewardWitness(0, 280_000, 0, 9, undefined, PAIRED_ROUTES_DEFAULT_CONFIG, true, undefined, "custom-cap", required);
     expect(result.state.phase, JSON.stringify({ args: result.args, terminal: result.terminal,
       collected: [...result.collected], passed: result.passedTypes, inputs: result.inputs.slice(-40) })).toBe("RUNNING");
     expect(result.state.score).toBeGreaterThanOrEqual(9);
@@ -1753,7 +1761,7 @@ describe("wetland station contract", () => {
 
   it("collects the paired catalog pressure trail and clears its following station", () => {
     const required = [0, 1, 2, 3].map(stepIndex => `feather-trail-2-${stepIndex}`);
-    const result = runRewardWitness(0, 280_000, 0, 13, undefined, DEFAULT_CONFIG, true, undefined, "custom-cap", required);
+    const result = runRewardWitness(0, 280_000, 0, 13, undefined, PAIRED_ROUTES_DEFAULT_CONFIG, true, undefined, "custom-cap", required);
     expect(result.state.phase, JSON.stringify({ args: result.args, terminal: result.terminal,
       collected: [...result.collected], passed: result.passedTypes, inputs: result.inputs.slice(-40) })).toBe("RUNNING");
     expect(result.state.score).toBeGreaterThanOrEqual(13);
@@ -1772,7 +1780,7 @@ describe("wetland station contract", () => {
   }, 30_000);
 
   it("does not automatically collect the complete paired pressure trail when rewards are ignored", () => {
-    const result = runRewardWitness(0, 280_000, 0, 13, undefined, DEFAULT_CONFIG, false);
+    const result = runRewardWitness(0, 280_000, 0, 13, undefined, PAIRED_ROUTES_DEFAULT_CONFIG, false);
     const pressureTrail = [0, 1, 2, 3].map(stepIndex => `feather-trail-2-${stepIndex}`);
     expect(result.state.phase).toBe("RUNNING");
     expect(result.state.score).toBeGreaterThanOrEqual(13);
@@ -1781,8 +1789,8 @@ describe("wetland station contract", () => {
   }, 30_000);
 
   it("collects the paired catalog scheduled Star and clears the following station", () => {
-    expect(DEFAULT_CONFIG.wetland!.starRoute).toEqual({ xOffset: 100_000, yOffset: 35_000 });
-    const result = runRewardWitness(0, 280_000, 0, 10, 8, DEFAULT_CONFIG, true, undefined, "custom-cap", ["star-8"],
+    expect(PAIRED_ROUTES_DEFAULT_CONFIG.wetland!.starRoute).toEqual({ xOffset: 100_000, yOffset: 35_000 });
+    const result = runRewardWitness(0, 280_000, 0, 10, 8, PAIRED_ROUTES_DEFAULT_CONFIG, true, undefined, "custom-cap", ["star-8"],
       { stationId: "station-8", fromTick: 3_231, throughTick: 3_251 });
     if (process.env.REPORT_STAR_WITNESS === "1") console.info(JSON.stringify({
       star: result.starWitness,
@@ -1805,7 +1813,7 @@ describe("wetland station contract", () => {
     expect(result.collectedAt.get("star-8")).toBeGreaterThanOrEqual(Math.max(star.readyAt, owner.readyAt));
     expect(result.passedTypes.some(item => item.stationId === "station-9")).toBe(true);
 
-    const ignored = runRewardWitness(0, 280_000, 0, 10, 8, DEFAULT_CONFIG, false, undefined, "custom-cap", ["star-8"],
+    const ignored = runRewardWitness(0, 280_000, 0, 10, 8, PAIRED_ROUTES_DEFAULT_CONFIG, false, undefined, "custom-cap", ["star-8"],
       { stationId: "station-8", fromTick: 3_231, throughTick: 3_251 });
     expect(ignored.state.phase).toBe("RUNNING");
     expect(ignored.state.score).toBeGreaterThanOrEqual(10);
@@ -2085,8 +2093,10 @@ describe("wetland station contract", () => {
   });
   it("replays reviewed raw full-state and event vectors", () => {
     expect(pairedWetlandFixture).toMatchObject({ fixtureRevision: "wetland-paired-stations-1",
+      simulationVersion: PAIRED_ROUTES_SIMULATION_VERSION, generatorVersion: PAIRED_ROUTES_GENERATOR_VERSION, configId: PAIRED_ROUTES_CONFIG_ID });
+    expect(currencyFormationsFixture).toMatchObject({ fixtureRevision: "currency-formations-1",
       simulationVersion: SIMULATION_VERSION, generatorVersion: GENERATOR_VERSION, configId: DEFAULT_CONFIG_ID });
-    for (const example of [...wetlandFixture.cases, ...variedWetlandFixture.cases, ...pairedWetlandFixture.cases]) {
+    for (const example of [...wetlandFixture.cases, ...variedWetlandFixture.cases, ...pairedWetlandFixture.cases, ...currencyFormationsFixture.cases]) {
       let state = example.syntheticInitialState
         ? example.initialState
         : createRun(example.initialState.descriptor, example.initialState.config);

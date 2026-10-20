@@ -205,9 +205,11 @@ func VerifyWetlandFixtures(path string) error {
 		fixture.GeneratorVersion == WetlandGeneratorVersion && fixture.ConfigID == WetlandDefaultConfigID && len(fixture.Cases) >= 5
 	variedFixture := fixture.FixtureRevision == "wetland-varied-stations-1" && fixture.SimulationVersion == VariedObstacleSimulationVersion &&
 		fixture.GeneratorVersion == VariedObstacleGeneratorVersion && fixture.ConfigID == VariedObstacleDefaultConfigID && len(fixture.Cases) >= 3
-	pairedFixture := fixture.FixtureRevision == "wetland-paired-stations-1" && fixture.SimulationVersion == SimulationVersion &&
+	pairedFixture := fixture.FixtureRevision == "wetland-paired-stations-1" && fixture.SimulationVersion == PairedRoutesSimulationVersion &&
+		fixture.GeneratorVersion == PairedRoutesGeneratorVersion && fixture.ConfigID == PairedRoutesConfigID && len(fixture.Cases) >= 3
+	currencyFixture := fixture.FixtureRevision == "currency-formations-1" && fixture.SimulationVersion == SimulationVersion &&
 		fixture.GeneratorVersion == GeneratorVersion && fixture.ConfigID == DefaultConfigID && len(fixture.Cases) >= 3
-	if !priorFixture && !variedFixture && !pairedFixture {
+	if !priorFixture && !variedFixture && !pairedFixture && !currencyFixture {
 		return fmt.Errorf("unexpected wetland fixture identity/case count")
 	}
 	for _, example := range fixture.Cases {
