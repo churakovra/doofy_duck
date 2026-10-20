@@ -19,7 +19,7 @@ and real Telegram acceptance remain open; see the
 ## Project navigation
 
 - [Product vision](docs/PRODUCT_VISION.md): approved purpose, audience, public-version scope, and open decisions.
-- [Agent instructions](AGENTS.md): working conventions and task-based model routing.
+- [Repository map](AGENTS.md): project purpose and source locations.
 - [Code map](docs/ARCHITECTURE.md): runtime flow, file ownership, and checks by task.
 - [Foundation](docs/FOUNDATION.md): extension points for rules, cosmetics, and event consumers.
 - [Documentation map](docs/README.md): current rules, product vision, future architecture, and supporting research.

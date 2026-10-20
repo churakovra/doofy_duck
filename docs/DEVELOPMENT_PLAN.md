@@ -30,8 +30,7 @@ execution dates; Telegram/device acceptance remains open.
 
 These are proposed feature boundaries, not time estimates or approved numeric
 economics. The milestone sections below provide the detailed acceptance rules.
-Implement each coherent feature on its own branch with TDD and the reviews
-required by the root instructions.
+See the [root README](../README.md) for current verification commands.
 
 | Order / ID | Feature and player outcome | Depends on | Completion evidence |
 | --- | --- | --- | --- |
@@ -171,9 +170,9 @@ despite the already playable client.
 
 ## Delivery sequence
 
-Each milestone needs a short behavior specification, failing tests first,
-implementation, relevant checks, and independent review. Keep each feature on
-its own branch. Do not wait until the final milestone to integrate the services.
+Each milestone is a product boundary with explicit behavior and completion
+evidence. Where a milestone crosses services, its acceptance covers the required
+client, Core, Platform and Economy behavior together.
 
 ### 0. Resolve requirements that affect contracts
 

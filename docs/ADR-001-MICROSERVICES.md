@@ -13,7 +13,8 @@ acceptance remain separate from design approval.
 
 Keep the React/Vite/PixiJS client and pure TypeScript/Go simulations. Platform and
 Economy are module boundaries inside one application, not separate deployments.
-Agents follow these boundaries; more agents do not require more services.
+These boundaries keep service ownership explicit; they do not require additional
+services as the project grows.
 
 Use managed PostgreSQL for hosting, with separate databases, credentials and
 migrations per application. No cross-service SQL access or joins. Docker Compose

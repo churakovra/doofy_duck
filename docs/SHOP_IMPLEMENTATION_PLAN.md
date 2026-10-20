@@ -84,9 +84,8 @@ a fresh complete recovery measurement remains required.
 
 ## Milestones and tasks
 
-Tasks below include meaningful tests first, expected-red execution, focused
-verification and worker self-review under root AGENTS.md. Each milestone has its
-own branch; keep one implementation owner through revisions.
+Tasks below include meaningful behavioral tests and focused verification. Each
+milestone should remain a coherent, reviewable change.
 
 ### M0 — Close prerequisites and freeze contracts
 
@@ -261,17 +260,7 @@ routes. Economy authorization uses validated identity without querying Platform'
 database. Core needs no change unless contract review identifies missing evidence;
 any shared event change requires compatibility/versioning review first.
 
-## Execution sequence and definition of done
-
-Default sequence: M0 → M1 → M2 → M3 → M4 → M5 → M6.
-UI contract prototypes may overlap after M0, but use one implementation worker by
-default and avoid simultaneous edits to shared API/models. No separate test-writing
-agent. Main agent owns branches, integration and commits; implementation stays with
-Luna under root instructions.
-
-For each milestone: settle acceptance → worker TDD/self-review → main review →
-batched independent review when required → focused revisions → coherent commit.
-Run full suites at integration milestones, not after every small edit.
+## Completion criteria
 
 Done means an eligible verified run credits exactly once under an approved policy;
 the account can buy an approved cosmetic once, with no overspend or partial grant;
