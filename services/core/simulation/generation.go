@@ -55,6 +55,223 @@ func variedWetlandGapCenter(seed uint32, block, step int64, family string, c Con
 	}
 	return 0, false
 }
+
+func isCoinCourseBlock(seed uint32, block int64) bool {
+	first := int64(2 + 2*(Mix32(seed^uint32(0x6d2b79f5))%3))
+	return block >= first && (block-first)%6 == 0
+}
+
+const (
+	bonusSegmentScheduleSalt uint32 = 0x2c1b3c6d
+	bonusSegmentRecipeSalt   uint32 = 0x297a2d39
+	bonusSegmentCenterSalt   uint32 = 0x165667b1
+	bonusSegmentRecovery     int64  = 360000
+	bonusSegmentV2CenterSalt uint32 = 0x7f4a7c15
+	bonusSegmentV2RecipeSalt uint32 = 0x6a09e667
+	bonusSegmentV2MirrorSalt uint32 = 0x3c6ef372
+)
+
+type bonusSegmentRecipe string
+
+const (
+	bonusAscent  bonusSegmentRecipe = "shallow-ascent"
+	bonusDescent bonusSegmentRecipe = "shallow-descent"
+	bonusSlalom  bonusSegmentRecipe = "shallow-slalom"
+)
+
+func bonusSegmentSlot(block int64) int64 { return (block - 2) / 3 }
+
+func isBonusSegmentBlock(seed uint32, block int64) bool {
+	if block < 2 {
+		return false
+	}
+	slot := bonusSegmentSlot(block)
+	selected := int64(2) + slot*3 + int64(Mix32(seed^bonusSegmentScheduleSalt^uint32(slot+1)*bonusSegmentRecipeSalt)%2)
+	return block == selected
+}
+
+func getBonusSegmentRecipe(seed uint32, block int64) bonusSegmentRecipe {
+	if !isBonusSegmentBlock(seed, block) {
+		panic("bonus segment recipe requested for an unscheduled block")
+	}
+	slot := bonusSegmentSlot(block)
+	sample := Mix32(seed ^ uint32(slot+1)*bonusSegmentCenterSalt ^ bonusSegmentRecipeSalt)
+	return []bonusSegmentRecipe{bonusAscent, bonusDescent, bonusSlalom}[sample%3]
+}
+
+func bonusSegmentGapCenter(seed uint32, block, step int64, c Config) int64 {
+	slot := bonusSegmentSlot(block)
+	sample := Mix32(seed ^ uint32(slot+1)*bonusSegmentCenterSalt)
+	center := (c.Pipes.GapMinCenter+c.Pipes.GapMaxCenter)/2 + int64(sample%5001) - 2500
+	var offset int64
+	switch getBonusSegmentRecipe(seed, block) {
+	case bonusAscent:
+		if step == 1 {
+			offset = -2500
+		} else if step == 2 {
+			offset = -5000
+		}
+	case bonusDescent:
+		if step == 1 {
+			offset = 2500
+		} else if step == 2 {
+			offset = 5000
+		}
+	case bonusSlalom:
+		if step == 1 {
+			offset = 5000
+		} else if step == 2 {
+			offset = -5000
+		}
+	}
+	return center + offset
+}
+
+func isScheduledBonusBlock(c Config, seed uint32, block int64) bool {
+	if c.Wetland == nil || c.Wetland.CatalogVersion < 11 {
+		return isBonusSegmentBlock(seed, block)
+	}
+	first := int64(6 + Mix32(seed^uint32(0x243f6a88))%3)
+	return block >= first && (block-first)%7 == 0
+}
+
+func bonusSegmentV2Recipe(seed uint32, block int64) string {
+	if !isBonusSegmentBlock(seed, block) {
+		panic("bonus segment recipe requested for an unscheduled block")
+	}
+	return bonusSegmentV2RecipeUnchecked(seed, block)
+}
+
+func bonusSegmentV2RecipeUnchecked(seed uint32, block int64) string {
+	slot := bonusSegmentSlot(block)
+	sample := Mix32(seed ^ uint32(slot+1)*bonusSegmentV2RecipeSalt ^ bonusSegmentV2CenterSalt)
+	return []string{"ascent", "descent", "slalom"}[sample%3]
+}
+
+func bonusSegmentV2Offsets(seed uint32, block int64) [3]int64 {
+	var offsets [3]int64
+	switch bonusSegmentV2RecipeUnchecked(seed, block) {
+	case "ascent":
+		offsets = [3]int64{0, -40000, -80000}
+	case "descent":
+		offsets = [3]int64{0, 40000, 80000}
+	case "slalom":
+		offsets = [3]int64{0, 40000, -40000}
+	}
+	slot := bonusSegmentSlot(block)
+	if Mix32(seed^uint32(slot+1)*bonusSegmentV2MirrorSalt)&1 != 0 {
+		for i := range offsets {
+			offsets[i] = -offsets[i]
+		}
+	}
+	return offsets
+}
+
+func bonusSegmentV2GapCenter(seed uint32, block, step, previous int64, c Config) (int64, error) {
+	offsets := bonusSegmentV2Offsets(seed, block)
+	if step > 0 {
+		return previous + offsets[step] - offsets[step-1], nil
+	}
+	p := c.Pipes
+	minOffset, maxOffset := offsets[0], offsets[0]
+	for _, offset := range offsets[1:] {
+		minOffset = min64(minOffset, offset)
+		maxOffset = max64(maxOffset, offset)
+	}
+	low := max64(p.GapMinCenter-minOffset, previous-p.MaxGapDelta)
+	high := min64(p.GapMaxCenter-maxOffset, previous+p.MaxGapDelta)
+	if low > high {
+		return 0, fmt.Errorf("bonus segment route has no legal seeded anchor")
+	}
+	approachLow := max64(low, previous-20000)
+	approachHigh := min64(high, previous+20000)
+	anchorLow, anchorHigh := low, high
+	if approachLow <= approachHigh {
+		anchorLow, anchorHigh = approachLow, approachHigh
+	}
+	slot := bonusSegmentSlot(block)
+	sample := Mix32(seed ^ uint32(slot+1)*bonusSegmentV2CenterSalt ^ bonusSegmentV2RecipeSalt)
+	anchor := anchorLow + int64(sample)%((anchorHigh-anchorLow)+1)
+	return anchor + offsets[step], nil
+}
+
+func pressurePipeCenter(seed uint32, index, previous int64, c Config) int64 {
+	sample := Mix32(seed ^ uint32(index+1)*uint32(0x68bc21eb))
+	magnitude := min64(c.Pipes.MaxGapDelta, 60000+int64(sample%20001))
+	direction := int64(-1)
+	polarity := Mix32(seed^uint32(index/4+1)*uint32(0x27d4eb2d)) & 1
+	if (index+int64(polarity))&1 == 0 {
+		direction = 1
+	}
+	target := previous + direction*magnitude
+	if target < c.Pipes.GapMinCenter || target > c.Pipes.GapMaxCenter {
+		target = previous - direction*magnitude
+	}
+	return max64(c.Pipes.GapMinCenter, min64(c.Pipes.GapMaxCenter, target))
+}
+
+func irregularBaseCenter(seed uint32, index, previous int64, c Config) int64 {
+	p := c.Pipes
+	sample := Mix32(seed ^ uint32(index+1)*uint32(0x4cf5ad43))
+	magnitude := min64(p.MaxGapDelta, 30000+int64(sample%40001))
+	direction := int64(1)
+	if sample&0x80000000 != 0 {
+		direction = -1
+	}
+	target := previous + direction*magnitude
+	if target < p.GapMinCenter || target > p.GapMaxCenter {
+		target = previous - direction*magnitude
+	}
+	if target < p.GapMinCenter || target > p.GapMaxCenter {
+		if previous-p.GapMinCenter >= p.GapMaxCenter-previous {
+			target = p.GapMinCenter
+		} else {
+			target = p.GapMaxCenter
+		}
+	}
+	return target
+}
+
+func variedPipeCenter(seed uint32, index, previous int64, recovery bool, c Config) int64 {
+	delta := int64(75000)
+	if recovery {
+		delta = 35000
+	}
+	delta = min64(delta, c.Pipes.MaxGapDelta)
+	low := max64(c.Pipes.GapMinCenter, previous-delta)
+	high := min64(c.Pipes.GapMaxCenter, previous+delta)
+	sample := Mix32(seed ^ uint32(index+1)*uint32(0x51ed270b))
+	return low + int64(sample)%(high-low+1)
+}
+
+func bonusSegmentV2OrdinaryCenter(seed uint32, index, previous int64, c Config) int64 {
+	low := max64(c.Pipes.GapMinCenter, previous-45000)
+	high := min64(c.Pipes.GapMaxCenter, previous+45000)
+	sample := Mix32(seed ^ uint32(index+1)*bonusSegmentV2CenterSalt)
+	return low + int64(sample)%((high-low)+1)
+}
+
+func scaledClearanceSpacing(original, width, percent int64) int64 {
+	return width + (original-width)*percent/100
+}
+
+func coinCourseGapCenter(seed uint32, block, step int64) int64 {
+	first := int64(2 + 2*(Mix32(seed^uint32(0x6d2b79f5))%3))
+	ordinal := (block - first) / 6
+	sample := Mix32(seed ^ uint32(ordinal+1)*uint32(0x85ebca6b) ^ uint32(0x6d2b79f5))
+	center := int64(280000) + int64(sample%30001) - 15000
+	direction := int64(1)
+	if sample&0x80000000 != 0 {
+		direction = -1
+	}
+	if step == 1 {
+		return center + direction*18000
+	}
+	if step == 2 {
+		return center - direction*9000
+	}
+	return center
+}
 func wetlandObstacles(typeID string, gapCenter int64, c Config, seed uint32, index int64) []ObstacleDefinition {
 	p := c.Pipes
 	openingTop, openingBottom := gapCenter-p.GapHeight/2, gapCenter+p.GapHeight/2
@@ -258,7 +475,70 @@ func sign64(v int64) int64 {
 
 func currencyFormationPoints(c Config, seed uint32, p Pipe, radius int64, star bool, eventOrdinal int64) [][2]int64 {
 	x, y := wetlandRewardPoint(c, p, radius, star)
-	if c.Wetland == nil || c.Wetland.CatalogVersion != 4 {
+	if c.Wetland != nil && c.Wetland.CatalogVersion == 5 && !star && p.StationStep != nil && *p.StationStep == 2 && isCoinCourseBlock(seed, p.Index/4) {
+		safeY := min64(20000, c.Pipes.GapHeight/2-c.Flight.DuckHalfHeight-radius-2)
+		if safeY < 1 {
+			safeY = 1
+		}
+		return [][2]int64{{p.X + 70000, y}, {p.X + 100000, y - safeY}, {p.X + 130000, y + safeY}}
+	}
+	if c.Wetland != nil && c.Wetland.CatalogVersion == 6 {
+		if !star && p.StationStep != nil && *p.StationStep == 2 && isBonusSegmentBlock(seed, p.Index/4) {
+			spacing := bonusSegmentRecovery + c.Pipes.Width
+			if p.StationSpacing != nil {
+				spacing = *p.StationSpacing
+			}
+			centerX := p.X + spacing/2
+			return [][2]int64{{centerX - 18000, y}, {centerX + 9000, y - 15000}, {centerX + 9000, y + 15000}}
+		}
+		if star && c.Wetland.StarFormations != nil && *c.Wetland.StarFormations {
+			variant := Mix32(seed ^ uint32(p.Index+1)*uint32(0x9e3779b9) ^ uint32(eventOrdinal+1)*uint32(0x85ebca6b) ^ uint32(0x51ed270b))
+			offsets := [][2]int64{{0, -22000}, {21000, -7000}, {13000, 18000}, {-13000, 18000}, {-21000, -7000}}
+			rotation := (variant >> 1) & 3
+			centerX := p.X + c.Pipes.Width/2
+			halfOpening := c.Pipes.GapHeight/2 - c.Flight.DuckHalfHeight - radius - 2
+			centerY := max64(p.GapCenter-halfOpening+22000, min64(p.GapCenter+halfOpening-22000, y))
+			points := make([][2]int64, len(offsets))
+			for i, offset := range offsets {
+				dx, dy := rotateFormationOffset(offset[0], offset[1], rotation)
+				points[i] = [2]int64{centerX + dx, centerY + dy}
+			}
+			return points
+		}
+		if star {
+			return [][2]int64{{p.X + c.Pipes.Width/2, y}}
+		}
+		return [][2]int64{{x, y}}
+	}
+	if c.Wetland != nil && c.Wetland.CatalogVersion >= 7 {
+		if !star && p.StationStep != nil && *p.StationStep == 2 && isScheduledBonusBlock(c, seed, p.Index/4) {
+			spacing := bonusSegmentRecovery + c.Pipes.Width
+			if p.StationSpacing != nil {
+				spacing = *p.StationSpacing
+			}
+			centerX := p.X + spacing/2
+			return [][2]int64{{centerX - 18000, y}, {centerX + 9000, y - 15000}, {centerX + 9000, y + 15000}}
+		}
+		if star && c.Wetland.StarFormations != nil && *c.Wetland.StarFormations {
+			variant := Mix32(seed ^ uint32(p.Index+1)*uint32(0x9e3779b9) ^ uint32(eventOrdinal+1)*uint32(0x85ebca6b) ^ uint32(0x51ed270b))
+			offsets := [][2]int64{{0, -22000}, {21000, -7000}, {13000, 18000}, {-13000, 18000}, {-21000, -7000}}
+			rotation := (variant >> 1) & 3
+			centerX := p.X + c.Pipes.Width/2
+			halfOpening := c.Pipes.GapHeight/2 - c.Flight.DuckHalfHeight - radius - 2
+			centerY := max64(p.GapCenter-halfOpening+22000, min64(p.GapCenter+halfOpening-22000, y))
+			points := make([][2]int64, len(offsets))
+			for i, offset := range offsets {
+				dx, dy := rotateFormationOffset(offset[0], offset[1], rotation)
+				points[i] = [2]int64{centerX + dx, centerY + dy}
+			}
+			return points
+		}
+		if star {
+			return [][2]int64{{p.X + c.Pipes.Width/2, y}}
+		}
+		return [][2]int64{{x, y}}
+	}
+	if c.Wetland == nil || c.Wetland.CatalogVersion < 4 {
 		return [][2]int64{{x, y}}
 	}
 	starSalt := uint32(0)
@@ -339,7 +619,23 @@ func CreateRun(d Descriptor, configurations ...Config) (State, error) {
 	if len(configurations) == 1 {
 		c = configurations[0]
 	} else if d.ConfigID == DefaultConfigID {
-		c = DefaultConfiguration()
+		c = VariedBaseConfiguration()
+	} else if d.ConfigID == BaseBonusConfigID {
+		c = BaseBonusConfiguration()
+	} else if d.ConfigID == DensePipesConfigID {
+		c = DensePipesConfiguration()
+	} else if d.ConfigID == PressurePipesConfigID {
+		c = PressurePipesConfiguration()
+	} else if d.ConfigID == VariedPipesConfigID {
+		c = VariedPipesConfiguration()
+	} else if d.ConfigID == BonusSegmentsV2ConfigID {
+		c = BonusSegmentsV2Configuration()
+	} else if d.ConfigID == BonusSegmentsConfigID {
+		c = BonusSegmentsConfiguration()
+	} else if d.ConfigID == CoinCourseConfigID {
+		c = CoinCourseConfiguration()
+	} else if d.ConfigID == CurrencyFormationsConfigID {
+		c = CurrencyFormationsConfiguration()
 	} else if d.ConfigID == PairedRoutesConfigID {
 		c = PairedRoutesConfiguration()
 	} else if d.ConfigID == VariedObstacleDefaultConfigID {
@@ -367,8 +663,32 @@ func CreateRun(d Descriptor, configurations ...Config) (State, error) {
 		if c.Wetland.CatalogVersion == 3 && (d.SimulationVersion != PairedRoutesSimulationVersion || d.GeneratorVersion != PairedRoutesGeneratorVersion) {
 			return State{}, fmt.Errorf("catalog-3 wetland config requires paired-routes simulation and generator versions")
 		}
-		if c.Wetland.CatalogVersion == 4 && (d.SimulationVersion != SimulationVersion || d.GeneratorVersion != GeneratorVersion) {
+		if c.Wetland.CatalogVersion == 4 && (d.SimulationVersion != CurrencyFormationsSimulationVersion || d.GeneratorVersion != CurrencyFormationsGeneratorVersion) {
 			return State{}, fmt.Errorf("catalog-4 wetland config requires currency-formations simulation and generator versions")
+		}
+		if c.Wetland.CatalogVersion == 5 && (d.SimulationVersion != CoinCourseSimulationVersion || d.GeneratorVersion != CoinCourseGeneratorVersion) {
+			return State{}, fmt.Errorf("catalog-5 wetland config requires coin-course simulation and generator versions")
+		}
+		if c.Wetland.CatalogVersion == 6 && (d.SimulationVersion != BonusSegmentsSimulationVersion || d.GeneratorVersion != BonusSegmentsGeneratorVersion) {
+			return State{}, fmt.Errorf("catalog-6 wetland config requires bonus-segments simulation and generator versions")
+		}
+		if c.Wetland.CatalogVersion == 7 && (d.SimulationVersion != BonusSegmentsV2SimulationVersion || d.GeneratorVersion != BonusSegmentsV2GeneratorVersion) {
+			return State{}, fmt.Errorf("catalog-7 wetland config requires bonus-segments-v2 simulation and generator versions")
+		}
+		if c.Wetland.CatalogVersion == 8 && (d.SimulationVersion != VariedPipesSimulationVersion || d.GeneratorVersion != VariedPipesGeneratorVersion) {
+			return State{}, fmt.Errorf("catalog-8 requires varied-pipes versions")
+		}
+		if c.Wetland.CatalogVersion == 9 && (d.SimulationVersion != PressurePipesSimulationVersion || d.GeneratorVersion != PressurePipesGeneratorVersion) {
+			return State{}, fmt.Errorf("catalog-9 requires pressure-pipes versions")
+		}
+		if c.Wetland.CatalogVersion == 10 && (d.SimulationVersion != DensePipesSimulationVersion || d.GeneratorVersion != DensePipesGeneratorVersion) {
+			return State{}, fmt.Errorf("catalog-10 requires dense-pipes versions")
+		}
+		if c.Wetland.CatalogVersion == 11 && (d.SimulationVersion != BaseBonusSimulationVersion || d.GeneratorVersion != BaseBonusGeneratorVersion) {
+			return State{}, fmt.Errorf("catalog-11 requires base-bonus versions")
+		}
+		if c.Wetland.CatalogVersion == 12 && (d.SimulationVersion != SimulationVersion || d.GeneratorVersion != GeneratorVersion) {
+			return State{}, fmt.Errorf("catalog-12 requires varied-base versions")
 		}
 	}
 	s := State{Descriptor: d, Config: cloneConfig(c), Phase: Ready, Duck: Duck{X: c.Flight.DuckX, Y: floorHalf(c.Pipes.FloorY + c.Pipes.CeilingY)}, Pipes: []Pipe{}, Collectibles: []Collectible{}, Totals: map[string]int64{}, RNGState: uint32(d.Seed), LastGapCenter: floorHalf(c.Pipes.GapMinCenter + c.Pipes.GapMaxCenter), LastCollectiblePipe: -1000000, InputHistory: []Input{}}
@@ -425,7 +745,15 @@ func generateNextOwned(s State) (Result, error) {
 		family := ""
 		var stationSpacing *int64
 		if wetland := s.Config.Wetland; wetland != nil {
-			family = wetlandEncounter(uint32(s.Descriptor.Seed), index/4, wetland.IntroFamilies, wetland.PressureFamilies)
+			wetlandBlock := index / 4
+			coinCourse := wetland.CatalogVersion == 5 && isCoinCourseBlock(uint32(s.Descriptor.Seed), wetlandBlock)
+			bonusSegment := wetland.CatalogVersion == 6 && isBonusSegmentBlock(uint32(s.Descriptor.Seed), wetlandBlock)
+			bonusSegmentV2 := wetland.CatalogVersion >= 7 && isScheduledBonusBlock(s.Config, uint32(s.Descriptor.Seed), wetlandBlock)
+			if wetland.CatalogVersion >= 11 {
+				family = "steady"
+			} else {
+				family = wetlandEncounter(uint32(s.Descriptor.Seed), wetlandBlock, wetland.IntroFamilies, wetland.PressureFamilies)
+			}
 			familySpec := WetlandFamily{}
 			for _, candidate := range wetland.Families {
 				if candidate.ID == family {
@@ -434,11 +762,69 @@ func generateNextOwned(s State) (Result, error) {
 				}
 			}
 			spacing := familySpec.StationSpacing[stationStep]
-			if family == "steady" && index/4 >= int64(len(wetland.IntroFamilies)) {
+			if (wetland.CatalogVersion == 6 || wetland.CatalogVersion >= 7) && family == "steady" && wetlandBlock >= int64(len(wetland.IntroFamilies)) {
 				spacing = wetland.RecoverySpacing
+			}
+			if coinCourse && stationStep < 2 {
+				spacing = 180000
+			} else if coinCourse && stationStep == 2 {
+				spacing = wetland.RecoverySpacing
+			} else if bonusSegment && stationStep < 2 {
+				spacing = scaledClearanceSpacing(spacing, p.Width, 20)
+			} else if bonusSegment && stationStep == 2 {
+				spacing = p.Width + bonusSegmentRecovery
+			} else if bonusSegmentV2 && stationStep < 2 {
+				spacing = scaledClearanceSpacing(spacing, p.Width, 10)
+			} else if bonusSegmentV2 && stationStep == 2 {
+				spacing = p.Width + bonusSegmentRecovery
+			} else if wetland.CatalogVersion == 6 {
+				spacing = scaledClearanceSpacing(spacing, p.Width, 70)
+			} else if wetland.CatalogVersion >= 7 {
+				spacing = scaledClearanceSpacing(spacing, p.Width, 50)
+			} else if family == "steady" && wetlandBlock >= int64(len(wetland.IntroFamilies)) {
+				spacing = wetland.RecoverySpacing
+			}
+			if wetland.CatalogVersion == 10 {
+				spacing = scaledClearanceSpacing(spacing, p.Width, 60)
+			}
+			if wetland.CatalogVersion >= 11 {
+				spacing = 126400
+				if bonusSegmentV2 && stationStep < 2 {
+					spacing = 66880
+				} else if bonusSegmentV2 && stationStep == 2 {
+					spacing = 268000
+				}
 			}
 			stationSpacing = &spacing
 			raw = familySpec.GapCenters[stationStep]
+			if wetland.CatalogVersion >= 11 {
+				if wetland.CatalogVersion == 12 && index > 0 {
+					raw = irregularBaseCenter(uint32(s.Descriptor.Seed), index, previousGap, s.Config)
+				} else {
+					raw = bonusSegmentV2OrdinaryCenter(uint32(s.Descriptor.Seed), index, previousGap, s.Config)
+				}
+			}
+			if coinCourse && stationStep < 3 {
+				raw = coinCourseGapCenter(uint32(s.Descriptor.Seed), wetlandBlock, stationStep)
+			}
+			if bonusSegment && stationStep < 3 {
+				raw = bonusSegmentGapCenter(uint32(s.Descriptor.Seed), wetlandBlock, stationStep, s.Config)
+			}
+			if bonusSegmentV2 && stationStep < 3 {
+				var err error
+				raw, err = bonusSegmentV2GapCenter(uint32(s.Descriptor.Seed), wetlandBlock, stationStep, previousGap, s.Config)
+				if err != nil {
+					return Result{}, err
+				}
+			} else if wetland.CatalogVersion >= 7 && wetland.CatalogVersion < 11 && wetlandBlock >= int64(len(wetland.IntroFamilies)) {
+				if wetland.CatalogVersion >= 9 && family != "steady" {
+					raw = pressurePipeCenter(uint32(s.Descriptor.Seed), index, previousGap, s.Config)
+				} else if wetland.CatalogVersion >= 8 {
+					raw = variedPipeCenter(uint32(s.Descriptor.Seed), index, previousGap, family == "steady", s.Config)
+				} else {
+					raw = bonusSegmentV2OrdinaryCenter(uint32(s.Descriptor.Seed), index, previousGap, s.Config)
+				}
+			}
 			if wetland.CatalogVersion == 2 {
 				if varied, ok := variedWetlandGapCenter(uint32(s.Descriptor.Seed), index/4, stationStep, family, s.Config); ok {
 					raw = varied

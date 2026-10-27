@@ -32,15 +32,25 @@ func validateDescriptor(d Descriptor) error {
 		return fmt.Errorf("invalid seed")
 	}
 	currentRules := d.SimulationVersion == SimulationVersion && d.GeneratorVersion == GeneratorVersion
+	baseBonusRules := d.SimulationVersion == BaseBonusSimulationVersion && d.GeneratorVersion == BaseBonusGeneratorVersion
+	densePipesRules := d.SimulationVersion == DensePipesSimulationVersion && d.GeneratorVersion == DensePipesGeneratorVersion
+	pressurePipesRules := d.SimulationVersion == PressurePipesSimulationVersion && d.GeneratorVersion == PressurePipesGeneratorVersion
+	variedPipesRules := d.SimulationVersion == VariedPipesSimulationVersion && d.GeneratorVersion == VariedPipesGeneratorVersion
+	bonusSegmentsV2Rules := d.SimulationVersion == BonusSegmentsV2SimulationVersion && d.GeneratorVersion == BonusSegmentsV2GeneratorVersion
+	bonusSegmentsRules := d.SimulationVersion == BonusSegmentsSimulationVersion && d.GeneratorVersion == BonusSegmentsGeneratorVersion
+	coinCourseRules := d.SimulationVersion == CoinCourseSimulationVersion && d.GeneratorVersion == CoinCourseGeneratorVersion
+	currencyFormationsRules := d.SimulationVersion == CurrencyFormationsSimulationVersion && d.GeneratorVersion == CurrencyFormationsGeneratorVersion
 	pairedRules := d.SimulationVersion == PairedRoutesSimulationVersion && d.GeneratorVersion == PairedRoutesGeneratorVersion
 	variedRules := d.SimulationVersion == VariedObstacleSimulationVersion && d.GeneratorVersion == VariedObstacleGeneratorVersion
 	priorRules := d.SimulationVersion == PriorSimulationVersion && d.GeneratorVersion == PriorGeneratorVersion
 	legacyRules := d.SimulationVersion == LegacySimulationVersion && d.GeneratorVersion == LegacyGeneratorVersion
 	wetlandRules := d.SimulationVersion == WetlandSimulationVersion && d.GeneratorVersion == WetlandGeneratorVersion
 	customConfig := strings.HasPrefix(d.ConfigID, "dd-v1-config:") && len(d.ConfigID) > len("dd-v1-config:")
-	if strings.TrimSpace(d.RunID) == "" || !(currentRules || pairedRules || variedRules || wetlandRules || priorRules || legacyRules) ||
-		!(d.ConfigID == DefaultConfigID || d.ConfigID == PairedRoutesConfigID || d.ConfigID == VariedObstacleDefaultConfigID || d.ConfigID == WetlandDefaultConfigID || d.ConfigID == PriorDefaultConfigID || d.ConfigID == LegacyDefaultConfigID || customConfig) ||
-		(d.ConfigID == DefaultConfigID && !currentRules) || (d.ConfigID == PairedRoutesConfigID && !pairedRules) || (d.ConfigID == VariedObstacleDefaultConfigID && !variedRules) || (d.ConfigID == PriorDefaultConfigID && !priorRules) || (d.ConfigID == LegacyDefaultConfigID && !legacyRules) {
+	if strings.TrimSpace(d.RunID) == "" || !(currentRules || baseBonusRules || densePipesRules || pressurePipesRules || variedPipesRules || bonusSegmentsV2Rules || bonusSegmentsRules || coinCourseRules || currencyFormationsRules || pairedRules || variedRules || wetlandRules || priorRules || legacyRules) ||
+		!(d.ConfigID == DefaultConfigID || d.ConfigID == BaseBonusConfigID || d.ConfigID == DensePipesConfigID || d.ConfigID == PressurePipesConfigID || d.ConfigID == VariedPipesConfigID || d.ConfigID == BonusSegmentsV2ConfigID || d.ConfigID == BonusSegmentsConfigID || d.ConfigID == CoinCourseConfigID || d.ConfigID == CurrencyFormationsConfigID || d.ConfigID == PairedRoutesConfigID || d.ConfigID == VariedObstacleDefaultConfigID || d.ConfigID == WetlandDefaultConfigID || d.ConfigID == PriorDefaultConfigID || d.ConfigID == LegacyDefaultConfigID || customConfig) ||
+		(d.ConfigID == CurrencyFormationsConfigID && !currencyFormationsRules) ||
+		(d.ConfigID == CoinCourseConfigID && !coinCourseRules) || (d.ConfigID == BonusSegmentsConfigID && !bonusSegmentsRules) || (d.ConfigID == BonusSegmentsV2ConfigID && !bonusSegmentsV2Rules) || (d.ConfigID == VariedPipesConfigID && !variedPipesRules) || (d.ConfigID == PressurePipesConfigID && !pressurePipesRules) || (d.ConfigID == DensePipesConfigID && !densePipesRules) || (d.ConfigID == BaseBonusConfigID && !baseBonusRules) || (d.ConfigID == DefaultConfigID && !currentRules) ||
+		(d.ConfigID == PairedRoutesConfigID && !pairedRules) || (d.ConfigID == VariedObstacleDefaultConfigID && !variedRules) || (d.ConfigID == PriorDefaultConfigID && !priorRules) || (d.ConfigID == LegacyDefaultConfigID && !legacyRules) {
 		return fmt.Errorf("invalid descriptor")
 	}
 	if d.ConfigID == WetlandDefaultConfigID && !wetlandRules {
@@ -63,6 +73,10 @@ func cloneConfig(c Config) Config {
 	}
 	if c.Wetland != nil {
 		wetland := *c.Wetland
+		if wetland.StarFormations != nil {
+			value := *wetland.StarFormations
+			wetland.StarFormations = &value
+		}
 		if wetland.Geometry != nil {
 			geometry := *wetland.Geometry
 			wetland.Geometry = &geometry
@@ -204,6 +218,18 @@ func ValidateConfig(c Config) error {
 				stationMinSpacing = min64(stationMinSpacing, spacing)
 			}
 		}
+		if c.Wetland != nil && c.Wetland.CatalogVersion == 5 {
+			stationMinSpacing = min64(stationMinSpacing, 180000)
+		}
+		if c.Wetland != nil && c.Wetland.CatalogVersion == 6 {
+			stationMinSpacing = p.Width + (stationMinSpacing-p.Width)*20/100
+		}
+		if c.Wetland != nil && c.Wetland.CatalogVersion >= 7 {
+			stationMinSpacing = p.Width + (stationMinSpacing-p.Width)*10/100
+		}
+		if c.Wetland != nil && c.Wetland.CatalogVersion >= 10 {
+			stationMinSpacing = p.Width + (stationMinSpacing-p.Width)*60/100
+		}
 		starDefinition := -1
 		for i := range c.Collectibles {
 			if c.Collectibles[i].TypeID == "GAME_STAR" {
@@ -221,8 +247,35 @@ func ValidateConfig(c Config) error {
 		if c.Challenges != nil {
 			return fmt.Errorf("wetland and legacy challenge modes are mutually exclusive")
 		}
-		if (wetland.CatalogVersion != 1 && wetland.CatalogVersion != 2 && wetland.CatalogVersion != 3 && wetland.CatalogVersion != 4) || len(wetland.StationSpacing) != 3 || wetland.RecoverySpacing != 360000 || len(wetland.IntroFamilies) != 2 || len(wetland.PressureFamilies) != 3 || len(wetland.Families) != 5 {
+		if (wetland.CatalogVersion != 1 && wetland.CatalogVersion != 2 && wetland.CatalogVersion != 3 && wetland.CatalogVersion != 4 && wetland.CatalogVersion != 5 && wetland.CatalogVersion != 6 && wetland.CatalogVersion != 7 && wetland.CatalogVersion != 8 && wetland.CatalogVersion != 9 && wetland.CatalogVersion != 10 && wetland.CatalogVersion != 11 && wetland.CatalogVersion != 12) || len(wetland.StationSpacing) != 3 || wetland.RecoverySpacing != 360000 || len(wetland.IntroFamilies) != 2 || len(wetland.PressureFamilies) != 3 || len(wetland.Families) != 5 {
 			return fmt.Errorf("wetland catalog")
+		}
+		if wetland.CatalogVersion >= 10 {
+			minimum := wetland.StationSpacing[0]
+			for _, spacing := range wetland.StationSpacing[1:] {
+				minimum = min64(minimum, spacing)
+			}
+			compact := p.Width + ((minimum-p.Width)*10/100)*60/100
+			if p.Width > (maxSafeInteger-p.Horizon)/(1+1) {
+				return fmt.Errorf("dense horizon span overflow")
+			}
+			span := p.Horizon + p.Width + p.Width/2
+			if compact <= p.Width {
+				return fmt.Errorf("dense pipe spacing")
+			}
+			required := span/compact + 1
+			if span%compact != 0 {
+				required++
+			}
+			if c.Limits.MaxActivePipes < required {
+				return fmt.Errorf("dense pipe capacity cannot cover the generation horizon")
+			}
+		}
+		if wetland.CatalogVersion >= 11 && p.Width != 52000 {
+			return fmt.Errorf("base-bonus catalog requires 52000-unit pipes")
+		}
+		if wetland.CatalogVersion >= 7 && (p.MaxGapDelta < 80000 || p.GapMaxCenter-p.GapMinCenter < 80000) {
+			return fmt.Errorf("catalog-7 geometry must allow intact 80000-unit bonus-segment routes")
 		}
 		if wetland.CatalogVersion == 1 {
 			if wetland.Geometry != nil || wetland.IntroLaneCenters != nil {
@@ -244,12 +297,29 @@ func ValidateConfig(c Config) error {
 		} else if wetland.Geometry != nil || wetland.IntroLaneCenters != nil {
 			return fmt.Errorf("paired wetland catalog cannot contain varied geometry")
 		}
+		if wetland.CatalogVersion == 6 && wetland.StarFormations != nil && *wetland.StarFormations && c.StarSchedule == nil {
+			return fmt.Errorf("catalog-6 Star formations require a scheduled Star route")
+		}
+		if wetland.CatalogVersion >= 7 && wetland.StarFormations != nil && *wetland.StarFormations && c.StarSchedule == nil {
+			return fmt.Errorf("catalog-7 Star formations require a scheduled Star route")
+		}
+		if wetland.CatalogVersion != 6 && wetland.CatalogVersion != 7 && wetland.CatalogVersion != 8 && wetland.CatalogVersion != 9 && wetland.CatalogVersion != 10 && wetland.CatalogVersion != 11 && wetland.CatalogVersion != 12 && wetland.StarFormations != nil {
+			return fmt.Errorf("Star formations are only supported in catalog 6 and 7")
+		}
 		if strings.Join(wetland.IntroFamilies, ",") != "steady,quick-pairs" || strings.Join(wetland.PressureFamilies, ",") != "dive-climb,climb-dive,slalom" {
 			return fmt.Errorf("wetland families")
 		}
 		spacingAllowed := func(value int64) bool { return value == 240000 || value == 300000 || value == 360000 }
 		minimumCapacity := c.Limits.MaxActivePipes
-		if wetland.CatalogVersion == 4 {
+		if wetland.CatalogVersion == 6 || wetland.CatalogVersion >= 7 {
+			minimumCapacity += 3
+			if c.StarSchedule != nil {
+				minimumCapacity++
+				if wetland.StarFormations != nil && *wetland.StarFormations {
+					minimumCapacity += 4
+				}
+			}
+		} else if wetland.CatalogVersion >= 4 {
 			minimumCapacity = c.Limits.MaxActivePipes * 3
 			if c.StarSchedule != nil {
 				minimumCapacity += 5
@@ -319,17 +389,28 @@ func ValidateConfig(c Config) error {
 				break
 			}
 		}
-		if wetland.CatalogVersion == 4 {
+		if wetland.CatalogVersion >= 4 {
 			minSpacing := wetland.StationSpacing[0]
 			for _, spacing := range wetland.StationSpacing[1:] {
 				minSpacing = min64(minSpacing, spacing)
 			}
+			if wetland.CatalogVersion == 5 {
+				minSpacing = min64(minSpacing, 180000)
+			}
+			compactPercent := int64(20)
+			if wetland.CatalogVersion >= 7 {
+				compactPercent = 10
+			}
+			compactSpacing := p.Width + (minSpacing-p.Width)*compactPercent/100
 			starSideClearance := int64(44000) + 2*f.DuckHalfWidth + 2*starDefinition + 2
 			starLeftBound := int64(44000) + f.DuckHalfWidth + starDefinition + 2
 			featherSideClearance := int64(36000) + 2*f.DuckHalfWidth + 2*featherRadius + 2
+			clearanceInvalid := minSpacing-p.Width < starSideClearance || minSpacing-p.Width < featherSideClearance || p.SafeLeadIn < starLeftBound
+			if wetland.CatalogVersion == 6 || wetland.CatalogVersion >= 7 {
+				clearanceInvalid = compactSpacing <= p.Width
+			}
 			if p.GapHeight/2-f.DuckHalfHeight-starDefinition-2 < 22000 ||
-				p.GapHeight/2-f.DuckHalfHeight-featherRadius-2 < 15000 ||
-				minSpacing-p.Width < starSideClearance || minSpacing-p.Width < featherSideClearance || p.SafeLeadIn < starLeftBound {
+				p.GapHeight/2-f.DuckHalfHeight-featherRadius-2 < 15000 || clearanceInvalid {
 				return fmt.Errorf("currency formation clearance")
 			}
 		}

@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { createRun, createRunDescriptor, DEFAULT_CONFIG, GENERATOR_VERSION, SIMULATION_VERSION, step, validateConfig } from "../src/index.js";
+import { createRun, createRunDescriptor, CURRENCY_FORMATIONS_DEFAULT_CONFIG as DEFAULT_CONFIG, CURRENCY_FORMATIONS_GENERATOR_VERSION as GENERATOR_VERSION, CURRENCY_FORMATIONS_SIMULATION_VERSION as SIMULATION_VERSION, step, validateConfig } from "../src/index.js";
 import { currencyFormationPoints } from "../src/generation.js";
 
 function spawned(seed: number) {
-  let state = createRun(createRunDescriptor({ runId: `formations-${seed}`, seed }));
+  let state = createRun(createRunDescriptor({ runId: `formations-${seed}`, seed }, DEFAULT_CONFIG), DEFAULT_CONFIG);
   for (let tick = 0; tick < 500 && state.phase !== "DEAD"; tick++) {
     const result = step(state, [{ sequence: state.nextInputSequence, action: "FLAP" }]);
     state = result.state;
@@ -78,7 +78,7 @@ describe("currency formations", () => {
   });
 
   it("spawns scheduled GAME_STAR as five individually identified unit pickups within the pipe opening", () => {
-    let state = createRun(createRunDescriptor({ runId: "formation-star", seed: 8 }));
+    let state = createRun(createRunDescriptor({ runId: "formation-star", seed: 8 }, DEFAULT_CONFIG), DEFAULT_CONFIG);
     state = step(state, [{ sequence: state.nextInputSequence, action: "FLAP" }]).state;
     for (let tick = 0; tick < 5000; tick++) {
       state = { ...state, phase: "RUNNING", duck: { ...state.duck, y: 280_000, vy: 0 } };
@@ -99,7 +99,7 @@ describe("currency formations", () => {
   });
 
   it("varies scheduled Star formation orientation and obstacle side by seed and event", () => {
-    const state = createRun(createRunDescriptor({ runId: "star-variation", seed: 1 }));
+    const state = createRun(createRunDescriptor({ runId: "star-variation", seed: 1 }, DEFAULT_CONFIG), DEFAULT_CONFIG);
     const pipe = state.pipes.find(item => item.index === 1)!;
     const radius = state.config.collectibles.find(item => item.typeId === "GAME_STAR")!.radius;
     const describe = (seed: number, eventOrdinal: number) => {

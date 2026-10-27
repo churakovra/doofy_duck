@@ -1,0 +1,780 @@
+{
+  "fixtureRevision": "coin-course-1",
+  "simulationVersion": "2.4.0",
+  "generatorVersion": "2.4.0",
+  "configId": "dd-v2-coin-course-v1",
+  "cases": [
+    {
+      "name": "course-feather-members-spawn-after-third-gate",
+      "syntheticInitialState": true,
+      "initialState": {
+        "collectibles": [],
+        "config": {
+          "challenges": null,
+          "collectibles": [
+            {
+              "amount": 1,
+              "appearance": "feather-v1",
+              "minPipeIndex": 1,
+              "minSpacingPipes": 1,
+              "radius": 7000,
+              "typeId": "FEATHER",
+              "version": 1,
+              "weight": 34
+            },
+            {
+              "amount": 1,
+              "appearance": "game-star-v1",
+              "minPipeIndex": 4,
+              "minSpacingPipes": 3,
+              "radius": 7000,
+              "typeId": "GAME_STAR",
+              "version": 1,
+              "weight": 0
+            }
+          ],
+          "flight": {
+            "duckHalfHeight": 10000,
+            "duckHalfWidth": 12000,
+            "duckX": 100000,
+            "flapVelocity": -5600,
+            "gravity": 320,
+            "maxFallSpeed": 8500
+          },
+          "limits": {
+            "maxActiveCollectibles": 29,
+            "maxActivePipes": 8
+          },
+          "pipes": {
+            "ceilingY": 0,
+            "floorY": 561000,
+            "gapHeight": 156000,
+            "gapMaxCenter": 400000,
+            "gapMinCenter": 160000,
+            "horizon": 960000,
+            "maxGapDelta": 85000,
+            "maxSpeed": 4800,
+            "rampTicks": 2700,
+            "safeLeadIn": 420000,
+            "spacing": 300000,
+            "speed": 3000,
+            "speedEveryPipes": 10,
+            "speedStepPercent": 10,
+            "width": 52000
+          },
+          "spawnNoneWeight": 66,
+          "starSchedule": {
+            "maxIntervalPipes": 16,
+            "minIntervalPipes": 8
+          },
+          "wetland": {
+            "catalogVersion": 5,
+            "families": [
+              {
+                "gapCenters": [
+                  280000,
+                  280000,
+                  280000,
+                  250000
+                ],
+                "id": "steady",
+                "obstacleTypes": [
+                  "pipes",
+                  "pipes",
+                  "pipes",
+                  "pipes"
+                ],
+                "rewardRoute": [
+                  {
+                    "xOffset": -16000,
+                    "yOffset": 0
+                  },
+                  {
+                    "xOffset": 16000,
+                    "yOffset": 18000
+                  },
+                  {
+                    "xOffset": -16000,
+                    "yOffset": 18000
+                  },
+                  {
+                    "xOffset": 16000,
+                    "yOffset": 68000
+                  }
+                ],
+                "stationSpacing": [
+                  300000,
+                  300000,
+                  300000,
+                  300000
+                ]
+              },
+              {
+                "gapCenters": [
+                  280000,
+                  280000,
+                  280000,
+                  280000
+                ],
+                "id": "quick-pairs",
+                "obstacleTypes": [
+                  "pipes",
+                  "pipes",
+                  "pipes",
+                  "pipes"
+                ],
+                "rewardRoute": [
+                  {
+                    "xOffset": 16000,
+                    "yOffset": 0
+                  },
+                  {
+                    "xOffset": -16000,
+                    "yOffset": -18000
+                  },
+                  {
+                    "xOffset": 16000,
+                    "yOffset": 18000
+                  },
+                  {
+                    "xOffset": -16000,
+                    "yOffset": 0
+                  }
+                ],
+                "stationSpacing": [
+                  240000,
+                  240000,
+                  360000,
+                  360000
+                ]
+              },
+              {
+                "gapCenters": [
+                  300000,
+                  330000,
+                  260000,
+                  230000
+                ],
+                "id": "dive-climb",
+                "obstacleTypes": [
+                  "pipes",
+                  "pipes",
+                  "pipes",
+                  "pipes"
+                ],
+                "rewardRoute": [
+                  {
+                    "xOffset": -16000,
+                    "yOffset": -18000
+                  },
+                  {
+                    "xOffset": 16000,
+                    "yOffset": -68000
+                  },
+                  {
+                    "xOffset": -16000,
+                    "yOffset": 18000
+                  },
+                  {
+                    "xOffset": 16000,
+                    "yOffset": 0
+                  }
+                ],
+                "stationSpacing": [
+                  300000,
+                  360000,
+                  300000,
+                  240000
+                ]
+              },
+              {
+                "gapCenters": [
+                  260000,
+                  230000,
+                  300000,
+                  330000
+                ],
+                "id": "climb-dive",
+                "obstacleTypes": [
+                  "pipes",
+                  "pipes",
+                  "pipes",
+                  "pipes"
+                ],
+                "rewardRoute": [
+                  {
+                    "xOffset": 16000,
+                    "yOffset": 18000
+                  },
+                  {
+                    "xOffset": -16000,
+                    "yOffset": 68000
+                  },
+                  {
+                    "xOffset": 16000,
+                    "yOffset": -18000
+                  },
+                  {
+                    "xOffset": -16000,
+                    "yOffset": 0
+                  }
+                ],
+                "stationSpacing": [
+                  300000,
+                  360000,
+                  300000,
+                  240000
+                ]
+              },
+              {
+                "gapCenters": [
+                  280000,
+                  330000,
+                  260000,
+                  320000
+                ],
+                "id": "slalom",
+                "obstacleTypes": [
+                  "pipes",
+                  "pipes",
+                  "pipes",
+                  "pipes"
+                ],
+                "rewardRoute": [
+                  {
+                    "xOffset": -16000,
+                    "yOffset": 0
+                  },
+                  {
+                    "xOffset": 16000,
+                    "yOffset": -18000
+                  },
+                  {
+                    "xOffset": -16000,
+                    "yOffset": 18000
+                  },
+                  {
+                    "xOffset": 16000,
+                    "yOffset": -68000
+                  }
+                ],
+                "stationSpacing": [
+                  300000,
+                  240000,
+                  360000,
+                  300000
+                ]
+              }
+            ],
+            "introFamilies": [
+              "steady",
+              "quick-pairs"
+            ],
+            "pressureFamilies": [
+              "dive-climb",
+              "climb-dive",
+              "slalom"
+            ],
+            "recoverySpacing": 360000,
+            "starRoute": {
+              "xOffset": 100000,
+              "yOffset": 35000
+            },
+            "stationSpacing": [
+              240000,
+              300000,
+              360000
+            ]
+          }
+        },
+        "descriptor": {
+          "configId": "dd-v2-coin-course-v1",
+          "generatorVersion": "2.4.0",
+          "runId": "coin-course-fixture",
+          "seed": 44,
+          "simulationVersion": "2.4.0"
+        },
+        "duck": {
+          "vy": 0,
+          "x": 100000,
+          "y": 280000
+        },
+        "finalizationCount": 0,
+        "inputHistory": [],
+        "lastCollectiblePipe": -1000000,
+        "lastGapCenter": 320000,
+        "nextInputSequence": 0,
+        "nextPipeIndex": 28,
+        "nextPipeX": 1080000,
+        "nextSpawnPipeIndex": 26,
+        "nextStarPipeIndex": 15,
+        "phase": "RUNNING",
+        "pipes": [
+          {
+            "encounterFamily": "slalom",
+            "gapCenter": 291063,
+            "id": "pipe-26",
+            "index": 26,
+            "obstacles": [
+              {
+                "height": 213063,
+                "typeId": "pipes",
+                "width": 52000,
+                "xOffset": 0,
+                "y": 0
+              },
+              {
+                "height": 191937,
+                "typeId": "pipes",
+                "width": 52000,
+                "xOffset": 0,
+                "y": 369063
+              }
+            ],
+            "scored": false,
+            "stationId": "station-26",
+            "stationSpacing": 360000,
+            "stationStep": 2,
+            "x": 420000
+          },
+          {
+            "encounterFamily": "slalom",
+            "gapCenter": 320000,
+            "id": "pipe-27",
+            "index": 27,
+            "obstacles": [
+              {
+                "height": 242000,
+                "typeId": "pipes",
+                "width": 52000,
+                "xOffset": 0,
+                "y": 0
+              },
+              {
+                "height": 163000,
+                "typeId": "pipes",
+                "width": 52000,
+                "xOffset": 0,
+                "y": 398000
+              }
+            ],
+            "scored": false,
+            "stationId": "station-27",
+            "stationSpacing": 300000,
+            "stationStep": 3,
+            "x": 780000
+          }
+        ],
+        "rngState": 2027808528,
+        "score": 0,
+        "starScheduleOrdinal": 0,
+        "tick": 0,
+        "totals": {}
+      },
+      "operations": [
+        {
+          "kind": "step",
+          "frames": [
+            {
+              "sequence": 0,
+              "action": "FLAP"
+            }
+          ],
+          "expectedState": {
+            "collectibles": [
+              {
+                "amount": 1,
+                "collected": false,
+                "id": "feather-trail-6-2-0",
+                "radius": 7000,
+                "typeId": "FEATHER",
+                "x": 487000,
+                "y": 309063
+              },
+              {
+                "amount": 1,
+                "collected": false,
+                "id": "feather-trail-6-2-1",
+                "radius": 7000,
+                "typeId": "FEATHER",
+                "x": 517000,
+                "y": 289063
+              },
+              {
+                "amount": 1,
+                "collected": false,
+                "id": "feather-trail-6-2-2",
+                "radius": 7000,
+                "typeId": "FEATHER",
+                "x": 547000,
+                "y": 329063
+              }
+            ],
+            "config": {
+              "challenges": null,
+              "collectibles": [
+                {
+                  "amount": 1,
+                  "appearance": "feather-v1",
+                  "minPipeIndex": 1,
+                  "minSpacingPipes": 1,
+                  "radius": 7000,
+                  "typeId": "FEATHER",
+                  "version": 1,
+                  "weight": 34
+                },
+                {
+                  "amount": 1,
+                  "appearance": "game-star-v1",
+                  "minPipeIndex": 4,
+                  "minSpacingPipes": 3,
+                  "radius": 7000,
+                  "typeId": "GAME_STAR",
+                  "version": 1,
+                  "weight": 0
+                }
+              ],
+              "flight": {
+                "duckHalfHeight": 10000,
+                "duckHalfWidth": 12000,
+                "duckX": 100000,
+                "flapVelocity": -5600,
+                "gravity": 320,
+                "maxFallSpeed": 8500
+              },
+              "limits": {
+                "maxActiveCollectibles": 29,
+                "maxActivePipes": 8
+              },
+              "pipes": {
+                "ceilingY": 0,
+                "floorY": 561000,
+                "gapHeight": 156000,
+                "gapMaxCenter": 400000,
+                "gapMinCenter": 160000,
+                "horizon": 960000,
+                "maxGapDelta": 85000,
+                "maxSpeed": 4800,
+                "rampTicks": 2700,
+                "safeLeadIn": 420000,
+                "spacing": 300000,
+                "speed": 3000,
+                "speedEveryPipes": 10,
+                "speedStepPercent": 10,
+                "width": 52000
+              },
+              "spawnNoneWeight": 66,
+              "starSchedule": {
+                "maxIntervalPipes": 16,
+                "minIntervalPipes": 8
+              },
+              "wetland": {
+                "catalogVersion": 5,
+                "families": [
+                  {
+                    "gapCenters": [
+                      280000,
+                      280000,
+                      280000,
+                      250000
+                    ],
+                    "id": "steady",
+                    "obstacleTypes": [
+                      "pipes",
+                      "pipes",
+                      "pipes",
+                      "pipes"
+                    ],
+                    "rewardRoute": [
+                      {
+                        "xOffset": -16000,
+                        "yOffset": 0
+                      },
+                      {
+                        "xOffset": 16000,
+                        "yOffset": 18000
+                      },
+                      {
+                        "xOffset": -16000,
+                        "yOffset": 18000
+                      },
+                      {
+                        "xOffset": 16000,
+                        "yOffset": 68000
+                      }
+                    ],
+                    "stationSpacing": [
+                      300000,
+                      300000,
+                      300000,
+                      300000
+                    ]
+                  },
+                  {
+                    "gapCenters": [
+                      280000,
+                      280000,
+                      280000,
+                      280000
+                    ],
+                    "id": "quick-pairs",
+                    "obstacleTypes": [
+                      "pipes",
+                      "pipes",
+                      "pipes",
+                      "pipes"
+                    ],
+                    "rewardRoute": [
+                      {
+                        "xOffset": 16000,
+                        "yOffset": 0
+                      },
+                      {
+                        "xOffset": -16000,
+                        "yOffset": -18000
+                      },
+                      {
+                        "xOffset": 16000,
+                        "yOffset": 18000
+                      },
+                      {
+                        "xOffset": -16000,
+                        "yOffset": 0
+                      }
+                    ],
+                    "stationSpacing": [
+                      240000,
+                      240000,
+                      360000,
+                      360000
+                    ]
+                  },
+                  {
+                    "gapCenters": [
+                      300000,
+                      330000,
+                      260000,
+                      230000
+                    ],
+                    "id": "dive-climb",
+                    "obstacleTypes": [
+                      "pipes",
+                      "pipes",
+                      "pipes",
+                      "pipes"
+                    ],
+                    "rewardRoute": [
+                      {
+                        "xOffset": -16000,
+                        "yOffset": -18000
+                      },
+                      {
+                        "xOffset": 16000,
+                        "yOffset": -68000
+                      },
+                      {
+                        "xOffset": -16000,
+                        "yOffset": 18000
+                      },
+                      {
+                        "xOffset": 16000,
+                        "yOffset": 0
+                      }
+                    ],
+                    "stationSpacing": [
+                      300000,
+                      360000,
+                      300000,
+                      240000
+                    ]
+                  },
+                  {
+                    "gapCenters": [
+                      260000,
+                      230000,
+                      300000,
+                      330000
+                    ],
+                    "id": "climb-dive",
+                    "obstacleTypes": [
+                      "pipes",
+                      "pipes",
+                      "pipes",
+                      "pipes"
+                    ],
+                    "rewardRoute": [
+                      {
+                        "xOffset": 16000,
+                        "yOffset": 18000
+                      },
+                      {
+                        "xOffset": -16000,
+                        "yOffset": 68000
+                      },
+                      {
+                        "xOffset": 16000,
+                        "yOffset": -18000
+                      },
+                      {
+                        "xOffset": -16000,
+                        "yOffset": 0
+                      }
+                    ],
+                    "stationSpacing": [
+                      300000,
+                      360000,
+                      300000,
+                      240000
+                    ]
+                  },
+                  {
+                    "gapCenters": [
+                      280000,
+                      330000,
+                      260000,
+                      320000
+                    ],
+                    "id": "slalom",
+                    "obstacleTypes": [
+                      "pipes",
+                      "pipes",
+                      "pipes",
+                      "pipes"
+                    ],
+                    "rewardRoute": [
+                      {
+                        "xOffset": -16000,
+                        "yOffset": 0
+                      },
+                      {
+                        "xOffset": 16000,
+                        "yOffset": -18000
+                      },
+                      {
+                        "xOffset": -16000,
+                        "yOffset": 18000
+                      },
+                      {
+                        "xOffset": 16000,
+                        "yOffset": -68000
+                      }
+                    ],
+                    "stationSpacing": [
+                      300000,
+                      240000,
+                      360000,
+                      300000
+                    ]
+                  }
+                ],
+                "introFamilies": [
+                  "steady",
+                  "quick-pairs"
+                ],
+                "pressureFamilies": [
+                  "dive-climb",
+                  "climb-dive",
+                  "slalom"
+                ],
+                "recoverySpacing": 360000,
+                "starRoute": {
+                  "xOffset": 100000,
+                  "yOffset": 35000
+                },
+                "stationSpacing": [
+                  240000,
+                  300000,
+                  360000
+                ]
+              }
+            },
+            "descriptor": {
+              "configId": "dd-v2-coin-course-v1",
+              "generatorVersion": "2.4.0",
+              "runId": "coin-course-fixture",
+              "seed": 44,
+              "simulationVersion": "2.4.0"
+            },
+            "duck": {
+              "vy": -5280,
+              "x": 100000,
+              "y": 274720
+            },
+            "finalizationCount": 0,
+            "inputHistory": [],
+            "lastCollectiblePipe": -1000000,
+            "lastGapCenter": 320000,
+            "nextInputSequence": 1,
+            "nextPipeIndex": 28,
+            "nextPipeX": 1077000,
+            "nextSpawnPipeIndex": 28,
+            "nextStarPipeIndex": 15,
+            "phase": "RUNNING",
+            "pipes": [
+              {
+                "encounterFamily": "slalom",
+                "gapCenter": 291063,
+                "id": "pipe-26",
+                "index": 26,
+                "obstacles": [
+                  {
+                    "height": 213063,
+                    "typeId": "pipes",
+                    "width": 52000,
+                    "xOffset": 0,
+                    "y": 0
+                  },
+                  {
+                    "height": 191937,
+                    "typeId": "pipes",
+                    "width": 52000,
+                    "xOffset": 0,
+                    "y": 369063
+                  }
+                ],
+                "scored": false,
+                "stationId": "station-26",
+                "stationSpacing": 360000,
+                "stationStep": 2,
+                "x": 417000
+              },
+              {
+                "encounterFamily": "slalom",
+                "gapCenter": 320000,
+                "id": "pipe-27",
+                "index": 27,
+                "obstacles": [
+                  {
+                    "height": 242000,
+                    "typeId": "pipes",
+                    "width": 52000,
+                    "xOffset": 0,
+                    "y": 0
+                  },
+                  {
+                    "height": 163000,
+                    "typeId": "pipes",
+                    "width": 52000,
+                    "xOffset": 0,
+                    "y": 398000
+                  }
+                ],
+                "scored": false,
+                "stationId": "station-27",
+                "stationSpacing": 300000,
+                "stationStep": 3,
+                "x": 777000
+              }
+            ],
+            "rngState": 3041712770,
+            "score": 0,
+            "starScheduleOrdinal": 0,
+            "tick": 1,
+            "totals": {}
+          },
+          "expectedEvents": []
+        }
+      ]
+    }
+  ]
+}

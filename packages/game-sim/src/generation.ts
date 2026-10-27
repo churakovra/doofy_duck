@@ -10,6 +10,152 @@ function encounter(seed: number, block: number, intro: readonly EncounterFamilyI
   return pressure[(offset + pressureIndex) % pressure.length]!;
 }
 
+const COIN_COURSE_SALT = 0x6d2b79f5;
+const COIN_COURSE_GATE_SPACING = 180_000;
+const BONUS_SEGMENT_SCHEDULE_SALT = 0x2c1b3c6d;
+const BONUS_SEGMENT_RECIPE_SALT = 0x297a2d39;
+const BONUS_SEGMENT_CENTER_SALT = 0x165667b1;
+const BONUS_SEGMENT_RECOVERY_CLEARANCE = 360_000;
+const BONUS_SEGMENT_V2_CENTER_SALT = 0x7f4a7c15;
+const BONUS_SEGMENT_V2_RECIPE_SALT = 0x6a09e667;
+const BONUS_SEGMENT_V2_MIRROR_SALT = 0x3c6ef372;
+const BONUS_SEGMENT_V2_CLEARANCE_PERCENT = 10;
+
+export type BonusSegmentRecipe = "shallow-ascent" | "shallow-descent" | "shallow-slalom";
+
+export function bonusSegmentSlot(block: number): number {
+  return Math.floor((block - 2) / 3);
+}
+
+export function isBonusSegmentBlock(seed: number, block: number): boolean {
+  if (!Number.isSafeInteger(block) || block < 2) return false;
+  const slot = bonusSegmentSlot(block);
+  const selectedBlock = 2 + slot * 3 + (mix32((seed ^ BONUS_SEGMENT_SCHEDULE_SALT ^ Math.imul(slot + 1, BONUS_SEGMENT_RECIPE_SALT)) >>> 0) % 2);
+  return block === selectedBlock;
+}
+
+export function isScheduledBonusBlock(config: GameConfig, seed: number, block: number): boolean {
+  if ((config.wetland?.catalogVersion ?? 0) < 11) return isBonusSegmentBlock(seed, block);
+  const first = 6 + mix32((seed ^ 0x243f6a88) >>> 0) % 3;
+  return block >= first && (block - first) % 7 === 0;
+}
+
+export function bonusSegmentRecipe(seed: number, block: number): BonusSegmentRecipe {
+  if (!isBonusSegmentBlock(seed, block)) throw Error("bonus segment recipe requested for an unscheduled block");
+  const slot = bonusSegmentSlot(block);
+  const sample = mix32((seed ^ Math.imul(slot + 1, BONUS_SEGMENT_CENTER_SALT) ^ BONUS_SEGMENT_RECIPE_SALT) >>> 0);
+  return (["shallow-ascent", "shallow-descent", "shallow-slalom"] as const)[sample % 3]!;
+}
+
+function bonusSegmentGapCenter(seed: number, block: number, step: number, config: GameConfig): number {
+  const slot = bonusSegmentSlot(block);
+  const sample = mix32((seed ^ Math.imul(slot + 1, BONUS_SEGMENT_CENTER_SALT)) >>> 0);
+  const center = Math.floor((config.pipes.gapMinCenter + config.pipes.gapMaxCenter) / 2) + (sample % 5_001) - 2_500;
+  const recipe = bonusSegmentRecipe(seed, block);
+  const offsets = recipe === "shallow-ascent" ? [0, -2_500, -5_000]
+    : recipe === "shallow-descent" ? [0, 2_500, 5_000]
+      : [0, 5_000, -5_000];
+  return center + (offsets[step] ?? 0);
+}
+
+export type BonusSegmentV2Recipe = "ascent" | "descent" | "slalom";
+
+export function bonusSegmentV2Recipe(seed: number, block: number): BonusSegmentV2Recipe {
+  if (!isBonusSegmentBlock(seed, block)) throw Error("bonus segment recipe requested for an unscheduled block");
+  return bonusSegmentV2RecipeUnchecked(seed, block);
+}
+
+function bonusSegmentV2RecipeUnchecked(seed: number, block: number): BonusSegmentV2Recipe {
+  const slot = bonusSegmentSlot(block);
+  const sample = mix32((seed ^ Math.imul(slot + 1, BONUS_SEGMENT_V2_RECIPE_SALT) ^ BONUS_SEGMENT_V2_CENTER_SALT) >>> 0);
+  return (["ascent", "descent", "slalom"] as const)[sample % 3]!;
+}
+
+function bonusSegmentV2Offsets(seed: number, block: number): readonly number[] {
+  const recipe = bonusSegmentV2RecipeUnchecked(seed, block);
+  const base = recipe === "ascent" ? [0, -40_000, -80_000]
+    : recipe === "descent" ? [0, 40_000, 80_000]
+      : [0, 40_000, -40_000];
+  const slot = bonusSegmentSlot(block);
+  const mirror = (mix32((seed ^ Math.imul(slot + 1, BONUS_SEGMENT_V2_MIRROR_SALT)) >>> 0) & 1) !== 0;
+  return mirror ? base.map(offset => -offset) : base;
+}
+
+function bonusSegmentV2GapCenter(seed: number, block: number, step: number, previous: number, config: GameConfig): number {
+  const p = config.pipes;
+  const offsets = bonusSegmentV2Offsets(seed, block);
+  if (step > 0) return previous + offsets[step]! - offsets[step - 1]!;
+  const entryCenter = previous;
+  const minOffset = Math.min(...offsets);
+  const maxOffset = Math.max(...offsets);
+  const low = Math.max(p.gapMinCenter - minOffset, entryCenter - p.maxGapDelta);
+  const high = Math.min(p.gapMaxCenter - maxOffset, entryCenter + p.maxGapDelta);
+  if (low > high) throw Error("bonus segment route has no legal seeded anchor");
+  const slot = bonusSegmentSlot(block);
+  const approachLow = Math.max(low, entryCenter - 20_000);
+  const approachHigh = Math.min(high, entryCenter + 20_000);
+  const anchorLow = approachLow <= approachHigh ? approachLow : low;
+  const anchorHigh = approachLow <= approachHigh ? approachHigh : high;
+  const sample = mix32((seed ^ Math.imul(slot + 1, BONUS_SEGMENT_V2_CENTER_SALT) ^ BONUS_SEGMENT_V2_RECIPE_SALT) >>> 0);
+  const anchor = anchorLow + sample % (anchorHigh - anchorLow + 1);
+  return anchor + offsets[step]!;
+}
+
+function bonusSegmentV2OrdinaryCenter(seed: number, index: number, previous: number, config: GameConfig): number {
+  const low = Math.max(config.pipes.gapMinCenter, previous - 45_000);
+  const high = Math.min(config.pipes.gapMaxCenter, previous + 45_000);
+  const sample = mix32((seed ^ Math.imul(index + 1, BONUS_SEGMENT_V2_CENTER_SALT)) >>> 0);
+  return low + sample % (high - low + 1);
+}
+
+function irregularBaseCenter(seed: number, index: number, previous: number, config: GameConfig): number {
+  const p = config.pipes;
+  const sample = mix32((seed ^ Math.imul(index + 1, 0x4cf5ad43)) >>> 0);
+  const magnitude = Math.min(p.maxGapDelta, 30_000 + sample % 40_001);
+  const direction = (sample & 0x80000000) === 0 ? 1 : -1;
+  let target = previous + direction * magnitude;
+  if (target < p.gapMinCenter || target > p.gapMaxCenter) target = previous - direction * magnitude;
+  if (target < p.gapMinCenter || target > p.gapMaxCenter)
+    target = previous - p.gapMinCenter >= p.gapMaxCenter - previous ? p.gapMinCenter : p.gapMaxCenter;
+  return target;
+}
+
+function variedPipeCenter(seed: number, index: number, previous: number, recovery: boolean, config: GameConfig): number {
+  const delta = Math.min(config.pipes.maxGapDelta, recovery ? 35_000 : 75_000);
+  const low = Math.max(config.pipes.gapMinCenter, previous - delta);
+  const high = Math.min(config.pipes.gapMaxCenter, previous + delta);
+  const sample = mix32((seed ^ Math.imul(index + 1, 0x51ed270b)) >>> 0);
+  return low + sample % (high - low + 1);
+}
+
+function pressurePipeCenter(seed: number, index: number, previous: number, config: GameConfig): number {
+  const sample = mix32((seed ^ Math.imul(index + 1, 0x68bc21eb)) >>> 0);
+  const magnitude = Math.min(config.pipes.maxGapDelta, 60_000 + sample % 20_001);
+  const polarity = mix32((seed ^ Math.imul(Math.floor(index / 4) + 1, 0x27d4eb2d)) >>> 0) & 1;
+  const direction = ((index + polarity) & 1) === 0 ? 1 : -1;
+  let target = previous + direction * magnitude;
+  if (target < config.pipes.gapMinCenter || target > config.pipes.gapMaxCenter)
+    target = previous - direction * magnitude;
+  return Math.max(config.pipes.gapMinCenter, Math.min(config.pipes.gapMaxCenter, target));
+}
+
+function scaledClearanceSpacing(originalSpacing: number, pipeWidth: number, percent: number): number {
+  return pipeWidth + Math.floor((originalSpacing - pipeWidth) * percent / 100);
+}
+
+export function isCoinCourseBlock(seed: number, block: number): boolean {
+  const first = 2 + 2 * (mix32((seed ^ COIN_COURSE_SALT) >>> 0) % 3);
+  return block >= first && (block - first) % 6 === 0;
+}
+
+function coinCourseGapCenter(seed: number, block: number, step: number): number {
+  const courseOrdinal = Math.floor((block - (2 + 2 * (mix32((seed ^ COIN_COURSE_SALT) >>> 0) % 3))) / 6);
+  const sample = mix32((seed ^ Math.imul(courseOrdinal + 1, 0x85ebca6b) ^ COIN_COURSE_SALT) >>> 0);
+  const center = 280_000 + (sample % 30_001) - 15_000;
+  const direction = (sample & 0x80000000) === 0 ? 1 : -1;
+  return center + (step === 1 ? direction * 18_000 : step === 2 ? -direction * 9_000 : 0);
+}
+
 function pressureLaneCenter(seed: number, block: number, config: GameConfig): number {
   const pressureOrdinal = Math.floor((block - 2) / 2);
   const topLane = (mix32((seed ^ Math.imul(pressureOrdinal + 1, 0x4cf5ad43)) >>> 0) & 1) === 1;
@@ -105,13 +251,51 @@ export function generateNext(s: RunState): StepResult {
     let challengeId: string | undefined;
     const wetland = s.config.wetland;
     const stationStep = index % 4;
-    const family = wetland ? encounter(s.descriptor.seed, Math.floor(index / 4), wetland.introFamilies, wetland.pressureFamilies) : undefined;
+    const wetlandBlock = Math.floor(index / 4);
+    const coinCourse = wetland?.catalogVersion === 5 && isCoinCourseBlock(s.descriptor.seed, wetlandBlock);
+    const bonusSegment = wetland?.catalogVersion === 6 && isBonusSegmentBlock(s.descriptor.seed, wetlandBlock);
+    const bonusSegmentV2 = (wetland?.catalogVersion ?? 0) >= 7 && isScheduledBonusBlock(s.config, s.descriptor.seed, wetlandBlock);
+    const family = wetland ? wetland.catalogVersion >= 11 ? "steady" : encounter(s.descriptor.seed, Math.floor(index / 4), wetland.introFamilies, wetland.pressureFamilies) : undefined;
     const familySpec = family === undefined ? undefined : wetland!.families.find(item => item.id === family)!;
-    const stationSpacing = familySpec === undefined ? undefined : family === "steady" && Math.floor(index / 4) >= wetland!.introFamilies.length
-      ? wetland!.recoverySpacing : familySpec.stationSpacing[stationStep]!;
+    const originalStationSpacing = familySpec === undefined ? undefined :
+      family === "steady" && wetlandBlock >= wetland!.introFamilies.length
+        ? wetland!.recoverySpacing : familySpec.stationSpacing[stationStep]!;
+    const baseStationSpacing = originalStationSpacing === undefined ? undefined : coinCourse && stationStep < 2
+      ? COIN_COURSE_GATE_SPACING
+      : coinCourse && stationStep === 2
+        ? wetland!.recoverySpacing
+        : bonusSegment && stationStep < 2
+          ? scaledClearanceSpacing(originalStationSpacing, p.width, 20)
+          : bonusSegment && stationStep === 2
+            ? p.width + BONUS_SEGMENT_RECOVERY_CLEARANCE
+        : bonusSegmentV2 && stationStep < 2
+          ? scaledClearanceSpacing(originalStationSpacing, p.width, BONUS_SEGMENT_V2_CLEARANCE_PERCENT)
+          : bonusSegmentV2 && stationStep === 2
+            ? p.width + BONUS_SEGMENT_RECOVERY_CLEARANCE
+            : wetland?.catalogVersion === 6
+              ? scaledClearanceSpacing(originalStationSpacing, p.width, 70)
+          : (wetland?.catalogVersion ?? 0) >= 7
+            ? scaledClearanceSpacing(originalStationSpacing, p.width, 50)
+              : originalStationSpacing;
+    const stationSpacing = (wetland?.catalogVersion ?? 0) >= 11
+      ? bonusSegmentV2 && stationStep < 2 ? 66_880 : bonusSegmentV2 && stationStep === 2 ? 268_000 : 126_400
+      : baseStationSpacing !== undefined && wetland?.catalogVersion === 10
+        ? scaledClearanceSpacing(baseStationSpacing, p.width, 60) : baseStationSpacing;
     let raw = p.gapMinCenter + sample % (p.gapMaxCenter - p.gapMinCenter + 1);
     if (familySpec) raw = familySpec.gapCenters[stationStep]!;
-    const wetlandBlock = Math.floor(index / 4);
+    if ((wetland?.catalogVersion ?? 0) >= 11) raw = wetland!.catalogVersion === 12 && index > 0
+      ? irregularBaseCenter(s.descriptor.seed, index, previousGap, s.config)
+      : bonusSegmentV2OrdinaryCenter(s.descriptor.seed, index, previousGap, s.config);
+    if (coinCourse && stationStep < 3) raw = coinCourseGapCenter(s.descriptor.seed, wetlandBlock, stationStep);
+    if (bonusSegment && stationStep < 3) raw = bonusSegmentGapCenter(s.descriptor.seed, wetlandBlock, stationStep, s.config);
+    if (bonusSegmentV2 && stationStep < 3)
+      raw = bonusSegmentV2GapCenter(s.descriptor.seed, wetlandBlock, stationStep, previousGap, s.config);
+    else if ((wetland?.catalogVersion ?? 0) >= 7 && (wetland?.catalogVersion ?? 0) < 11 && wetlandBlock >= wetland!.introFamilies.length)
+      raw = wetland!.catalogVersion >= 9 && family !== "steady"
+        ? pressurePipeCenter(s.descriptor.seed, index, previousGap, s.config)
+        : wetland!.catalogVersion >= 8
+        ? variedPipeCenter(s.descriptor.seed, index, previousGap, family === "steady", s.config)
+        : bonusSegmentV2OrdinaryCenter(s.descriptor.seed, index, previousGap, s.config);
     const variedGapCenter = wetland?.catalogVersion === 2 && family !== undefined
       ? variedWetlandGapCenter(s.descriptor.seed, wetlandBlock, stationStep, family, s.config)
       : undefined;
@@ -244,7 +428,49 @@ export function wetlandRewardPoint(config: GameConfig, pipe: Pipe, radius: numbe
 /** Individual pickup positions for the v4 currency formations. */
 export function currencyFormationPoints(config: GameConfig, seed: number, pipe: Pipe, radius: number, star = false, eventOrdinal = pipe.index): readonly { x: number; y: number }[] {
   const center = wetlandRewardPoint(config, pipe, radius, star);
-  if (config.wetland?.catalogVersion !== 4) return [center];
+  if (config.wetland?.catalogVersion === 5 && !star && pipe.stationStep === 2 && isCoinCourseBlock(seed, Math.floor(pipe.index / 4))) {
+    const opening = Math.floor(config.pipes.gapHeight / 2) - config.flight.duckHalfHeight - radius - 2;
+    const safeY = Math.max(1, Math.min(20_000, opening));
+    return [
+      { x: pipe.x + 70_000, y: center.y },
+      { x: pipe.x + 100_000, y: center.y - safeY },
+      { x: pipe.x + 130_000, y: center.y + safeY },
+    ];
+  }
+  if (config.wetland?.catalogVersion === 6 && !star && pipe.stationStep === 2 && isBonusSegmentBlock(seed, Math.floor(pipe.index / 4))) {
+    const intervalCenterX = pipe.x + Math.floor((pipe.stationSpacing ?? config.pipes.width + BONUS_SEGMENT_RECOVERY_CLEARANCE) / 2);
+    return [
+      { x: intervalCenterX - 18_000, y: center.y },
+      { x: intervalCenterX + 9_000, y: center.y - 15_000 },
+      { x: intervalCenterX + 9_000, y: center.y + 15_000 },
+    ];
+  }
+  if ((config.wetland?.catalogVersion ?? 0) >= 7 && !star && pipe.stationStep === 2 && isScheduledBonusBlock(config, seed, Math.floor(pipe.index / 4))) {
+    const intervalCenterX = pipe.x + Math.floor((pipe.stationSpacing ?? config.pipes.width + BONUS_SEGMENT_RECOVERY_CLEARANCE) / 2);
+    return [
+      { x: intervalCenterX - 18_000, y: center.y },
+      { x: intervalCenterX + 9_000, y: center.y - 15_000 },
+      { x: intervalCenterX + 9_000, y: center.y + 15_000 },
+    ];
+  }
+  if (config.wetland && config.wetland.catalogVersion >= 6) {
+    if (star && config.wetland.starFormations === true) {
+      const variant = mix32((seed ^ Math.imul(pipe.index + 1, 0x9e3779b9) ^ Math.imul(eventOrdinal + 1, 0x85ebca6b) ^ 0x51ed270b) >>> 0);
+      const offsets = [[0, -22000], [21000, -7000], [13000, 18000], [-13000, 18000], [-21000, -7000]] as const;
+      const rotation = (variant >>> 1) & 3;
+      const centerX = pipe.x + Math.floor(config.pipes.width / 2);
+      const halfOpening = Math.floor(config.pipes.gapHeight / 2) - config.flight.duckHalfHeight - radius - 2;
+      const centerY = Math.max(pipe.gapCenter - halfOpening + 22_000,
+        Math.min(pipe.gapCenter + halfOpening - 22_000, center.y));
+      return offsets.map(([dx, dy]) => {
+        const rotated = rotateFormationOffset(dx, dy, rotation);
+        return { x: centerX + rotated.x, y: centerY + rotated.y };
+      });
+    }
+    if (star) return [{ x: pipe.x + Math.floor(config.pipes.width / 2), y: center.y }];
+    return [{ x: center.x, y: center.y }];
+  }
+  if ((config.wetland?.catalogVersion ?? 0) < 4) return [center];
   const variant = mix32((seed ^ Math.imul(pipe.index + 1, 0x9e3779b9) ^ Math.imul(eventOrdinal + 1, 0x85ebca6b) ^ (star ? 0x51ed270b : 0)) >>> 0);
   const halfOpening = Math.floor(config.pipes.gapHeight / 2) - config.flight.duckHalfHeight - radius - 2;
   const yVariation = star ? 22_000 : 15_000;

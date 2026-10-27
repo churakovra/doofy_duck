@@ -207,9 +207,25 @@ func VerifyWetlandFixtures(path string) error {
 		fixture.GeneratorVersion == VariedObstacleGeneratorVersion && fixture.ConfigID == VariedObstacleDefaultConfigID && len(fixture.Cases) >= 3
 	pairedFixture := fixture.FixtureRevision == "wetland-paired-stations-1" && fixture.SimulationVersion == PairedRoutesSimulationVersion &&
 		fixture.GeneratorVersion == PairedRoutesGeneratorVersion && fixture.ConfigID == PairedRoutesConfigID && len(fixture.Cases) >= 3
-	currencyFixture := fixture.FixtureRevision == "currency-formations-1" && fixture.SimulationVersion == SimulationVersion &&
-		fixture.GeneratorVersion == GeneratorVersion && fixture.ConfigID == DefaultConfigID && len(fixture.Cases) >= 3
-	if !priorFixture && !variedFixture && !pairedFixture && !currencyFixture {
+	currencyFixture := fixture.FixtureRevision == "currency-formations-1" && fixture.SimulationVersion == CurrencyFormationsSimulationVersion &&
+		fixture.GeneratorVersion == CurrencyFormationsGeneratorVersion && fixture.ConfigID == CurrencyFormationsConfigID && len(fixture.Cases) >= 3
+	coinCourseFixture := fixture.FixtureRevision == "coin-course-1" && fixture.SimulationVersion == CoinCourseSimulationVersion &&
+		fixture.GeneratorVersion == CoinCourseGeneratorVersion && fixture.ConfigID == CoinCourseConfigID && len(fixture.Cases) >= 1
+	bonusSegmentsFixture := fixture.FixtureRevision == "bonus-segments-1" && fixture.SimulationVersion == BonusSegmentsSimulationVersion &&
+		fixture.GeneratorVersion == BonusSegmentsGeneratorVersion && fixture.ConfigID == BonusSegmentsConfigID && len(fixture.Cases) >= 4
+	bonusSegmentsRecoveryFixture := fixture.FixtureRevision == "bonus-segments-recovery-1" && fixture.SimulationVersion == BonusSegmentsSimulationVersion &&
+		fixture.GeneratorVersion == BonusSegmentsGeneratorVersion && fixture.ConfigID == BonusSegmentsConfigID && len(fixture.Cases) >= 1
+	bonusSegmentsV2Fixture := fixture.FixtureRevision == "bonus-segments-v2-1" && fixture.SimulationVersion == BonusSegmentsV2SimulationVersion &&
+		fixture.GeneratorVersion == BonusSegmentsV2GeneratorVersion && fixture.ConfigID == BonusSegmentsV2ConfigID && len(fixture.Cases) >= 4
+	pressureFixture := fixture.FixtureRevision == "pressure-pipes-replay-1" && fixture.SimulationVersion == PressurePipesSimulationVersion &&
+		fixture.GeneratorVersion == PressurePipesGeneratorVersion && fixture.ConfigID == PressurePipesConfigID && len(fixture.Cases) >= 1
+	denseFixture := fixture.FixtureRevision == "dense-pipes-replay-1" && fixture.SimulationVersion == DensePipesSimulationVersion &&
+		fixture.GeneratorVersion == DensePipesGeneratorVersion && fixture.ConfigID == DensePipesConfigID && len(fixture.Cases) >= 1
+	baseBonusFixture := fixture.FixtureRevision == "base-bonus-replay-1" && fixture.SimulationVersion == BaseBonusSimulationVersion &&
+		fixture.GeneratorVersion == BaseBonusGeneratorVersion && fixture.ConfigID == BaseBonusConfigID && len(fixture.Cases) >= 1
+	variedBaseFixture := fixture.FixtureRevision == "varied-base-replay-1" && fixture.SimulationVersion == SimulationVersion &&
+		fixture.GeneratorVersion == GeneratorVersion && fixture.ConfigID == DefaultConfigID && len(fixture.Cases) >= 1
+	if !variedBaseFixture && !baseBonusFixture && !denseFixture && !pressureFixture && !priorFixture && !variedFixture && !pairedFixture && !currencyFixture && !coinCourseFixture && !bonusSegmentsFixture && !bonusSegmentsRecoveryFixture && !bonusSegmentsV2Fixture {
 		return fmt.Errorf("unexpected wetland fixture identity/case count")
 	}
 	for _, example := range fixture.Cases {

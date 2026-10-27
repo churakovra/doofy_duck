@@ -4,7 +4,10 @@ import {
   PRIOR_DEFAULT_CONFIG,
   WETLAND_DEFAULT_CONFIG,
   VARIED_OBSTACLE_DEFAULT_CONFIG,
-  DEFAULT_CONFIG,
+  CURRENCY_FORMATIONS_DEFAULT_CONFIG as DEFAULT_CONFIG,
+  CURRENCY_FORMATIONS_CONFIG_ID,
+  CURRENCY_FORMATIONS_SIMULATION_VERSION,
+  CURRENCY_FORMATIONS_GENERATOR_VERSION,
   DEFAULT_CONFIG_ID,
   PAIRED_ROUTES_DEFAULT_CONFIG,
   PAIRED_ROUTES_CONFIG_ID,
@@ -1055,7 +1058,7 @@ describe("wetland station contract", () => {
 
   it("issues paired routes while retaining frozen varied and 2.0 wetland identities", () => {
     expect([SIMULATION_VERSION, GENERATOR_VERSION, DEFAULT_CONFIG_ID]).toEqual([
-      "2.3.0", "2.3.0", "dd-v2-currency-formations-v1",
+      "3.1.0", "3.1.0", "dd-v3-varied-base-v1",
     ]);
     expect(createRunDescriptor({ runId: "paired", seed: 4 })).toMatchObject({
       simulationVersion: SIMULATION_VERSION, generatorVersion: GENERATOR_VERSION, configId: DEFAULT_CONFIG_ID,
@@ -1599,7 +1602,7 @@ describe("wetland station contract", () => {
 
   it("survives from a genuine paired READY default run through station 16 with the same pipe policy", () => {
     const result = runPairedGapPolicyWitness(9, 280_000, 0, true, 17);
-    expect(result.initialState.descriptor.configId).toBe(DEFAULT_CONFIG_ID);
+    expect(result.initialState.descriptor.configId).toBe(CURRENCY_FORMATIONS_CONFIG_ID);
     expect({ phase: result.initialState.phase, tick: result.initialState.tick, catalogVersion: result.initialState.config.wetland?.catalogVersion,
       y: result.initialState.duck.y, vy: result.initialState.duck.vy })
       .toEqual({ phase: "READY", tick: 0, catalogVersion: 4,
@@ -1692,7 +1695,7 @@ describe("wetland station contract", () => {
       identity: result.args.configIdentity, horizon: result.initialState.config.pipes.horizon,
       capacity: result.initialState.config.limits.maxActiveCollectibles, stars: result.initialState.config.starSchedule })
       .toEqual({ profile: "normal-default", pursueRewards: false, phase: "READY", tick: 0, y: expectedInitial.duck.y, vy: 0,
-        identity: DEFAULT_CONFIG_ID, horizon: config.pipes.horizon, capacity: config.limits.maxActiveCollectibles,
+        identity: CURRENCY_FORMATIONS_CONFIG_ID, horizon: config.pipes.horizon, capacity: config.limits.maxActiveCollectibles,
         stars: config.starSchedule });
     expect(result.inputs[0]).toEqual({ tick: 0, flap: true });
     expect(result.state.phase, `args=${JSON.stringify(result.args)} initial=READY/0/${result.initialState.duck.y}/0 final=${result.state.phase}/${result.state.tick}/${result.state.score}/${result.state.duck.y}/${result.state.duck.vy} passed=${JSON.stringify(result.passedTypes.slice(-8))} terminal=${JSON.stringify(result.terminal)} targets=${JSON.stringify(result.targetChanges.slice(-10))}`)
@@ -2095,7 +2098,7 @@ describe("wetland station contract", () => {
     expect(pairedWetlandFixture).toMatchObject({ fixtureRevision: "wetland-paired-stations-1",
       simulationVersion: PAIRED_ROUTES_SIMULATION_VERSION, generatorVersion: PAIRED_ROUTES_GENERATOR_VERSION, configId: PAIRED_ROUTES_CONFIG_ID });
     expect(currencyFormationsFixture).toMatchObject({ fixtureRevision: "currency-formations-1",
-      simulationVersion: SIMULATION_VERSION, generatorVersion: GENERATOR_VERSION, configId: DEFAULT_CONFIG_ID });
+      simulationVersion: CURRENCY_FORMATIONS_SIMULATION_VERSION, generatorVersion: CURRENCY_FORMATIONS_GENERATOR_VERSION, configId: CURRENCY_FORMATIONS_CONFIG_ID });
     for (const example of [...wetlandFixture.cases, ...variedWetlandFixture.cases, ...pairedWetlandFixture.cases, ...currencyFormationsFixture.cases]) {
       let state = example.syntheticInitialState
         ? example.initialState
@@ -2150,7 +2153,7 @@ describe("wetland station contract", () => {
   });
 
   it("advances the wetland spawn cursor and refills after every previous station is pruned", () => {
-    let state = createRun(createRunDescriptor({ runId: "wetland-refill", seed: 32 }));
+    let state = createRun(createRunDescriptor({ runId: "wetland-refill", seed: 32 }, DEFAULT_CONFIG), DEFAULT_CONFIG);
     state = {
       ...state,
       phase: "RUNNING",

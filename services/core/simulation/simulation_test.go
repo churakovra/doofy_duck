@@ -9,12 +9,24 @@ import (
 )
 
 func TestCurrentContractIdentity(t *testing.T) {
-	if SimulationVersion != "2.3.0" || GeneratorVersion != "2.3.0" || DefaultConfigID != "dd-v2-currency-formations-v1" {
-		t.Fatalf("unexpected currency-formations identity: %s/%s/%s", SimulationVersion, GeneratorVersion, DefaultConfigID)
+	if SimulationVersion != "3.1.0" || GeneratorVersion != "3.1.0" || DefaultConfigID != "dd-v3-varied-base-v1" {
+		t.Fatalf("unexpected bonus-segments-v2 identity: %s/%s/%s", SimulationVersion, GeneratorVersion, DefaultConfigID)
 	}
 	current, err := CreateRun(Descriptor{RunID: "current", Seed: 4, SimulationVersion: SimulationVersion, GeneratorVersion: GeneratorVersion, ConfigID: DefaultConfigID})
-	if err != nil || current.Config.Wetland == nil || current.Config.Wetland.CatalogVersion != 4 || current.NextPipeX == nil {
-		t.Fatalf("currency-formations default run missing catalog/cursor: err=%v", err)
+	if err != nil || current.Config.Wetland == nil || current.Config.Wetland.CatalogVersion != 12 || current.NextPipeX == nil || current.Config.Wetland.StarFormations == nil || *current.Config.Wetland.StarFormations {
+		t.Fatalf("bonus-segments-v2 default run missing catalog/cursor/default Star policy: err=%v", err)
+	}
+	bonusSegmentsV1, err := CreateRun(Descriptor{RunID: "bonus-v1-frozen", Seed: 4, SimulationVersion: BonusSegmentsSimulationVersion, GeneratorVersion: BonusSegmentsGeneratorVersion, ConfigID: BonusSegmentsConfigID})
+	if err != nil || bonusSegmentsV1.Config.Wetland == nil || bonusSegmentsV1.Config.Wetland.CatalogVersion != 6 {
+		t.Fatalf("frozen catalog-6 bonus-segments identity is unavailable: err=%v", err)
+	}
+	coinCourse, err := CreateRun(Descriptor{RunID: "coin-course-frozen", Seed: 4, SimulationVersion: CoinCourseSimulationVersion, GeneratorVersion: CoinCourseGeneratorVersion, ConfigID: CoinCourseConfigID})
+	if err != nil || coinCourse.Config.Wetland == nil || coinCourse.Config.Wetland.CatalogVersion != 5 {
+		t.Fatalf("frozen coin-course identity is unavailable: err=%v", err)
+	}
+	frozenCurrency, err := CreateRun(Descriptor{RunID: "currency-frozen", Seed: 4, SimulationVersion: CurrencyFormationsSimulationVersion, GeneratorVersion: CurrencyFormationsGeneratorVersion, ConfigID: CurrencyFormationsConfigID})
+	if err != nil || frozenCurrency.Config.Wetland == nil || frozenCurrency.Config.Wetland.CatalogVersion != 4 {
+		t.Fatalf("frozen currency-formation identity is unavailable: err=%v", err)
 	}
 	paired, err := CreateRun(Descriptor{RunID: "paired-frozen", Seed: 4, SimulationVersion: PairedRoutesSimulationVersion, GeneratorVersion: PairedRoutesGeneratorVersion, ConfigID: PairedRoutesConfigID})
 	if err != nil || paired.Config.Wetland == nil || paired.Config.Wetland.CatalogVersion != 3 {
@@ -26,11 +38,6 @@ func TestCurrentContractIdentity(t *testing.T) {
 	for _, pipe := range current.Pipes {
 		if len(pipe.Obstacles) != 2 || pipe.Obstacles[0].TypeID != "pipes" || pipe.Obstacles[1].TypeID != "pipes" || pipe.Obstacles[0].Height <= 0 || pipe.Obstacles[1].Height <= 0 {
 			t.Fatalf("paired default produced invalid obstacle geometry: %+v", pipe.Obstacles)
-		}
-		for _, family := range current.Config.Wetland.Families {
-			if family.ID == pipe.EncounterFamily && *pipe.StationSpacing != family.StationSpacing[*pipe.StationStep] {
-				t.Fatalf("station spacing=%d, want authored %d for %s/%d", *pipe.StationSpacing, family.StationSpacing[*pipe.StationStep], family.ID, *pipe.StationStep)
-			}
 		}
 	}
 	varied, err := CreateRun(Descriptor{RunID: "varied", Seed: 4, SimulationVersion: VariedObstacleSimulationVersion, GeneratorVersion: VariedObstacleGeneratorVersion, ConfigID: VariedObstacleDefaultConfigID})
@@ -79,6 +86,26 @@ func TestCurrentContractIdentity(t *testing.T) {
 	}
 	if _, ok := priorObject["pipes"]; !ok {
 		t.Fatal("prior state lost pipes")
+	}
+}
+
+func TestCreateRunResolvesFrozenCurrencyDescriptorWithoutExplicitConfig(t *testing.T) {
+	state, err := CreateRun(Descriptor{
+		RunID:             "currency-descriptor-only",
+		Seed:              17,
+		SimulationVersion: CurrencyFormationsSimulationVersion,
+		GeneratorVersion:  CurrencyFormationsGeneratorVersion,
+		ConfigID:          CurrencyFormationsConfigID,
+	})
+	if err != nil {
+		t.Fatalf("CreateRun rejected frozen currency descriptor without explicit config: %v", err)
+	}
+	if state.Config.Wetland == nil || state.Config.Wetland.CatalogVersion != 4 {
+		t.Fatalf("descriptor resolved catalog %v, want 4", state.Config.Wetland)
+	}
+	configID, err := ConfigIDFor(state.Config)
+	if err != nil || configID != CurrencyFormationsConfigID {
+		t.Fatalf("descriptor resolved config id=%q, err=%v; want %q", configID, err, CurrencyFormationsConfigID)
 	}
 }
 
@@ -263,8 +290,15 @@ func TestWetlandRawFullStateAndEventFixtureParity(t *testing.T) {
 	}
 }
 
+func TestCoinCourseRawFullStateAndEventFixtureParity(t *testing.T) {
+	if err := VerifyWetlandFixtures("../../../contracts/simulation/coin-course-v1.json"); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestWetlandStepAdvancesSpawnCursorAfterEveryStationWasPruned(t *testing.T) {
-	state, err := CreateRun(Descriptor{RunID: "wetland-refill", Seed: 32, SimulationVersion: SimulationVersion, GeneratorVersion: GeneratorVersion, ConfigID: DefaultConfigID})
+	config := CurrencyFormationsConfiguration()
+	state, err := CreateRun(Descriptor{RunID: "wetland-refill", Seed: 32, SimulationVersion: CurrencyFormationsSimulationVersion, GeneratorVersion: CurrencyFormationsGeneratorVersion, ConfigID: CurrencyFormationsConfigID}, config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -412,6 +446,18 @@ func TestReviewedPairedRoutesFixture(t *testing.T) {
 
 func TestReviewedCurrencyFormationsFixture(t *testing.T) {
 	if err := VerifyWetlandFixtures("../../../contracts/simulation/currency-formations-v1.json"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestReviewedBonusSegmentsFixture(t *testing.T) {
+	if err := VerifyWetlandFixtures("../../../contracts/simulation/bonus-segments-v1.json"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestReviewedBonusSegmentsRecoveryFixture(t *testing.T) {
+	if err := VerifyWetlandFixtures("../../../contracts/simulation/bonus-segments-recovery-v1.json"); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -612,7 +658,7 @@ func TestCurrencyFormationsEmitIndividualMembersWithinCapacity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	state, err := CreateRun(Descriptor{RunID: "formation-feathers", Seed: 11, SimulationVersion: SimulationVersion, GeneratorVersion: GeneratorVersion, ConfigID: id}, config)
+	state, err := CreateRun(Descriptor{RunID: "formation-feathers", Seed: 11, SimulationVersion: CurrencyFormationsSimulationVersion, GeneratorVersion: CurrencyFormationsGeneratorVersion, ConfigID: id}, config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -645,7 +691,7 @@ func TestCurrencyFormationsEmitIndividualMembersWithinCapacity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	state, err = CreateRun(Descriptor{RunID: "formation-stars", Seed: 11, SimulationVersion: SimulationVersion, GeneratorVersion: GeneratorVersion, ConfigID: id}, config)
+	state, err = CreateRun(Descriptor{RunID: "formation-stars", Seed: 11, SimulationVersion: CurrencyFormationsSimulationVersion, GeneratorVersion: CurrencyFormationsGeneratorVersion, ConfigID: id}, config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -673,7 +719,7 @@ func TestCurrencyFormationsEmitIndividualMembersWithinCapacity(t *testing.T) {
 
 func TestCurrencyFormationGeometryAndSupportedBounds(t *testing.T) {
 	config := CurrencyFormationsConfiguration()
-	state, err := CreateRun(Descriptor{RunID: "formation-geometry", Seed: 1, SimulationVersion: SimulationVersion, GeneratorVersion: GeneratorVersion, ConfigID: DefaultConfigID}, config)
+	state, err := CreateRun(Descriptor{RunID: "formation-geometry", Seed: 1, SimulationVersion: CurrencyFormationsSimulationVersion, GeneratorVersion: CurrencyFormationsGeneratorVersion, ConfigID: CurrencyFormationsConfigID}, config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -751,6 +797,464 @@ func TestCurrencyFormationGeometryAndSupportedBounds(t *testing.T) {
 	}
 }
 
+func TestCoinCourseFormationGeometryOnlyAppliesOnScheduledBlocks(t *testing.T) {
+	courseConfig := CoinCourseConfiguration()
+	catalog4Config := CurrencyFormationsConfiguration()
+	seed := uint32(0)
+	for ; seed < 256; seed++ {
+		if isCoinCourseBlock(seed, 2) {
+			break
+		}
+	}
+	if seed == 256 {
+		t.Fatal("no seed schedules the first coin course in block 2")
+	}
+	step := int64(2)
+	makePipe := func(block int64) Pipe {
+		return Pipe{Index: block*4 + step, X: 450000, GapCenter: 280000, StationStep: &step}
+	}
+	radius := int64(7000)
+
+	ordinaryPipe := makePipe(3)
+	if isCoinCourseBlock(seed, ordinaryPipe.Index/4) {
+		t.Fatal("test ordinary block unexpectedly schedules a coin course")
+	}
+	ordinaryCourseConfig := currencyFormationPoints(courseConfig, seed, ordinaryPipe, radius, false, ordinaryPipe.Index)
+	ordinaryCatalog4 := currencyFormationPoints(catalog4Config, seed, ordinaryPipe, radius, false, ordinaryPipe.Index)
+	if fmt.Sprint(ordinaryCourseConfig) != fmt.Sprint(ordinaryCatalog4) {
+		t.Fatalf("ordinary catalog-5 formation differs from catalog 4: course=%v catalog4=%v", ordinaryCourseConfig, ordinaryCatalog4)
+	}
+
+	coursePipe := makePipe(2)
+	if !isCoinCourseBlock(seed, coursePipe.Index/4) {
+		t.Fatal("test course block is not scheduled")
+	}
+	scheduled := currencyFormationPoints(courseConfig, seed, coursePipe, radius, false, coursePipe.Index)
+	wantX := []int64{coursePipe.X + 70000, coursePipe.X + 100000, coursePipe.X + 130000}
+	if len(scheduled) != len(wantX) {
+		t.Fatalf("scheduled course formation has %d members, want %d", len(scheduled), len(wantX))
+	}
+	for index, point := range scheduled {
+		if point[0] != wantX[index] {
+			t.Fatalf("scheduled course member %d x=%d, want %d", index, point[0], wantX[index])
+		}
+	}
+	if fmt.Sprint(scheduled) == fmt.Sprint(currencyFormationPoints(catalog4Config, seed, coursePipe, radius, false, coursePipe.Index)) {
+		t.Fatal("scheduled course formation unexpectedly uses ordinary catalog-4 geometry")
+	}
+}
+
+func TestBonusSegmentCatalogIdentitySchedulingGeometryAndStarOptIn(t *testing.T) {
+	config := BonusSegmentsConfiguration()
+	descriptor := Descriptor{RunID: "bonus-segment", Seed: 32, SimulationVersion: BonusSegmentsSimulationVersion, GeneratorVersion: BonusSegmentsGeneratorVersion, ConfigID: BonusSegmentsConfigID}
+	state, err := CreateRun(descriptor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Config.Wetland == nil || state.Config.Wetland.CatalogVersion != 6 || state.Config.Wetland.StarFormations == nil || *state.Config.Wetland.StarFormations {
+		t.Fatalf("default config = %+v, want catalog-6 single-Star policy", state.Config.Wetland)
+	}
+	if id, err := ConfigIDFor(config); err != nil || id != BonusSegmentsConfigID {
+		t.Fatalf("default identity = %q, err=%v", id, err)
+	}
+
+	seenRecipes := map[bonusSegmentRecipe]bool{}
+	for seed := uint32(0); seed < 512; seed++ {
+		for slot := int64(0); slot < 6; slot++ {
+			first := int64(2) + slot*3
+			selected := 0
+			for block := first; block <= first+1; block++ {
+				if isBonusSegmentBlock(seed, block) {
+					selected++
+					seenRecipes[getBonusSegmentRecipe(seed, block)] = true
+				}
+			}
+			if selected != 1 || isBonusSegmentBlock(seed, first+2) {
+				t.Fatalf("seed=%d slot=%d did not select exactly one block in its first pair", seed, slot)
+			}
+		}
+	}
+	if len(seenRecipes) != 3 {
+		t.Fatalf("seed schedule exercised recipes %v, want all three", seenRecipes)
+	}
+
+	seed := uint32(0)
+	for ; seed < 256; seed++ {
+		if isBonusSegmentBlock(seed, 2) {
+			break
+		}
+	}
+	block := int64(2)
+	start := int64(100000)
+	state.NextPipeIndex = block * 4
+	state.Pipes = []Pipe{}
+	state.NextSpawnPipeIndex = state.NextPipeIndex
+	state.NextPipeX = &start
+	state.Descriptor.Seed = int64(seed)
+	generated, err := GenerateNext(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	course := generated.State.Pipes
+	if len(course) < 4 {
+		t.Fatalf("generated %d stations for course block", len(course))
+	}
+	for _, pipe := range course[:4] {
+		step := *pipe.StationStep
+		family := generated.State.Config.Wetland.Families[0]
+		for _, candidate := range generated.State.Config.Wetland.Families {
+			if candidate.ID == pipe.EncounterFamily {
+				family = candidate
+				break
+			}
+		}
+		original := family.StationSpacing[step]
+		if pipe.EncounterFamily == "steady" && pipe.Index/4 >= 2 {
+			original = generated.State.Config.Wetland.RecoverySpacing
+		}
+		want := scaledClearanceSpacing(original, generated.State.Config.Pipes.Width, 70)
+		if step < 2 {
+			want = scaledClearanceSpacing(original, generated.State.Config.Pipes.Width, 20)
+		} else if step == 2 {
+			want = generated.State.Config.Pipes.Width + bonusSegmentRecovery
+		}
+		if *pipe.StationSpacing != want {
+			t.Fatalf("course station %d spacing=%d want=%d", step, *pipe.StationSpacing, want)
+		}
+	}
+	ordinaryBlock := int64(3)
+	if isBonusSegmentBlock(seed, ordinaryBlock) {
+		ordinaryBlock = 4
+	}
+	ordinaryState := state
+	ordinaryState.NextPipeIndex = ordinaryBlock * 4
+	ordinaryState.NextSpawnPipeIndex = ordinaryState.NextPipeIndex
+	ordinary, err := GenerateNext(ordinaryState)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ordinaryStep2 := ordinary.State.Pipes[2]
+	radius := int64(7000)
+	if points := currencyFormationPoints(config, seed, ordinaryStep2, radius, false, ordinaryStep2.Index); len(points) != 1 {
+		t.Fatalf("ordinary catalog-6 station-2 returned %d coins, want one", len(points))
+	}
+	coursePipe := course[2]
+	points := currencyFormationPoints(config, seed, coursePipe, radius, false, coursePipe.Index)
+	centerX := coursePipe.X + *coursePipe.StationSpacing/2
+	if len(points) != 3 || points[0][0] != centerX-18000 || points[1][0] != centerX+9000 || points[2][0] != centerX+9000 {
+		t.Fatalf("course figure=%v, expected three members centered at %d", points, centerX)
+	}
+
+	starPoints := currencyFormationPoints(config, seed, course[0], radius, true, 0)
+	if len(starPoints) != 1 || starPoints[0][0] != course[0].X+config.Pipes.Width/2 {
+		t.Fatalf("default Star layout = %v, want one in-opening pickup", starPoints)
+	}
+	enabled := true
+	formed := config
+	formed.Wetland = cloneConfig(config).Wetland
+	formed.Wetland.StarFormations = &enabled
+	if err := ValidateConfig(formed); err != nil {
+		t.Fatalf("catalog-6 Star opt-in rejected: %v", err)
+	}
+
+	withoutSchedule := cloneConfig(config)
+	withoutSchedule.StarSchedule = nil
+	disabled := false
+	withoutSchedule.Wetland.StarFormations = &disabled
+	if err := ValidateConfig(withoutSchedule); err != nil {
+		t.Fatalf("catalog-6 explicit Star opt-out without schedule rejected: %v", err)
+	}
+	withoutSchedule.Wetland.StarFormations = &enabled
+	if err := ValidateConfig(withoutSchedule); err == nil {
+		t.Fatal("catalog-6 Star opt-in without schedule accepted")
+	}
+
+	if id, err := ConfigIDFor(formed); err != nil || id == BonusSegmentsConfigID {
+		t.Fatalf("custom Star policy identity=%q, err=%v", id, err)
+	}
+	if points := currencyFormationPoints(formed, seed, course[0], radius, true, 0); len(points) != 5 {
+		t.Fatalf("opt-in Star layout has %d members, want 5", len(points))
+	}
+	old := CoinCourseConfiguration()
+	old.Wetland.StarFormations = &enabled
+	if err := ValidateConfig(old); err == nil {
+		t.Fatal("catalog-5 accepted catalog-6 Star formation option")
+	}
+
+	repeatDescriptor := Descriptor{RunID: "bonus-repeat", Seed: int64(seed), SimulationVersion: BonusSegmentsSimulationVersion, GeneratorVersion: BonusSegmentsGeneratorVersion, ConfigID: BonusSegmentsConfigID}
+	firstCourse, err := CreateRun(repeatDescriptor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	repeatedCourse, err := CreateRun(repeatDescriptor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := CanonicalJSON(firstCourse.Pipes); got != mustCanonicalJSON(t, repeatedCourse.Pipes) {
+		t.Fatal("repeated default run produced different initial pipe geometry")
+	}
+}
+
+func TestBonusSegmentPickupRulesRestoreNormalDropsAndReserveCourseFigure(t *testing.T) {
+	seed := uint32(0)
+	for ; seed < 2048; seed++ {
+		state, err := CreateRun(Descriptor{RunID: "bonus-normal-drop", Seed: int64(seed), SimulationVersion: BonusSegmentsSimulationVersion, GeneratorVersion: BonusSegmentsGeneratorVersion, ConfigID: BonusSegmentsConfigID})
+		if err != nil {
+			t.Fatal(err)
+		}
+		state.Phase = Running
+		result, err := Step(state, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		feathers := 0
+		for _, item := range result.State.Collectibles {
+			if item.TypeID == "FEATHER" {
+				feathers++
+				if item.ID != "collectible-1" || item.Amount != 1 {
+					t.Fatalf("ordinary drop=%+v, want one normal FEATHER pickup", item)
+				}
+			}
+		}
+		if feathers == 1 {
+			break
+		}
+	}
+	if seed == 2048 {
+		t.Fatal("no seed produced an ordinary FEATHER pickup in the first normal block")
+	}
+
+	courseSeed := uint32(0)
+	for ; courseSeed < 256 && !isBonusSegmentBlock(courseSeed, 2); courseSeed++ {
+	}
+	state, err := CreateRun(Descriptor{RunID: "bonus-course-drop", Seed: int64(courseSeed), SimulationVersion: BonusSegmentsSimulationVersion, GeneratorVersion: BonusSegmentsGeneratorVersion, ConfigID: BonusSegmentsConfigID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	state.Pipes = []Pipe{}
+	state.NextPipeIndex, state.NextSpawnPipeIndex = 8, 8
+	start := int64(100000)
+	state.NextPipeX = &start
+	state.LastGapCenter = 280000
+	state.Phase = Running
+	generated, err := GenerateNext(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := Step(generated.State, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	figure := 0
+	for _, item := range result.State.Collectibles {
+		if strings.HasPrefix(item.ID, "bonus-segment-2-") {
+			figure++
+			if item.TypeID != "FEATHER" || item.Amount != 1 {
+				t.Fatalf("course figure member=%+v", item)
+			}
+		}
+	}
+	if figure != 3 {
+		t.Fatalf("scheduled course produced %d figure members, want 3", figure)
+	}
+}
+
+func TestBonusSegmentV2CatalogVectorsAndValidation(t *testing.T) {
+	defaultConfig := BonusSegmentsV2Configuration()
+	if id, err := ConfigIDFor(defaultConfig); err != nil || id != BonusSegmentsV2ConfigID {
+		t.Fatalf("catalog-7 identity=%q err=%v", id, err)
+	}
+	if defaultConfig.Wetland.CatalogVersion != 7 || defaultConfig.Wetland.StarFormations == nil || *defaultConfig.Wetland.StarFormations {
+		t.Fatalf("catalog-7 default=%+v, want default-off Star formations", defaultConfig.Wetland)
+	}
+	if id, err := ConfigIDFor(BonusSegmentsConfiguration()); err != nil || id != BonusSegmentsConfigID {
+		t.Fatalf("catalog-6 frozen identity=%q err=%v", id, err)
+	}
+
+	withoutSchedule := cloneConfig(defaultConfig)
+	withoutSchedule.StarSchedule = nil
+	disabled := false
+	withoutSchedule.Wetland.StarFormations = &disabled
+	if err := ValidateConfig(withoutSchedule); err != nil {
+		t.Fatalf("catalog-7 Star opt-out without schedule rejected: %v", err)
+	}
+	enabled := true
+	withoutSchedule.Wetland.StarFormations = &enabled
+	if err := ValidateConfig(withoutSchedule); err == nil {
+		t.Fatal("catalog-7 Star opt-in without schedule accepted")
+	}
+
+	vectors := []struct {
+		seed    uint32
+		block   int64
+		recipe  string
+		centers [4]int64
+		spacing [4]int64
+	}{
+		{0, 3, "slalom", [4]int64{263974, 223974, 303974, 346348}, [4]int64{82800, 82800, 412000, 206000}},
+		{1, 2, "slalom", [4]int64{294789, 334789, 254789, 289573}, [4]int64{76800, 82800, 412000, 146000}},
+		{2, 3, "descent", [4]int64{265395, 305395, 345395, 338454}, [4]int64{82800, 82800, 412000, 206000}},
+		{19, 2, "descent", [4]int64{299325, 259325, 219325, 197958}, [4]int64{76800, 82800, 412000, 146000}},
+		{31, 3, "ascent", [4]int64{289018, 329018, 369018, 382304}, [4]int64{82800, 82800, 412000, 206000}},
+		{128, 2, "slalom", [4]int64{275782, 235782, 315782, 305790}, [4]int64{76800, 82800, 412000, 146000}},
+	}
+	for _, vector := range vectors {
+		if got := bonusSegmentV2Recipe(vector.seed, vector.block); got != vector.recipe {
+			t.Fatalf("seed=%d block=%d recipe=%s want=%s", vector.seed, vector.block, got, vector.recipe)
+		}
+		descriptor := Descriptor{RunID: "catalog-7-vector", Seed: int64(vector.seed), SimulationVersion: BonusSegmentsV2SimulationVersion, GeneratorVersion: BonusSegmentsV2GeneratorVersion, ConfigID: BonusSegmentsV2ConfigID}
+		state, err := CreateRun(descriptor)
+		if err != nil {
+			t.Fatal(err)
+		}
+		state.Pipes = []Pipe{}
+		state.NextPipeIndex, state.NextSpawnPipeIndex = vector.block*4, vector.block*4
+		start := int64(100000)
+		state.NextPipeX = &start
+		state.LastGapCenter = 280000
+		generated, err := GenerateNext(state)
+		if err != nil {
+			t.Fatalf("seed=%d block=%d: %v", vector.seed, vector.block, err)
+		}
+		if len(generated.State.Pipes) < 4 {
+			t.Fatalf("seed=%d block=%d generated %d stations", vector.seed, vector.block, len(generated.State.Pipes))
+		}
+		for station, pipe := range generated.State.Pipes[:4] {
+			if pipe.GapCenter != vector.centers[station] || pipe.StationSpacing == nil || *pipe.StationSpacing != vector.spacing[station] {
+				t.Fatalf("seed=%d block=%d station=%d center/spacing=%d/%v want=%d/%d", vector.seed, vector.block, station, pipe.GapCenter, pipe.StationSpacing, vector.centers[station], vector.spacing[station])
+			}
+		}
+	}
+
+	// Ordinary post-intro centers use an indexed hash, so generation can be
+	// repeated or resumed without consuming mutable RNG state.
+	ordinaryBlock := int64(2)
+	for isBonusSegmentBlock(77, ordinaryBlock) {
+		ordinaryBlock++
+	}
+	ordinaryCenters := make(map[int64]bool)
+	for seed := uint32(1); seed <= 64; seed++ {
+		state, err := CreateRun(Descriptor{RunID: "ordinary-center", Seed: int64(seed), SimulationVersion: BonusSegmentsV2SimulationVersion, GeneratorVersion: BonusSegmentsV2GeneratorVersion, ConfigID: BonusSegmentsV2ConfigID})
+		if err != nil {
+			t.Fatal(err)
+		}
+		previous := int64(280000)
+		first := bonusSegmentV2OrdinaryCenter(seed, ordinaryBlock*4, previous, state.Config)
+		repeated := bonusSegmentV2OrdinaryCenter(seed, ordinaryBlock*4, previous, state.Config)
+		if first != repeated || first < previous-45000 || first > previous+45000 {
+			t.Fatalf("seed=%d ordinary center=%d repeated=%d outside +/-45k", seed, first, repeated)
+		}
+		ordinaryCenters[first] = true
+	}
+	if len(ordinaryCenters) < 50 {
+		t.Fatalf("ordinary center hash produced only %d distinct centers across 64 seeds", len(ordinaryCenters))
+	}
+
+	courseSeed := uint32(0)
+	for ; courseSeed < 1024 && !isBonusSegmentBlock(courseSeed, 2); courseSeed++ {
+	}
+	if courseSeed == 1024 {
+		t.Fatal("no seed scheduled a bonus segment in block 2")
+	}
+	courseConfig := BonusSegmentsV2Configuration()
+	stationStep := int64(2)
+	stationSpacing := courseConfig.Pipes.Width + bonusSegmentRecovery
+	coursePipe := Pipe{Index: 2*4 + 2, X: 100000, GapCenter: 280000, StationStep: &stationStep, StationSpacing: &stationSpacing}
+	courseFigure := currencyFormationPoints(courseConfig, courseSeed, coursePipe, 7000, false, coursePipe.Index)
+	if len(courseFigure) != 3 {
+		t.Fatalf("scheduled catalog-7 course layout has %d coins, want 3", len(courseFigure))
+	}
+	ordinaryPipe := coursePipe
+	ordinaryPipe.Index = 3*4 + 2
+	ordinaryFigure := currencyFormationPoints(courseConfig, courseSeed, ordinaryPipe, 7000, false, ordinaryPipe.Index)
+	if len(ordinaryFigure) != 1 {
+		t.Fatalf("ordinary catalog-7 station-2 layout has %d coins, want one", len(ordinaryFigure))
+	}
+	star := currencyFormationPoints(courseConfig, courseSeed, coursePipe, 4000, true, coursePipe.Index)
+	if len(star) != 1 {
+		t.Fatalf("catalog-7 default Star layout has %d members, want one", len(star))
+	}
+}
+
+func TestBonusSegmentV2RequiresFullRouteGeometry(t *testing.T) {
+	minimumRange := BonusSegmentsV2Configuration()
+	minimumRange.Pipes.GapMinCenter, minimumRange.Pipes.GapMaxCenter = 240000, 320000
+	minimumRange.Pipes.MaxGapDelta = 80000
+	for familyIndex := range minimumRange.Wetland.Families {
+		minimumRange.Wetland.Families[familyIndex].GapCenters = []int64{280000, 280000, 280000, 280000}
+	}
+	if err := ValidateConfig(minimumRange); err != nil {
+		t.Fatalf("catalog-7 80k route bounds rejected: %v", err)
+	}
+	configID, err := ConfigIDFor(minimumRange)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, err := CreateRun(Descriptor{RunID: "catalog-seven-boundary-route", Seed: 0, SimulationVersion: BonusSegmentsV2SimulationVersion,
+		GeneratorVersion: BonusSegmentsV2GeneratorVersion, ConfigID: configID}, minimumRange)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state.Pipes = []Pipe{}
+	state.NextPipeIndex, state.NextSpawnPipeIndex = 12, 12
+	start := int64(100000)
+	state.NextPipeX = &start
+	state.LastGapCenter = 280000
+	generated, err := GenerateNext(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	centers := []int64{generated.State.Pipes[0].GapCenter, generated.State.Pipes[1].GapCenter, generated.State.Pipes[2].GapCenter}
+	if max64(centers[0], max64(centers[1], centers[2]))-min64(centers[0], min64(centers[1], centers[2])) != 80000 || abs(centers[2]-centers[1]) != 80000 {
+		t.Fatalf("catalog-7 route was flattened at the 80k boundary: %v", centers)
+	}
+
+	tooSmallDelta := cloneConfig(minimumRange)
+	tooSmallDelta.Pipes.MaxGapDelta = 70000
+	if err := ValidateConfig(tooSmallDelta); err == nil {
+		t.Fatal("catalog-7 accepted maxGapDelta below the 80k slalom transition")
+	}
+	tooSmallRange := cloneConfig(minimumRange)
+	tooSmallRange.Pipes.GapMaxCenter = 319999
+	if err := ValidateConfig(tooSmallRange); err == nil {
+		t.Fatal("catalog-7 accepted a world gap-center range below 80k")
+	}
+}
+
+func TestCatalogSixRecoverySpacingMatchesTypeScript(t *testing.T) {
+	state, err := CreateRun(Descriptor{RunID: "catalog-six-recovery", Seed: 1, SimulationVersion: BonusSegmentsSimulationVersion,
+		GeneratorVersion: BonusSegmentsGeneratorVersion, ConfigID: BonusSegmentsConfigID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	state.Pipes = []Pipe{}
+	state.NextPipeIndex, state.NextSpawnPipeIndex = 12, 12
+	start := int64(100000)
+	state.NextPipeX = &start
+	state.LastGapCenter = 280000
+	generated, err := GenerateNext(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(generated.State.Pipes) < 4 {
+		t.Fatalf("generated %d recovery stations, want 4", len(generated.State.Pipes))
+	}
+	for index, pipe := range generated.State.Pipes[:4] {
+		if pipe.EncounterFamily != "steady" || pipe.StationSpacing == nil || *pipe.StationSpacing != 267600 {
+			t.Fatalf("station %d recovery family/spacing=%s/%v, want steady/267600", index, pipe.EncounterFamily, pipe.StationSpacing)
+		}
+	}
+}
+
+func mustCanonicalJSON(t *testing.T, value any) string {
+	t.Helper()
+	result, err := CanonicalJSON(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return result
+}
+
 func TestCurrencyFormationRejectsNeighborPipeClearanceRegression(t *testing.T) {
 	config := CurrencyFormationsConfiguration()
 	config.Pipes.Width = 140000
@@ -786,14 +1290,14 @@ func TestCurrencyFormationRejectsNeighborPipeClearanceRegression(t *testing.T) {
 }
 
 func TestPairedRoutesScoringFatalOrderingAndRetention(t *testing.T) {
-	config := DefaultConfiguration()
+	config := CurrencyFormationsConfiguration()
 	config.Pipes.Width = 100000
 	config.Pipes.Horizon = 600000
 	id, err := ConfigIDFor(config)
 	if err != nil {
 		t.Fatal(err)
 	}
-	state, err := CreateRun(Descriptor{RunID: "paired-retention", Seed: 8, SimulationVersion: SimulationVersion, GeneratorVersion: GeneratorVersion, ConfigID: id}, config)
+	state, err := CreateRun(Descriptor{RunID: "paired-retention", Seed: 8, SimulationVersion: CurrencyFormationsSimulationVersion, GeneratorVersion: CurrencyFormationsGeneratorVersion, ConfigID: id}, config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1035,5 +1539,260 @@ func TestFixtureHarnessComparesEventsToRawJSON(t *testing.T) {
 	}
 	if err := VerifyFoundationFixtures(path); err == nil {
 		t.Fatal("harness accepted RunEnded fixture missing required totals")
+	}
+}
+
+func TestVariedPipesSharedVectors(t *testing.T) {
+	data, err := os.ReadFile("../../../contracts/simulation/varied-pipes-v1.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture struct {
+		Cases []struct {
+			Seed     int64   `json:"seed"`
+			Block    int64   `json:"block"`
+			Centers  []int64 `json:"centers"`
+			Spacings []int64 `json:"spacings"`
+		} `json:"cases"`
+	}
+	if err := json.Unmarshal(data, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	for _, v := range fixture.Cases {
+		s, err := CreateRun(Descriptor{RunID: "vector", Seed: v.Seed, SimulationVersion: VariedPipesSimulationVersion, GeneratorVersion: VariedPipesGeneratorVersion, ConfigID: VariedPipesConfigID})
+		if err != nil {
+			t.Fatal(err)
+		}
+		x := int64(100000)
+		s.Pipes = nil
+		s.NextPipeIndex = v.Block * 4
+		s.NextPipeX = &x
+		s.LastGapCenter = 280000
+		result, err := GenerateNext(s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i, p := range result.State.Pipes[:4] {
+			if p.GapCenter != v.Centers[i] || *p.StationSpacing != v.Spacings[i] {
+				t.Fatalf("seed %d block %d station %d: got %d/%d want %d/%d", v.Seed, v.Block, i, p.GapCenter, *p.StationSpacing, v.Centers[i], v.Spacings[i])
+			}
+		}
+	}
+}
+
+func TestPressurePipesSharedVectors(t *testing.T) {
+	data, err := os.ReadFile("../../../contracts/simulation/pressure-pipes-v1.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture struct {
+		Cases []struct {
+			Seed     int64   `json:"seed"`
+			Block    int64   `json:"block"`
+			Centers  []int64 `json:"centers"`
+			Spacings []int64 `json:"spacings"`
+		} `json:"cases"`
+	}
+	if err := json.Unmarshal(data, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	for _, v := range fixture.Cases {
+		s, err := CreateRun(Descriptor{RunID: "vector", Seed: v.Seed, SimulationVersion: PressurePipesSimulationVersion, GeneratorVersion: PressurePipesGeneratorVersion, ConfigID: PressurePipesConfigID})
+		if err != nil {
+			t.Fatal(err)
+		}
+		x := int64(100000)
+		s.Pipes = nil
+		s.NextPipeIndex = v.Block * 4
+		s.NextPipeX = &x
+		s.LastGapCenter = 280000
+		result, err := GenerateNext(s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i, p := range result.State.Pipes[:4] {
+			if p.GapCenter != v.Centers[i] || *p.StationSpacing != v.Spacings[i] {
+				t.Fatalf("seed %d block %d station %d: got %d/%d want %d/%d", v.Seed, v.Block, i, p.GapCenter, *p.StationSpacing, v.Centers[i], v.Spacings[i])
+			}
+		}
+	}
+}
+
+func TestPressurePipesFullStateReplay(t *testing.T) {
+	if err := VerifyWetlandFixtures("../../../contracts/simulation/pressure-pipes-replay-v1.json"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestDensePipesSharedVectors(t *testing.T) {
+	data, err := os.ReadFile("../../../contracts/simulation/dense-pipes-v1.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture struct {
+		Cases []struct {
+			Seed     int64   `json:"seed"`
+			Block    int64   `json:"block"`
+			Centers  []int64 `json:"centers"`
+			Spacings []int64 `json:"spacings"`
+		} `json:"cases"`
+	}
+	if err := json.Unmarshal(data, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	for _, v := range fixture.Cases {
+		s, err := CreateRun(Descriptor{RunID: "vector", Seed: v.Seed, SimulationVersion: DensePipesSimulationVersion, GeneratorVersion: DensePipesGeneratorVersion, ConfigID: DensePipesConfigID})
+		if err != nil {
+			t.Fatal(err)
+		}
+		x := int64(100000)
+		s.Pipes = nil
+		s.NextPipeIndex = v.Block * 4
+		s.NextPipeX = &x
+		s.LastGapCenter = 280000
+		result, err := GenerateNext(s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i, p := range result.State.Pipes[:4] {
+			if p.GapCenter != v.Centers[i] || *p.StationSpacing != v.Spacings[i] {
+				t.Fatalf("seed %d block %d station %d: got %d/%d want %d/%d", v.Seed, v.Block, i, p.GapCenter, *p.StationSpacing, v.Centers[i], v.Spacings[i])
+			}
+		}
+	}
+}
+func TestDensePipesFullStateReplay(t *testing.T) {
+	if err := VerifyWetlandFixtures("../../../contracts/simulation/dense-pipes-replay-v1.json"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestDensePipesCapacityBounds(t *testing.T) {
+	config := DensePipesConfiguration()
+	if err := ValidateConfig(config); err != nil {
+		t.Fatal(err)
+	}
+	config.Limits.MaxActivePipes = 17
+	if err := ValidateConfig(config); err == nil {
+		t.Fatal("insufficient pipe horizon capacity accepted")
+	}
+	config = DensePipesConfiguration()
+	config.StarSchedule.MinIntervalPipes = 15
+	if err := ValidateConfig(config); err == nil {
+		t.Fatal("insufficient Star spacing accepted")
+	}
+	config = DensePipesConfiguration()
+	config.Limits.MaxActiveCollectibles = 21
+	if err := ValidateConfig(config); err == nil {
+		t.Fatal("insufficient pickup capacity accepted")
+	}
+}
+
+func TestBaseBonusSharedVectors(t *testing.T) {
+	data, err := os.ReadFile("../../../contracts/simulation/base-bonus-v1.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture struct {
+		Cases []struct {
+			Seed     int64   `json:"seed"`
+			Block    int64   `json:"block"`
+			Centers  []int64 `json:"centers"`
+			Spacings []int64 `json:"spacings"`
+		} `json:"cases"`
+	}
+	if err := json.Unmarshal(data, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	for _, v := range fixture.Cases {
+		s, err := CreateRun(Descriptor{RunID: "vector", Seed: v.Seed, SimulationVersion: BaseBonusSimulationVersion, GeneratorVersion: BaseBonusGeneratorVersion, ConfigID: BaseBonusConfigID})
+		if err != nil {
+			t.Fatal(err)
+		}
+		x := int64(100000)
+		s.Pipes = nil
+		s.NextPipeIndex = v.Block * 4
+		s.NextPipeX = &x
+		s.LastGapCenter = 280000
+		result, err := GenerateNext(s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i, p := range result.State.Pipes[:4] {
+			if p.GapCenter != v.Centers[i] || *p.StationSpacing != v.Spacings[i] {
+				t.Fatalf("seed %d block %d station %d: got %d/%d want %d/%d", v.Seed, v.Block, i, p.GapCenter, *p.StationSpacing, v.Centers[i], v.Spacings[i])
+			}
+		}
+	}
+}
+func TestBaseBonusFullStateReplay(t *testing.T) {
+	if err := VerifyWetlandFixtures("../../../contracts/simulation/base-bonus-replay-v1.json"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestVariedBaseSharedVectors(t *testing.T) {
+	data, err := os.ReadFile("../../../contracts/simulation/varied-base-v1.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture struct {
+		Cases []struct {
+			Seed     int64   `json:"seed"`
+			Block    int64   `json:"block"`
+			Centers  []int64 `json:"centers"`
+			Spacings []int64 `json:"spacings"`
+		} `json:"cases"`
+	}
+	if err := json.Unmarshal(data, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	for _, v := range fixture.Cases {
+		s, err := CreateRun(Descriptor{RunID: "vector", Seed: v.Seed, SimulationVersion: SimulationVersion, GeneratorVersion: GeneratorVersion, ConfigID: DefaultConfigID})
+		if err != nil {
+			t.Fatal(err)
+		}
+		x := int64(100000)
+		s.Pipes = nil
+		s.NextPipeIndex = v.Block * 4
+		s.NextPipeX = &x
+		s.LastGapCenter = 280000
+		result, err := GenerateNext(s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i, p := range result.State.Pipes[:4] {
+			if p.GapCenter != v.Centers[i] || *p.StationSpacing != v.Spacings[i] {
+				t.Fatalf("seed %d block %d station %d: got %d/%d want %d/%d", v.Seed, v.Block, i, p.GapCenter, *p.StationSpacing, v.Centers[i], v.Spacings[i])
+			}
+		}
+	}
+}
+func TestVariedBaseFullStateReplay(t *testing.T) {
+	if err := VerifyWetlandFixtures("../../../contracts/simulation/varied-base-replay-v1.json"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestVariedBaseNarrowBounds(t *testing.T) {
+	c := VariedBaseConfiguration()
+	c.Pipes.GapMinCenter, c.Pipes.GapMaxCenter, c.Pipes.MaxGapDelta = 240000, 320000, 80000
+	for i := range c.Wetland.Families {
+		c.Wetland.Families[i].GapCenters = []int64{280000, 280000, 280000, 280000}
+	}
+	if err := ValidateConfig(c); err != nil {
+		t.Fatal(err)
+	}
+	for seed := uint32(0); seed < 64; seed++ {
+		for _, entry := range []int64{240000, 280000, 320000} {
+			previous := entry
+			for index := int64(8); index < 12; index++ {
+				center := irregularBaseCenter(seed, index, previous, c)
+				if center < c.Pipes.GapMinCenter || center > c.Pipes.GapMaxCenter || abs(center-previous) < 30000 || abs(center-previous) > c.Pipes.MaxGapDelta {
+					t.Fatalf("seed %d index %d previous %d center %d", seed, index, previous, center)
+				}
+				previous = center
+			}
+		}
 	}
 }

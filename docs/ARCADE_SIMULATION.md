@@ -4,10 +4,45 @@ The deterministic game runs independently in TypeScript and Go. The modules expo
 
 ## Wetland rules
 
-The current currency-formations default is simulation `2.3.0`, generator
-`2.3.0`, configuration `dd-v2-currency-formations-v1`, encounter catalog 4.
-Core issues this identity for new runs. The prior paired-route rules remain
-frozen at simulation/generator `2.2.0`, configuration
+The current varied-base default is simulation/generator `3.1.0`,
+configuration `dd-v3-varied-base-v1`, encounter catalog 12. Core issues this
+identity for new runs. Ordinary pipes use fixed 126,400-unit center spacing.
+Their gap centers move a seeded 30,000–70,000 units in either direction from
+the previous center. If a move crosses a configured center bound, it reverses;
+the initial gap retains the prior safe bound of ±35,000 from the configured
+range midpoint. Catalog 11's bonus schedule, bonus gate spacing and coin
+figure placement are unchanged. A seeded hard bonus
+pattern first appears at block 6, 7 or 8 (pipes 24, 28 or
+32), then repeats every seven blocks. It uses one of three recipes—shallow
+ascent, descent or slalom—with seeded mirroring, yielding four realized shapes.
+The first two bonus gates are spaced 66,880 units apart, followed by 268,000
+units to a three-FEATHER figure reward in the pipe-free interval after gate
+three. Base spacing resumes afterward. Normal FEATHER pickups and the existing
+Star schedule remain enabled. Catalog 11 remains separately resolvable for
+issued runs at `3.0.0` / `dd-v3-base-bonus-v1`.
+
+Catalog 11 uses simulation/generator `3.0.0`, configuration
+`dd-v3-base-bonus-v1`, encounter catalog 11. Its spacing and seeded ±45,000-unit
+gap-center walk remain frozen for issued runs.
+
+Catalog 10 uses simulation/generator `2.9.0`,
+configuration `dd-v2-dense-pipes-v1`, encounter catalog 10. Core issues this
+identity for its issued runs. It retains catalog 9's intro, recovery and bonus-segment
+behavior. Ordinary pressure pipes alternate seeded gap-center moves of 60–80
+pixels; when a move would cross a configured gap-center bound, it reflects in
+the opposite direction. Move magnitude is capped by the configured maximum
+gap delta. Dense pipes scales authored edge clearance to 60% on every station,
+including ordinary, bonus-segment and recovery stations. Its default supports
+18 active pipes and schedules a Star exactly every 16 pipes. Catalog 9 remains
+separately resolvable for issued runs at `2.8.0` / `dd-v2-pressure-pipes-v1`.
+Catalog 8 remains separately resolvable for issued runs at
+`2.7.0` / `dd-v2-varied-pipes-v1`. Catalog 7 remains separately resolvable for issued runs at
+`2.6.0` / `dd-v2-bonus-segments-v2`. Catalog 6 remains separately resolvable for issued runs
+at `2.5.0` / `dd-v2-bonus-segments-v1`. Coin-course rules remain separately
+resolvable for issued runs at `2.4.0` / `dd-v2-coin-course-v1`, catalog 5;
+currency formations remain
+separately resolvable at `2.3.0` / `dd-v2-currency-formations-v1`, catalog 4.
+The prior paired-route rules remain frozen at simulation/generator `2.2.0`, configuration
 `dd-v2-paired-routes-v1`, encounter catalog 3. Existing runs retain their issued
 identity, including frozen `2.1.0` / `2.1.0` / `dd-v2-varied-obstacles-v1`,
 `2.0.0` / `2.0.0` / `dd-v2-wetland-v1` and earlier rules. See
@@ -29,6 +64,54 @@ orientation and inside/outside pipe placement vary between routes. The runtime
 capacity is 29 active individual pickups, covering eight active stations with
 three coins each plus one five-member Star formation. Wallet payout and the
 30-FEATHER run cap are unchanged.
+
+Catalog 5 retains catalog-4 formations and adds occasional required coin-course
+blocks selected deterministically by seed and block. Each course has three
+paired gates at 180-pixel spacing, then a 360-pixel recovery gap; its third gate
+station carries a three-member FEATHER formation. Ordinary trails are suppressed
+within that course block, while normal coin formations continue elsewhere.
+Courses use the shared deterministic integer simulation, existing collision
+rectangles and per-coin collection path: only touched coins pay. Death and
+scoring rules are unchanged. The independent Star schedule, placement, rewards
+and physics are unchanged.
+
+Catalog 6 (simulation/generator `2.5.0`, config
+`dd-v2-bonus-segments-v1`) schedules occasional seeded bonus segments: within each three-block
+slot starting at block 2, the seed selects one of its first two blocks. Each
+segment uses one of three three-gate patterns: shallow ascent, shallow descent
+or shallow slalom. Normal station spacing retains 70% of the authored
+edge-to-edge pipe margin; the hard three-gate segment retains 20%. These
+percentages apply to the clear margin after subtracting pipe width, not to
+center-to-center spacing.
+The three compact gates are followed by a recovery interval with 360 pixels of
+clearance. A three-coin figure reward sits in the pipe-free interval after the
+third gate. Regular coin and Star pickups remain single pickups. Star formations
+are disabled in the default config and can be enabled by config opt-in; the
+seeded Star schedule remains active at 12–16 pipes. Existing catalog-4 currency
+formations and catalog-5 coin courses keep their own identities and rules for
+issued runs.
+
+Catalog 7 keeps the catalog-6 occasional seeded segment schedule, recovery and
+three-coin figure reward, while tightening spacing: ordinary stations retain
+50% of authored edge-to-edge pipe margin and hard three-gate segments retain
+10%. As in catalog 6, the percentage applies to clear space after subtracting
+pipe width. Relative to the seeded anchor, gate-center offsets are ascent
+`[0, -40, -80]`, descent `[0, 40, 80]`, or slalom `[0, 40, -40]` pixels;
+seed mirroring flips their signs. These routes span 80 pixels. Outside
+scheduled segments, gap centers after the two introductory blocks wander
+deterministically within 45 pixels of the previous center, clipped to the
+configured gap-center bounds. Configured maximum gap delta also bounds each
+
+Catalog 8 retains catalog 7's segment schedule, rewards, spacing and Star
+behavior. Outside scheduled segments and the introductory blocks, seeded gap
+centers may vary by up to 75 pixels on pressure steps and 35 pixels on steady
+recovery steps. Each step is clipped to configured gap-center bounds and the
+configured maximum gap delta.
+
+The catalog-7 default Star schedule is every 14–16 pipes. Star formations remain
+off by default and require config opt-in; ordinary Star and FEATHER rewards are single
+pickups. Catalog 6 and earlier versions retain their issued identities and
+behavior.
 
 Frozen catalogs 1 and 2 combine paired pipes, ceiling vines, floor rocks/reeds and
 floating debris in four-station encounters. Each station supplies authoritative collision rectangles,
@@ -104,8 +187,8 @@ incompatible selectable family boundaries before play starts. Thus validated
 challenge centers retain their authored shape; the bounds clamp still protects
 the gap-only path. The legacy catalog above does not select these new families.
 
-Descriptor validation accepts the paired, varied, wetland, prior and legacy
-simulation/generator versions. Each default config ID is bound to its matching version pair; custom
+Descriptor validation accepts the wetland catalog-3 through catalog-8, prior,
+and legacy simulation/generator versions. Each default config ID is bound to its matching version pair; custom
 configuration IDs carry canonical configuration content. A legacy descriptor
 without an explicit config resolves to the legacy default, whose serialized state
 omits Star schedule fields so replay remains unchanged.
