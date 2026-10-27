@@ -142,7 +142,25 @@ def test_settlement_policies_keep_legacy_stars_out_and_credit_new_stars_without_
     varied_obstacle_identity = ("2.1.0", "2.1.0", "dd-v2-varied-obstacles-v1")
     paired_routes_identity = ("2.2.0", "2.2.0", "dd-v2-paired-routes-v1")
     currency_formations_identity = ("2.3.0", "2.3.0", "dd-v2-currency-formations-v1")
+    coin_course_identity = ("2.4.0", "2.4.0", "dd-v2-coin-course-v1")
+    bonus_segments_identity = ("2.5.0", "2.5.0", "dd-v2-bonus-segments-v1")
+    bonus_segments_v2_identity = ("2.6.0", "2.6.0", "dd-v2-bonus-segments-v2")
 
+    assert settlement_rewards(
+        ("3.1.0", "3.1.0", "dd-v3-varied-base-v1"), feathers=40, game_stars=900, feathers_remaining=30
+    ) == (30, 900)
+    assert settlement_rewards(
+        ("3.0.0", "3.0.0", "dd-v3-base-bonus-v1"), feathers=40, game_stars=900, feathers_remaining=30
+    ) == (30, 900)
+    assert settlement_rewards(
+        ("2.9.0", "2.9.0", "dd-v2-dense-pipes-v1"), feathers=40, game_stars=900, feathers_remaining=30
+    ) == (30, 900)
+    assert settlement_rewards(
+        ("2.8.0", "2.8.0", "dd-v2-pressure-pipes-v1"), feathers=40, game_stars=900, feathers_remaining=30
+    ) == (30, 900)
+    assert settlement_rewards(
+        ("2.7.0", "2.7.0", "dd-v2-varied-pipes-v1"), feathers=40, game_stars=900, feathers_remaining=30
+    ) == (30, 900)
     assert settlement_rewards(legacy_identity, feathers=20, game_stars=9, feathers_remaining=10) == (10, 0)
     assert settlement_rewards(star_identity, feathers=20, game_stars=9, feathers_remaining=10) == (10, 9)
     assert settlement_rewards(star_identity, feathers=20, game_stars=700, feathers_remaining=0) == (0, 700)
@@ -153,7 +171,22 @@ def test_settlement_policies_keep_legacy_stars_out_and_credit_new_stars_without_
     assert settlement_rewards(wetland_identity, feathers=40, game_stars=900, feathers_remaining=30) == (30, 900)
     assert settlement_rewards(varied_obstacle_identity, feathers=40, game_stars=900, feathers_remaining=30) == (30, 900)
     assert settlement_rewards(paired_routes_identity, feathers=40, game_stars=900, feathers_remaining=30) == (30, 900)
-    assert settlement_rewards(currency_formations_identity, feathers=40, game_stars=900, feathers_remaining=30) == (30, 900)
+    assert settlement_rewards(currency_formations_identity, feathers=40, game_stars=900, feathers_remaining=30) == (
+        30,
+        900,
+    )
+    assert settlement_rewards(coin_course_identity, feathers=40, game_stars=900, feathers_remaining=30) == (30, 900)
+    assert settlement_rewards(bonus_segments_identity, feathers=40, game_stars=900, feathers_remaining=30) == (
+        30,
+        900,
+    )
+    assert settlement_rewards(bonus_segments_v2_identity, feathers=40, game_stars=900, feathers_remaining=30) == (
+        30,
+        900,
+    )
+    assert historical_coin_reward(coin_course_identity, 40, 30) is None
+    assert historical_coin_reward(bonus_segments_identity, 40, 30) is None
+    assert historical_coin_reward(bonus_segments_v2_identity, 40, 30) is None
     assert historical_coin_reward(varied_obstacle_identity, 40, 30) is None
     assert historical_coin_reward(paired_routes_identity, 40, 30) is None
     assert historical_coin_reward(currency_formations_identity, 40, 30) is None
@@ -187,6 +220,113 @@ def test_settlement_policies_keep_legacy_stars_out_and_credit_new_stars_without_
         settlement_rewards(("2.2.0", "2.2.0", "dd-v1-config:custom"), feathers=4, game_stars=2, feathers_remaining=30)
         is None
     )
+
+
+def test_coin_course_contract_identity_has_live_settlement_policy():
+    import json
+    from pathlib import Path
+
+    from jsonschema import Draft202012Validator
+
+    from app.economy.settlement import (
+        COIN_COURSE_POLICY_VERSION,
+        COIN_COURSE_SIMULATION_IDENTITY,
+        CURRENCY_FORMATIONS_POLICY_VERSION,
+        CURRENCY_FORMATIONS_SIMULATION_IDENTITY,
+        SUPPORTED_SIMULATION_IDENTITIES,
+    )
+
+    repository_root = Path(__file__).resolve().parents[3]
+    fixture = json.loads((repository_root / "contracts/simulation/coin-course-v1.json").read_text())
+    descriptor = {
+        "runId": "coin-course-contract-test",
+        "seed": 44,
+        "simulationVersion": fixture["simulationVersion"],
+        "generatorVersion": fixture["generatorVersion"],
+        "configId": fixture["configId"],
+    }
+    schema = json.loads((repository_root / "contracts/simulation/run-descriptor.schema.json").read_text())
+    Draft202012Validator(schema).validate(descriptor)
+
+    assert (
+        fixture["simulationVersion"],
+        fixture["generatorVersion"],
+        fixture["configId"],
+    ) == COIN_COURSE_SIMULATION_IDENTITY
+    assert SUPPORTED_SIMULATION_IDENTITIES[COIN_COURSE_SIMULATION_IDENTITY] == COIN_COURSE_POLICY_VERSION
+    assert (
+        SUPPORTED_SIMULATION_IDENTITIES[CURRENCY_FORMATIONS_SIMULATION_IDENTITY] == CURRENCY_FORMATIONS_POLICY_VERSION
+    )
+
+
+def test_bonus_segments_contract_identity_has_live_settlement_policy():
+    import json
+    from pathlib import Path
+
+    from jsonschema import Draft202012Validator
+
+    from app.economy.settlement import (
+        BONUS_SEGMENTS_POLICY_VERSION,
+        BONUS_SEGMENTS_SIMULATION_IDENTITY,
+        COIN_COURSE_POLICY_VERSION,
+        COIN_COURSE_SIMULATION_IDENTITY,
+        SUPPORTED_SIMULATION_IDENTITIES,
+    )
+
+    repository_root = Path(__file__).resolve().parents[3]
+    fixture = json.loads((repository_root / "contracts/simulation/bonus-segments-v1.json").read_text())
+    descriptor = {
+        "runId": "bonus-segments-contract-test",
+        "seed": 45,
+        "simulationVersion": fixture["simulationVersion"],
+        "generatorVersion": fixture["generatorVersion"],
+        "configId": fixture["configId"],
+    }
+    schema = json.loads((repository_root / "contracts/simulation/run-descriptor.schema.json").read_text())
+    Draft202012Validator(schema).validate(descriptor)
+
+    assert (
+        fixture["simulationVersion"],
+        fixture["generatorVersion"],
+        fixture["configId"],
+    ) == BONUS_SEGMENTS_SIMULATION_IDENTITY
+    assert SUPPORTED_SIMULATION_IDENTITIES[BONUS_SEGMENTS_SIMULATION_IDENTITY] == BONUS_SEGMENTS_POLICY_VERSION
+    assert SUPPORTED_SIMULATION_IDENTITIES[COIN_COURSE_SIMULATION_IDENTITY] == COIN_COURSE_POLICY_VERSION
+
+
+def test_bonus_segments_v2_contract_identity_has_live_settlement_policy():
+    import json
+    from pathlib import Path
+
+    from jsonschema import Draft202012Validator
+
+    from app.economy.settlement import (
+        BONUS_SEGMENTS_POLICY_VERSION,
+        BONUS_SEGMENTS_SIMULATION_IDENTITY,
+        BONUS_SEGMENTS_V2_POLICY_VERSION,
+        BONUS_SEGMENTS_V2_SIMULATION_IDENTITY,
+        SUPPORTED_SIMULATION_IDENTITIES,
+    )
+
+    repository_root = Path(__file__).resolve().parents[3]
+    fixture = json.loads((repository_root / "contracts/simulation/bonus-segments-v2.json").read_text())
+    descriptor = {
+        "runId": "bonus-segments-v2-contract-test",
+        "seed": 45,
+        "simulationVersion": fixture["simulationVersion"],
+        "generatorVersion": fixture["generatorVersion"],
+        "configId": fixture["configId"],
+    }
+    schema = json.loads((repository_root / "contracts/simulation/run-descriptor.schema.json").read_text())
+    Draft202012Validator(schema).validate(descriptor)
+
+    assert (
+        fixture["simulationVersion"],
+        fixture["generatorVersion"],
+        fixture["configId"],
+    ) == BONUS_SEGMENTS_V2_SIMULATION_IDENTITY
+    assert SUPPORTED_SIMULATION_IDENTITIES[BONUS_SEGMENTS_V2_SIMULATION_IDENTITY] == BONUS_SEGMENTS_V2_POLICY_VERSION
+    assert SUPPORTED_SIMULATION_IDENTITIES[BONUS_SEGMENTS_SIMULATION_IDENTITY] == BONUS_SEGMENTS_POLICY_VERSION
 
 
 def test_wallet_audit_cli_parser_supports_bounded_read_only_pages():

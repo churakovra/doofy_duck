@@ -1,10 +1,13 @@
 # Wetland challenges
 
-Status: current new runs use catalog-4 currency formations. Simulation/generator
-`2.3.0` use configuration `dd-v2-currency-formations-v1`; catalog-3 paired
-routes remain frozen at `2.2.0` / `dd-v2-paired-routes-v1`. Both use paired-pipe
-gameplay, varied spacing and authored coin/Star routes. Local gameplay
-acceptance remains open.
+Status: current new runs use catalog-7 bonus segments v2. Simulation/generator
+`2.6.0` use configuration `dd-v2-bonus-segments-v2`. Catalog-6 bonus segments
+remain separately resolvable for issued runs at `2.5.0` /
+`dd-v2-bonus-segments-v1`; catalog-5 coin courses remain separately resolvable at `2.4.0` /
+`dd-v2-coin-course-v1`; catalog-4 currency formations remain separately
+resolvable at `2.3.0` /
+`dd-v2-currency-formations-v1`; catalog-3 paired routes remain frozen at
+`2.2.0` / `dd-v2-paired-routes-v1`. Local gameplay acceptance remains open.
 
 The mixed obstacle implementations remain in the codebase under their frozen
 `2.1.0` and `2.0.0` identities. Existing flights retain their issued rules. The
@@ -22,7 +25,7 @@ obstacles to new-run issuance.
 ## Paired-route target
 
 The frozen catalog-3 paired identity remains replayable for existing runs.
-New-run behavior is described below under currency formations.
+Current new-run behavior is described below under bonus segments v2.
 
 Catalog 3 restores all four stations in every family to paired pipes. It retains
 the original wetland authored gap centers, the 156-pixel opening and
@@ -46,7 +49,22 @@ Previously issued paired runs use policy
 credit and existing Star rules. All older supported policies remain eligible.
 The catalog-3 paired fixtures remain byte-frozen.
 
-## Currency formations
+## Coin courses (catalog 5, issued runs)
+
+Catalog 5 schedules occasional required coin courses deterministically by run
+seed and course block. Each course has three paired gates spaced 180 pixels
+apart, followed by a 360-pixel recovery gap. A three-member FEATHER formation
+appears at the third gate station. Ordinary coin trails are suppressed within
+that course block; normal currency formations continue elsewhere.
+
+Gate geometry, rewards and collision use the existing deterministic shared
+integer TypeScript/Go simulation and collision rectangles. Only touched coins
+are collected and paid. Death and scoring rules are unchanged. The independent
+Star schedule, placement, rewards and physics are unchanged. The
+`coin-course-v1.json` fixture adds parity cases without changing frozen earlier
+fixture bytes.
+
+## Currency formations (frozen catalog 4)
 
 Catalog 4 keeps paired pipes and spacing while creating groups of three
 individual FEATHER members on eligible coin routes and five individual
@@ -55,16 +73,136 @@ stable deterministic ID and the existing collision/event path. Group value is
 the member count. Seeded layouts vary sides and place coin members inside or
 outside pipe routes. The 29-member active capacity covers the maximum of eight
 active stations with three coin members each plus one five-member Star group.
-The settlement cap and per-member payout semantics remain unchanged. The new
-`currency-formations-v1.json` fixture supplements all frozen fixture bytes.
+The settlement cap and per-member payout semantics remain unchanged. The
+`currency-formations-v1.json` fixture remains frozen and separately resolvable
+for already issued catalog-4 runs.
 
-Required current evidence is paired geometry and varied spacing, complete unique
-reward opportunities and Star capacity, fatal-tick ordering, once-only scoring,
-offscreen retention, deterministic lifecycle/refill, old-rule compatibility,
-shared raw JSON parity, bounded paired survival/reward witnesses, and real
-PostgreSQL settlement/deduplication/cap checks. Bounded controller witnesses do
-not prove universal reachability or human gameplay acceptance. Browser suites,
+Catalog-4 verification covered paired geometry and varied spacing, complete
+unique reward opportunities and Star capacity, fatal-tick ordering, once-only
+scoring, offscreen retention, deterministic lifecycle/refill, old-rule
+compatibility, shared raw JSON parity, bounded paired survival/reward witnesses,
+and PostgreSQL settlement/deduplication/cap checks. Bounded controller witnesses
+do not prove universal reachability or human gameplay acceptance. Browser suites,
 visual playtesting and physical Telegram/mobile checks remain separate.
+
+### Catalog-5 implementation checks
+
+For the catalog-5 implementation, the implementer reports these checks passed:
+`npm run typecheck`; `npm test -- --run` (42 files, 441 tests);
+`GOCACHE=/tmp/duffy-go-cache go -C services/core/backend test -count=1 ./...`;
+`GOCACHE=/tmp/duffy-go-cache npm run test:parity`; and `git diff --check`.
+These checks establish automated implementation and parity coverage, not broad
+universal human reachability or gameplay acceptance. Local playtesting remains
+open.
+
+## Varied base (catalog 12)
+
+Catalog 12 uses simulation/generator `3.1.0` and configuration
+`dd-v3-varied-base-v1`. It retains catalog 11's fixed 126.4-pixel pipe spacing,
+hard bonus schedule, compact gate spacing, coin figure interval, normal pickups
+and Star schedule. Ordinary gap centers move a seeded 30–70 pixels in either
+direction from the previous center. If the move would cross a configured gap
+center bound, its direction reverses. The first center keeps catalog 11's
+±35-pixel midpoint safety bound.
+
+## Base-bonus (catalog 11, issued runs)
+
+Catalog 11 uses simulation/generator `3.0.0` and configuration
+`dd-v3-base-bonus-v1`. Ordinary pipes have fixed 126.4-pixel center spacing.
+Gap centers follow a seeded random walk of up to ±45 pixels per pipe within the
+configured center bounds; the first center is within ±35 pixels of the range
+midpoint. A seeded hard bonus pattern starts at pipe 24, 28 or 32 and repeats
+every 28 pipes. It uses shallow ascent, descent or slalom geometry with seeded
+mirroring, producing four realized shapes. Its first two gates use 66.88-pixel
+center spacing; the third gate is followed by a 268-pixel interval containing
+a three-FEATHER figure reward in pipe-free space. Ordinary spacing resumes
+after the pattern. Normal pickups and the existing Star schedule remain
+enabled.
+
+## Dense pipes (catalog 10, issued runs)
+
+Catalog 10 uses simulation/generator `2.9.0` and configuration
+`dd-v2-dense-pipes-v1`. It retains catalog 9's pressure behavior and scales
+authored edge clearance to 60% for all stations, including ordinary gates,
+bonus-segment gates, and recovery stations. The default allows 18 active pipes
+and schedules a Star every 16 pipes to maintain the validated capacity margin.
+
+## Pressure pipes (catalog 9, issued runs)
+
+Catalog 9 uses simulation/generator `2.8.0` and configuration
+`dd-v2-pressure-pipes-v1`. It retains catalog 8's introductory and recovery
+gates and bonus-segment behavior. Outside introductory, recovery and bonus
+segments, ordinary pressure gates move their gap centers by a seeded 60–80
+pixels, alternating direction. If a move would cross a configured gap-center
+bound, it reflects and moves in the opposite direction. The magnitude is capped
+by the configured maximum gap delta.
+
+## Varied pipes (catalog 8, issued runs)
+
+Catalog 8 remains simulation/generator `2.7.0` and configuration
+`dd-v2-varied-pipes-v1`. It retains catalog 7's seeded bonus-segment schedule,
+spacing, rewards and Star behavior. Outside scheduled segments and the two
+introductory blocks, pressure gap centers vary deterministically by up to
+±75 pixels from the previous center; steady recovery centers vary by up to
+±35 pixels. Both are bounded by configured gap-center limits and the
+per-pipe maximum gap delta.
+
+## Bonus segments v2 (catalog 7, issued runs)
+
+Catalog 7 uses simulation/generator `2.6.0` and configuration
+`dd-v2-bonus-segments-v2`. It retains catalog 6's seeded schedule: one of the
+first two blocks in each three-block slot starting at block 2 is selected by
+the run seed. Relative to the seeded anchor, gate-center offsets are ascent
+`[0, -40, -80]`, descent `[0, 40, 80]`, or slalom `[0, 40, -40]` pixels;
+seed mirroring flips their signs. These routes span 80 pixels. Ordinary
+stations retain 50% of their authored edge-to-edge pipe margin;
+hard segment gates retain 10%. These percentages apply to clear margin after
+subtracting pipe width.
+
+Non-segment gap centers after the two introductory blocks are sampled
+deterministically within ±45 pixels of the previous center, then bounded by the
+configured gap-center range and per-pipe maximum gap delta. Segment routes are
+also bounded by these configured limits; generation fails if no legal seeded
+anchor exists. The hard segment retains its recovery interval with 360 pixels of
+clearance and the three-coin figure reward in the pipe-free interval after its
+third gate.
+
+FEATHER and GAME_STAR pickups remain single by default. The seeded Star
+schedule runs every 14–16 pipes; Star formations are disabled by default and
+available only through config opt-in. The settlement policy is
+`verified-pickups-v9-bonus-segments-v2` for this exact identity. Policy support
+is documented here; PostgreSQL integration and human gameplay acceptance have
+not been verified for catalog 7.
+
+## Bonus segments (catalog 6, issued runs)
+
+Catalog 6 remains simulation/generator `2.5.0`, configuration
+`dd-v2-bonus-segments-v1`, with settlement policy
+`verified-pickups-v8-bonus-segments`. Its original spacing, route centers and
+Star behavior remain unchanged for issued runs.
+
+Catalog 6's Star schedule remains every 12–16 pipes. It schedules occasional
+bonus segments deterministically from the run seed: within each three-block slot
+starting at block 2, the seed selects one of
+its first two blocks. Each segment uses one of three three-gate patterns:
+shallow ascent, shallow descent or shallow slalom. Normal stations retain 70%
+of their authored edge-to-edge pipe clearance; the hard three-gate segment
+retains 20%. The percentage is applied to the free margin after subtracting
+pipe width. The compact gates are followed by a recovery interval with 360
+pixels of clear space. A three-coin figure reward occupies the pipe-free
+interval after the third gate.
+
+Regular FEATHER and GAME_STAR opportunities remain single pickups. Catalog 6
+keeps its seeded Star schedule; Star formations are off by default and require
+explicit config opt-in. Catalogs 4 and 5 remain separately resolvable for issued
+runs with their original formation and course rules.
+
+The catalog-6 settlement policy is `verified-pickups-v8-bonus-segments` for
+simulation/generator `2.5.0` / `2.5.0` and config
+`dd-v2-bonus-segments-v1`. Catalog 5 retains
+`verified-pickups-v7-coin-course`; catalog 4 retains
+`verified-pickups-v6-currency-formations`. This records configured policy
+support, not PostgreSQL integration verification or human gameplay acceptance.
 
 ## Retained catalog-2 geometry
 

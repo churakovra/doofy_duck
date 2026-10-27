@@ -109,6 +109,38 @@ func ConfigIDFor(c Config) (string, error) {
 	}
 	def, _ := CanonicalJSON(DefaultConfiguration())
 	cur, _ := CanonicalJSON(c)
+	baseBonus, _ := CanonicalJSON(BaseBonusConfiguration())
+	if cur == baseBonus {
+		return BaseBonusConfigID, nil
+	}
+	densePipes, _ := CanonicalJSON(DensePipesConfiguration())
+	if cur == densePipes {
+		return DensePipesConfigID, nil
+	}
+	pressurePipes, _ := CanonicalJSON(PressurePipesConfiguration())
+	if cur == pressurePipes {
+		return PressurePipesConfigID, nil
+	}
+	variedPipes, _ := CanonicalJSON(VariedPipesConfiguration())
+	if cur == variedPipes {
+		return VariedPipesConfigID, nil
+	}
+	bonusSegmentsV2, _ := CanonicalJSON(BonusSegmentsV2Configuration())
+	if cur == bonusSegmentsV2 {
+		return BonusSegmentsV2ConfigID, nil
+	}
+	bonusSegmentsV1, _ := CanonicalJSON(BonusSegmentsConfiguration())
+	if cur == bonusSegmentsV1 {
+		return BonusSegmentsConfigID, nil
+	}
+	coinCourse, _ := CanonicalJSON(CoinCourseConfiguration())
+	if cur == coinCourse {
+		return CoinCourseConfigID, nil
+	}
+	currencyFormations, _ := CanonicalJSON(CurrencyFormationsConfiguration())
+	if cur == currencyFormations {
+		return CurrencyFormationsConfigID, nil
+	}
 	if cur == def {
 		return DefaultConfigID, nil
 	}

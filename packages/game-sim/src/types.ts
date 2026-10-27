@@ -10,9 +10,33 @@ export interface RunDescriptor {
 export const PAIRED_ROUTES_SIMULATION_VERSION = "2.2.0";
 export const PAIRED_ROUTES_GENERATOR_VERSION = "2.2.0";
 export const PAIRED_ROUTES_CONFIG_ID = "dd-v2-paired-routes-v1";
-export const SIMULATION_VERSION = "2.3.0";
-export const GENERATOR_VERSION = "2.3.0";
-export const DEFAULT_CONFIG_ID = "dd-v2-currency-formations-v1";
+export const CURRENCY_FORMATIONS_SIMULATION_VERSION = "2.3.0";
+export const CURRENCY_FORMATIONS_GENERATOR_VERSION = "2.3.0";
+export const CURRENCY_FORMATIONS_CONFIG_ID = "dd-v2-currency-formations-v1";
+export const COIN_COURSE_SIMULATION_VERSION = "2.4.0";
+export const COIN_COURSE_GENERATOR_VERSION = "2.4.0";
+export const COIN_COURSE_CONFIG_ID = "dd-v2-coin-course-v1";
+export const BONUS_SEGMENTS_SIMULATION_VERSION = "2.5.0";
+export const BONUS_SEGMENTS_GENERATOR_VERSION = "2.5.0";
+export const BONUS_SEGMENTS_CONFIG_ID = "dd-v2-bonus-segments-v1";
+export const BONUS_SEGMENTS_V2_SIMULATION_VERSION = "2.6.0";
+export const BONUS_SEGMENTS_V2_GENERATOR_VERSION = "2.6.0";
+export const BONUS_SEGMENTS_V2_CONFIG_ID = "dd-v2-bonus-segments-v2";
+export const VARIED_PIPES_SIMULATION_VERSION = "2.7.0";
+export const VARIED_PIPES_GENERATOR_VERSION = "2.7.0";
+export const VARIED_PIPES_CONFIG_ID = "dd-v2-varied-pipes-v1";
+export const PRESSURE_PIPES_SIMULATION_VERSION = "2.8.0";
+export const PRESSURE_PIPES_GENERATOR_VERSION = "2.8.0";
+export const PRESSURE_PIPES_CONFIG_ID = "dd-v2-pressure-pipes-v1";
+export const DENSE_PIPES_SIMULATION_VERSION = "2.9.0";
+export const DENSE_PIPES_GENERATOR_VERSION = "2.9.0";
+export const DENSE_PIPES_CONFIG_ID = "dd-v2-dense-pipes-v1";
+export const BASE_BONUS_SIMULATION_VERSION = "3.0.0";
+export const BASE_BONUS_GENERATOR_VERSION = "3.0.0";
+export const BASE_BONUS_CONFIG_ID = "dd-v3-base-bonus-v1";
+export const SIMULATION_VERSION = "3.1.0";
+export const GENERATOR_VERSION = "3.1.0";
+export const DEFAULT_CONFIG_ID = "dd-v3-varied-base-v1";
 export const VARIED_OBSTACLE_SIMULATION_VERSION = "2.1.0";
 export const VARIED_OBSTACLE_GENERATOR_VERSION = "2.1.0";
 export const VARIED_OBSTACLE_DEFAULT_CONFIG_ID = "dd-v2-varied-obstacles-v1";
@@ -93,6 +117,8 @@ export interface WetlandConfig {
   readonly families: readonly WetlandEncounterFamily[];
   readonly starRoute: WetlandRewardPoint;
   readonly catalogVersion: number;
+  /** Catalog 6+ only: opt in to multi-member scheduled Star formations. */
+  readonly starFormations?: boolean;
   readonly geometry?: WetlandGeometryConfig;
   readonly introLaneCenters?: readonly number[];
 }

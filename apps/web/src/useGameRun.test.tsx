@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useGameRun } from './useGameRun';
 import { LocaleProvider, useLocale } from './locale';
-import { DEFAULT_CONFIG, PRIOR_DEFAULT_CONFIG, VARIED_OBSTACLE_DEFAULT_CONFIG, WETLAND_DEFAULT_CONFIG, createRun, createRunDescriptor, type GameConfig, type GameEvent, type RunDescriptorIdentity, type RunState } from '@doofy-duck/game-sim';
+import { DEFAULT_CONFIG, BONUS_SEGMENTS_DEFAULT_CONFIG, COIN_COURSE_DEFAULT_CONFIG, PRIOR_DEFAULT_CONFIG, VARIED_OBSTACLE_DEFAULT_CONFIG, WETLAND_DEFAULT_CONFIG, createRun, createRunDescriptor, type GameConfig, type GameEvent, type RunDescriptorIdentity, type RunState } from '@doofy-duck/game-sim';
 
 let run: ReturnType<typeof useGameRun>;
 let frameId: number;
@@ -63,13 +63,35 @@ afterEach(() => {
 });
 
 describe('run clock integration', () => {
-  it('restarts a fresh default run with the currency-formations identity', () => {
+  it('restarts a fresh default run with the varied-base identity', () => {
     act(() => run.restart());
-    expect(run.getState().config.wetland?.catalogVersion).toBe(4);
+    expect(run.getState().config.wetland?.catalogVersion).toBe(12);
     expect(run.getState().descriptor).toMatchObject({
-      simulationVersion: '2.3.0', generatorVersion: '2.3.0', configId: 'dd-v2-currency-formations-v1',
+      simulationVersion: '3.1.0', generatorVersion: '3.1.0', configId: 'dd-v3-varied-base-v1',
     });
     expect(run.getState().config).toEqual(DEFAULT_CONFIG);
+  });
+
+  it('resumes a frozen 2.5 bonus-segments run without changing its identity', () => {
+    const config = BONUS_SEGMENTS_DEFAULT_CONFIG;
+    const state = createRun(createRunDescriptor({ runId: 'retained-bonus-segments-v2.5', seed: 44 }, config), config);
+    options = { config, initialState: state };
+    act(() => root.render(<LocaleProvider><Harness key="retained-bonus-segments-v2.5" /></LocaleProvider>));
+    expect(run.getState().config.wetland?.catalogVersion).toBe(6);
+    expect(run.getState().descriptor).toMatchObject({
+      simulationVersion: '2.5.0', generatorVersion: '2.5.0', configId: 'dd-v2-bonus-segments-v1',
+    });
+  });
+
+  it('resumes a frozen 2.4 coin-course run without changing its identity', () => {
+    const config = COIN_COURSE_DEFAULT_CONFIG;
+    const state = createRun(createRunDescriptor({ runId: 'retained-coin-course-v2.4', seed: 44 }, config), config);
+    options = { config, initialState: state };
+    act(() => root.render(<LocaleProvider><Harness key="retained-coin-course-v2.4" /></LocaleProvider>));
+    expect(run.getState().config.wetland?.catalogVersion).toBe(5);
+    expect(run.getState().descriptor).toMatchObject({
+      simulationVersion: '2.4.0', generatorVersion: '2.4.0', configId: 'dd-v2-coin-course-v1',
+    });
   });
 
   it('recovers an existing catalog-2 varied-obstacle run without changing its identity', () => {

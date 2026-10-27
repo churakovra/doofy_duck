@@ -1,5 +1,5 @@
 import { deepFreeze } from "./internal.js";
-import { DEFAULT_CONFIG_ID, GENERATOR_VERSION, PAIRED_ROUTES_CONFIG_ID, PAIRED_ROUTES_GENERATOR_VERSION, PAIRED_ROUTES_SIMULATION_VERSION, LEGACY_DEFAULT_CONFIG_ID, LEGACY_GENERATOR_VERSION, LEGACY_SIMULATION_VERSION, PRIOR_DEFAULT_CONFIG_ID, PRIOR_GENERATOR_VERSION, PRIOR_SIMULATION_VERSION, SIMULATION_VERSION, VARIED_OBSTACLE_DEFAULT_CONFIG_ID, VARIED_OBSTACLE_GENERATOR_VERSION, VARIED_OBSTACLE_SIMULATION_VERSION, WETLAND_DEFAULT_CONFIG_ID, WETLAND_GENERATOR_VERSION, WETLAND_SIMULATION_VERSION, type FlightConfig, type GameConfig, type GapPattern, type PipeConfig, type RunDescriptor } from "./types.js";
+import { BONUS_SEGMENTS_CONFIG_ID, BONUS_SEGMENTS_GENERATOR_VERSION, BONUS_SEGMENTS_SIMULATION_VERSION, BONUS_SEGMENTS_V2_CONFIG_ID, BONUS_SEGMENTS_V2_GENERATOR_VERSION, BONUS_SEGMENTS_V2_SIMULATION_VERSION, DEFAULT_CONFIG_ID, GENERATOR_VERSION, SIMULATION_VERSION, BASE_BONUS_CONFIG_ID, BASE_BONUS_GENERATOR_VERSION, BASE_BONUS_SIMULATION_VERSION, DENSE_PIPES_CONFIG_ID, DENSE_PIPES_GENERATOR_VERSION, DENSE_PIPES_SIMULATION_VERSION, PRESSURE_PIPES_CONFIG_ID, PRESSURE_PIPES_GENERATOR_VERSION, PRESSURE_PIPES_SIMULATION_VERSION, VARIED_PIPES_CONFIG_ID, VARIED_PIPES_GENERATOR_VERSION, VARIED_PIPES_SIMULATION_VERSION, COIN_COURSE_CONFIG_ID, COIN_COURSE_GENERATOR_VERSION, COIN_COURSE_SIMULATION_VERSION, CURRENCY_FORMATIONS_CONFIG_ID, CURRENCY_FORMATIONS_GENERATOR_VERSION, CURRENCY_FORMATIONS_SIMULATION_VERSION, PAIRED_ROUTES_CONFIG_ID, PAIRED_ROUTES_GENERATOR_VERSION, PAIRED_ROUTES_SIMULATION_VERSION, LEGACY_DEFAULT_CONFIG_ID, LEGACY_GENERATOR_VERSION, LEGACY_SIMULATION_VERSION, PRIOR_DEFAULT_CONFIG_ID, PRIOR_GENERATOR_VERSION, PRIOR_SIMULATION_VERSION, VARIED_OBSTACLE_DEFAULT_CONFIG_ID, VARIED_OBSTACLE_GENERATOR_VERSION, VARIED_OBSTACLE_SIMULATION_VERSION, WETLAND_DEFAULT_CONFIG_ID, WETLAND_GENERATOR_VERSION, WETLAND_SIMULATION_VERSION, type FlightConfig, type GameConfig, type GapPattern, type PipeConfig, type RunDescriptor } from "./types.js";
 
 export const PATTERN_CATALOG: readonly GapPattern[] = deepFreeze([
   { id: "center", gaps: [280000, 280000, 280000, 280000] },
@@ -146,10 +146,46 @@ export const PAIRED_ROUTES_DEFAULT_CONFIG: GameConfig = deepFreeze({
     })),
   },
 });
-export const DEFAULT_CONFIG: GameConfig = deepFreeze({
+export const CURRENCY_FORMATIONS_DEFAULT_CONFIG: GameConfig = deepFreeze({
   ...PAIRED_ROUTES_DEFAULT_CONFIG,
   limits: { ...PAIRED_ROUTES_DEFAULT_CONFIG.limits, maxActiveCollectibles: 29 },
   wetland: { ...PAIRED_ROUTES_DEFAULT_CONFIG.wetland!, catalogVersion: 4 },
+});
+export const COIN_COURSE_DEFAULT_CONFIG: GameConfig = deepFreeze({
+  ...CURRENCY_FORMATIONS_DEFAULT_CONFIG,
+  wetland: { ...CURRENCY_FORMATIONS_DEFAULT_CONFIG.wetland!, catalogVersion: 5 },
+});
+export const BONUS_SEGMENTS_DEFAULT_CONFIG: GameConfig = deepFreeze({
+  ...COIN_COURSE_DEFAULT_CONFIG,
+  starSchedule: { minIntervalPipes: 12, maxIntervalPipes: 16 },
+  wetland: { ...COIN_COURSE_DEFAULT_CONFIG.wetland!, catalogVersion: 6, starFormations: false },
+});
+export const BONUS_SEGMENTS_V2_DEFAULT_CONFIG: GameConfig = deepFreeze({
+  ...BONUS_SEGMENTS_DEFAULT_CONFIG,
+  starSchedule: { minIntervalPipes: 14, maxIntervalPipes: 16 },
+  wetland: { ...BONUS_SEGMENTS_DEFAULT_CONFIG.wetland!, catalogVersion: 7, starFormations: false },
+});
+export const VARIED_PIPES_DEFAULT_CONFIG: GameConfig = deepFreeze({
+  ...BONUS_SEGMENTS_V2_DEFAULT_CONFIG,
+  wetland: { ...BONUS_SEGMENTS_V2_DEFAULT_CONFIG.wetland!, catalogVersion: 8 },
+});
+export const PRESSURE_PIPES_DEFAULT_CONFIG: GameConfig = deepFreeze({
+  ...VARIED_PIPES_DEFAULT_CONFIG,
+  wetland: { ...VARIED_PIPES_DEFAULT_CONFIG.wetland!, catalogVersion: 9 },
+});
+export const DENSE_PIPES_DEFAULT_CONFIG: GameConfig = deepFreeze({
+  ...PRESSURE_PIPES_DEFAULT_CONFIG,
+  limits: { ...PRESSURE_PIPES_DEFAULT_CONFIG.limits, maxActivePipes: 18 },
+  starSchedule: { minIntervalPipes: 16, maxIntervalPipes: 16 },
+  wetland: { ...PRESSURE_PIPES_DEFAULT_CONFIG.wetland!, catalogVersion: 10 },
+});
+export const BASE_BONUS_DEFAULT_CONFIG: GameConfig = deepFreeze({
+  ...DENSE_PIPES_DEFAULT_CONFIG,
+  wetland: { ...DENSE_PIPES_DEFAULT_CONFIG.wetland!, catalogVersion: 11 },
+});
+export const DEFAULT_CONFIG: GameConfig = deepFreeze({
+  ...BASE_BONUS_DEFAULT_CONFIG,
+  wetland: { ...BASE_BONUS_DEFAULT_CONFIG.wetland!, catalogVersion: 12 },
 });
 const integer = (v: unknown): v is number => Number.isSafeInteger(v);
 function variedRecoveryCentersValid(p: PipeConfig): boolean {
@@ -264,7 +300,16 @@ export function validateConfig(c: GameConfig): GameConfig {
   if (c.starSchedule !== undefined && c.starSchedule !== null) {
     const schedule = c.starSchedule;
     const starDefinition = c.collectibles.find(definition => definition.typeId === "GAME_STAR");
-    const stationMinSpacing = c.wetland?.stationSpacing ? Math.min(...c.wetland.stationSpacing) : p.spacing;
+    const originalStationMinSpacing = c.wetland?.stationSpacing ? Math.min(...c.wetland.stationSpacing) : p.spacing;
+    const stationMinSpacing = (c.wetland?.catalogVersion ?? 0) >= 10
+      ? p.width + Math.floor(Math.floor((originalStationMinSpacing - p.width) * 10 / 100) * 60 / 100)
+      : c.wetland?.catalogVersion === 6
+      ? p.width + Math.floor((originalStationMinSpacing - p.width) * 20 / 100)
+      : (c.wetland?.catalogVersion ?? 0) >= 7
+        ? p.width + Math.floor((originalStationMinSpacing - p.width) * 10 / 100)
+      : c.wetland?.catalogVersion === 5
+        ? Math.min(originalStationMinSpacing, 180_000)
+        : originalStationMinSpacing;
     if (!integer(schedule.minIntervalPipes) || schedule.minIntervalPipes < 8 ||
         !integer(schedule.maxIntervalPipes) || schedule.maxIntervalPipes < schedule.minIntervalPipes ||
         schedule.maxIntervalPipes > 16 || !starDefinition || starDefinition.weight !== 0 ||
@@ -274,7 +319,7 @@ export function validateConfig(c: GameConfig): GameConfig {
       throw Error("invalid scheduled Star capacity or interval geometry");
   }
   if (c.wetland != null && c.challenges != null) throw Error("wetland and legacy challenge modes are mutually exclusive");
-  if (c.wetland != null && (![1, 2, 3, 4].includes(c.wetland.catalogVersion) || c.wetland.recoverySpacing !== 360000 || !Array.isArray(c.wetland.stationSpacing) ||
+  if (c.wetland != null && (![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].includes(c.wetland.catalogVersion) || c.wetland.recoverySpacing !== 360000 || !Array.isArray(c.wetland.stationSpacing) ||
       c.wetland.stationSpacing.length !== 3 || c.wetland.stationSpacing.some(value => !integer(value) || value <= 0) ||
       !Array.isArray(c.wetland.introFamilies) || c.wetland.introFamilies.join(",") !== "steady,quick-pairs" ||
       !Array.isArray(c.wetland.pressureFamilies) || c.wetland.pressureFamilies.join(",") !== "dive-climb,climb-dive,slalom" ||
@@ -283,7 +328,9 @@ export function validateConfig(c: GameConfig): GameConfig {
       !c.wetland.starRoute || !Number.isSafeInteger(c.wetland.starRoute.xOffset) || !Number.isSafeInteger(c.wetland.starRoute.yOffset) ||
       (c.wetland.catalogVersion === 1 && c.wetland.geometry !== undefined) ||
       (c.wetland.catalogVersion === 1 && c.wetland.introLaneCenters !== undefined) ||
-      ([3, 4].includes(c.wetland.catalogVersion) && (c.wetland.geometry !== undefined || c.wetland.introLaneCenters !== undefined)) ||
+      ([3, 4, 5, 6, 7, 8, 9, 10, 11, 12].includes(c.wetland.catalogVersion) && (c.wetland.geometry !== undefined || c.wetland.introLaneCenters !== undefined)) ||
+      ([6, 7, 8, 9, 10, 11, 12].includes(c.wetland.catalogVersion) && c.wetland.starFormations !== undefined && typeof c.wetland.starFormations !== "boolean") ||
+      (![6, 7, 8, 9, 10, 11, 12].includes(c.wetland.catalogVersion) && c.wetland.starFormations !== undefined) ||
       (c.wetland.catalogVersion === 2 && (!c.wetland.geometry || !integer(c.wetland.geometry.halfPipeMinPercent) || c.wetland.geometry.halfPipeMinPercent < 70 || c.wetland.geometry.halfPipeMinPercent > 88 ||
         !integer(c.wetland.geometry.halfPipeMaxPercent) || c.wetland.geometry.halfPipeMaxPercent < c.wetland.geometry.halfPipeMinPercent || c.wetland.geometry.halfPipeMaxPercent > 90 ||
         c.wetland.geometry.floatingBarMinWidth !== 90_000 || c.wetland.geometry.floatingBarMaxWidth !== 216_000 || c.wetland.geometry.floatingBarHeight !== 42_000 ||
@@ -306,19 +353,36 @@ export function validateConfig(c: GameConfig): GameConfig {
         family.stationSpacing.some((spacing: number) => !integer(spacing) || !c.wetland!.stationSpacing.includes(spacing)) ||
         family.gapCenters.some((center: number, index: number) => index > 0 && Math.abs(center - family.gapCenters[index - 1]!) > p.maxGapDelta)) || c.limits.maxActiveCollectibles < 10))
     throw Error("invalid wetland encounter catalog");
+  if (c.wetland && c.wetland.catalogVersion >= 10) {
+    const compact = p.width + Math.floor(Math.floor((Math.min(...c.wetland.stationSpacing) - p.width) * 10 / 100) * 60 / 100);
+    const span = p.horizon + p.width + Math.floor(p.width / 2);
+    if (compact <= p.width || !Number.isSafeInteger(span) ||
+        c.limits.maxActivePipes < Math.ceil(span / compact) + 1)
+      throw Error("dense pipe capacity cannot cover the generation horizon");
+  }
+  if ((c.wetland?.catalogVersion ?? 0) >= 11 && p.width !== 52_000)
+    throw Error("base-bonus catalog requires 52,000-unit pipes");
+  if ((c.wetland?.catalogVersion ?? 0) >= 7 &&
+      (p.maxGapDelta < 80_000 || p.gapMaxCenter - p.gapMinCenter < 80_000))
+    throw Error("catalog-7 geometry must allow intact 80,000-unit bonus-segment routes");
   if (c.wetland != null) {
-    if (c.wetland.catalogVersion === 4) {
+    if (c.wetland.catalogVersion >= 4) {
       const featherRadius = c.collectibles.find(item => item.typeId === "FEATHER")?.radius ?? 0;
       const starRadius = c.collectibles.find(item => item.typeId === "GAME_STAR")?.radius ?? 0;
       const starHalfOpening = Math.floor(c.pipes.gapHeight / 2) - c.flight.duckHalfHeight - starRadius - 2;
       const featherHalfOpening = Math.floor(c.pipes.gapHeight / 2) - c.flight.duckHalfHeight - featherRadius - 2;
-      const minWetlandSpacing = Math.min(...c.wetland.stationSpacing);
+      const originalStationMinSpacing = Math.min(...c.wetland.stationSpacing);
+      const minWetlandSpacing = Math.min(originalStationMinSpacing, ...(c.wetland.catalogVersion === 5 ? [180_000] : []));
       const starSideClearance = 44_000 + 2 * c.flight.duckHalfWidth + 2 * starRadius + 2;
       const starLeftBound = 44_000 + c.flight.duckHalfWidth + starRadius + 2;
       const featherSideClearance = 36_000 + 2 * c.flight.duckHalfWidth + 2 * featherRadius + 2;
+    const compactPercent = c.wetland.catalogVersion === 6 ? 20 : 10;
+    const compactSpacing = c.pipes.width + Math.floor((originalStationMinSpacing - c.pipes.width) * compactPercent / 100);
       if (starHalfOpening < 22_000 || featherHalfOpening < 15_000 ||
-          minWetlandSpacing - c.pipes.width < starSideClearance ||
-          minWetlandSpacing - c.pipes.width < featherSideClearance || c.pipes.safeLeadIn < starLeftBound)
+          (c.wetland.catalogVersion >= 6
+            ? compactSpacing <= c.pipes.width || (c.wetland.starFormations === true && !c.starSchedule)
+            : minWetlandSpacing - c.pipes.width < starSideClearance ||
+              minWetlandSpacing - c.pipes.width < featherSideClearance || c.pipes.safeLeadIn < starLeftBound))
         throw Error("invalid currency formation clearance");
     }
     const families = new Map(c.wetland.families.map(family => [family.id, family]));
@@ -326,8 +390,10 @@ export function validateConfig(c: GameConfig): GameConfig {
     const pressure = c.wetland.pressureFamilies.map(id => families.get(id));
     const recovery = families.get("steady");
     const requiredObstacleTypes = new Set(c.wetland.families.flatMap(family => family.obstacleTypes));
-    const requiredCollectibleCapacity = c.wetland.catalogVersion === 4
-      ? c.limits.maxActivePipes * 3 + (c.starSchedule ? 5 : 0)
+    const requiredCollectibleCapacity = c.wetland.catalogVersion >= 6
+      ? c.limits.maxActivePipes + 3 + (c.starSchedule ? c.wetland.starFormations === true ? 5 : 1 : 0)
+      : c.wetland.catalogVersion >= 4
+        ? c.limits.maxActivePipes * 3 + (c.starSchedule ? 5 : 0)
       : c.limits.maxActivePipes + (c.starSchedule ? 1 : 0);
     if (new Set(c.wetland.families.map(family => family.id)).size !== 5 ||
         c.wetland.families.map(family => family.id).sort().join(",") !== "climb-dive,dive-climb,quick-pairs,slalom,steady" ||
@@ -421,13 +487,21 @@ export function validateConfig(c: GameConfig): GameConfig {
 }
 export function validateDescriptor(d: RunDescriptor): RunDescriptor {
   const supportedRules =
+    (d?.simulationVersion === BASE_BONUS_SIMULATION_VERSION && d?.generatorVersion === BASE_BONUS_GENERATOR_VERSION) ||
+    (d?.simulationVersion === DENSE_PIPES_SIMULATION_VERSION && d?.generatorVersion === DENSE_PIPES_GENERATOR_VERSION) ||
+    (d?.simulationVersion === PRESSURE_PIPES_SIMULATION_VERSION && d?.generatorVersion === PRESSURE_PIPES_GENERATOR_VERSION) ||
+    (d?.simulationVersion === VARIED_PIPES_SIMULATION_VERSION && d?.generatorVersion === VARIED_PIPES_GENERATOR_VERSION) ||
     (d?.simulationVersion === SIMULATION_VERSION && d?.generatorVersion === GENERATOR_VERSION) ||
+    (d?.simulationVersion === CURRENCY_FORMATIONS_SIMULATION_VERSION && d?.generatorVersion === CURRENCY_FORMATIONS_GENERATOR_VERSION) ||
+    (d?.simulationVersion === COIN_COURSE_SIMULATION_VERSION && d?.generatorVersion === COIN_COURSE_GENERATOR_VERSION) ||
+    (d?.simulationVersion === BONUS_SEGMENTS_SIMULATION_VERSION && d?.generatorVersion === BONUS_SEGMENTS_GENERATOR_VERSION) ||
+    (d?.simulationVersion === BONUS_SEGMENTS_V2_SIMULATION_VERSION && d?.generatorVersion === BONUS_SEGMENTS_V2_GENERATOR_VERSION) ||
     (d?.simulationVersion === PAIRED_ROUTES_SIMULATION_VERSION && d?.generatorVersion === PAIRED_ROUTES_GENERATOR_VERSION) ||
     (d?.simulationVersion === VARIED_OBSTACLE_SIMULATION_VERSION && d?.generatorVersion === VARIED_OBSTACLE_GENERATOR_VERSION) ||
     (d?.simulationVersion === PRIOR_SIMULATION_VERSION && d?.generatorVersion === PRIOR_GENERATOR_VERSION) ||
     (d?.simulationVersion === LEGACY_SIMULATION_VERSION && d?.generatorVersion === LEGACY_GENERATOR_VERSION) ||
     (d?.simulationVersion === WETLAND_SIMULATION_VERSION && d?.generatorVersion === WETLAND_GENERATOR_VERSION);
-  const supportedConfig = d?.configId === DEFAULT_CONFIG_ID || d?.configId === PAIRED_ROUTES_CONFIG_ID ||
+  const supportedConfig = d?.configId === BASE_BONUS_CONFIG_ID || d?.configId === DENSE_PIPES_CONFIG_ID || d?.configId === PRESSURE_PIPES_CONFIG_ID || d?.configId === VARIED_PIPES_CONFIG_ID || d?.configId === DEFAULT_CONFIG_ID || d?.configId === BONUS_SEGMENTS_V2_CONFIG_ID || d?.configId === BONUS_SEGMENTS_CONFIG_ID || d?.configId === COIN_COURSE_CONFIG_ID || d?.configId === CURRENCY_FORMATIONS_CONFIG_ID || d?.configId === PAIRED_ROUTES_CONFIG_ID ||
     d?.configId === VARIED_OBSTACLE_DEFAULT_CONFIG_ID ||
     d?.configId === PRIOR_DEFAULT_CONFIG_ID ||
     d?.configId === WETLAND_DEFAULT_CONFIG_ID ||
@@ -442,6 +516,14 @@ export function validateDescriptor(d: RunDescriptor): RunDescriptor {
     d.seed > 0xffffffff ||
     !supportedRules ||
     !supportedConfig ||
+    (d.configId === CURRENCY_FORMATIONS_CONFIG_ID && d.simulationVersion !== CURRENCY_FORMATIONS_SIMULATION_VERSION) ||
+    (d.configId === COIN_COURSE_CONFIG_ID && d.simulationVersion !== COIN_COURSE_SIMULATION_VERSION) ||
+    (d.configId === BONUS_SEGMENTS_CONFIG_ID && d.simulationVersion !== BONUS_SEGMENTS_SIMULATION_VERSION) ||
+    (d.configId === BONUS_SEGMENTS_V2_CONFIG_ID && d.simulationVersion !== BONUS_SEGMENTS_V2_SIMULATION_VERSION) ||
+    (d.configId === VARIED_PIPES_CONFIG_ID && d.simulationVersion !== VARIED_PIPES_SIMULATION_VERSION) ||
+    (d.configId === PRESSURE_PIPES_CONFIG_ID && d.simulationVersion !== PRESSURE_PIPES_SIMULATION_VERSION) ||
+    (d.configId === DENSE_PIPES_CONFIG_ID && d.simulationVersion !== DENSE_PIPES_SIMULATION_VERSION) ||
+    (d.configId === BASE_BONUS_CONFIG_ID && d.simulationVersion !== BASE_BONUS_SIMULATION_VERSION) ||
     (d.configId === DEFAULT_CONFIG_ID && d.simulationVersion !== SIMULATION_VERSION) ||
     (d.configId === PAIRED_ROUTES_CONFIG_ID && d.simulationVersion !== PAIRED_ROUTES_SIMULATION_VERSION) ||
     (d.configId === VARIED_OBSTACLE_DEFAULT_CONFIG_ID && d.simulationVersion !== VARIED_OBSTACLE_SIMULATION_VERSION) ||

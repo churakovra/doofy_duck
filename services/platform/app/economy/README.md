@@ -7,6 +7,17 @@ transactional idempotent posting, linked adjustments, and read-only paginated
 reconciliation. It has no routes or issuance callers. Currency issuance,
 settlement, purchases, and account inventory remain disabled.
 
+Run-completion verification maps simulation identity `3.1.0` / `3.1.0` /
+`dd-v3-varied-base-v1` (catalog 12) to policy
+`verified-pickups-v14-varied-base`. Issued catalog-11 runs retain the
+`3.0.0` / `dd-v3-base-bonus-v1` identity and v13 policy; catalog-10 runs retain the
+`2.9.0` / `dd-v2-dense-pipes-v1` identity and v12 policy; catalog-9 runs retain the
+`2.8.0` / `dd-v2-pressure-pipes-v1` identity and v11 policy; catalog-7 runs retain the
+`2.6.0` / `dd-v2-bonus-segments-v2` identity and v9 policy; catalog-6 runs retain the
+`2.5.0` / `dd-v2-bonus-segments-v1` identity and v8 policy; catalog-5 runs retain
+`2.4.0` / `dd-v2-coin-course-v1` and v7 policy. These policy mappings do not
+establish PostgreSQL settlement integration or gameplay acceptance.
+
 Wallet currency values are `FEATHER` and `GAME_STAR`, each represented as an
 integer balance in the range 0 through the signed 64-bit maximum. A posting
 records its source kind/reference and policy version; callers own the transaction

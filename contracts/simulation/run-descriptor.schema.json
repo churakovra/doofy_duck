@@ -15,6 +15,62 @@
   "oneOf": [
     {
       "properties": {
+        "simulationVersion": { "const": "3.1.0" },
+        "generatorVersion": { "const": "3.1.0" },
+        "configId": { "anyOf": [{ "const": "dd-v3-varied-base-v1" }, { "pattern": "^dd-v1-config:.+$" }] }
+      }
+    },
+    {
+      "properties": {
+        "simulationVersion": { "const": "3.0.0" },
+        "generatorVersion": { "const": "3.0.0" },
+        "configId": { "anyOf": [{ "const": "dd-v3-base-bonus-v1" }, { "pattern": "^dd-v1-config:.+$" }] }
+      }
+    },
+    {
+      "properties": {
+        "simulationVersion": { "const": "2.9.0" },
+        "generatorVersion": { "const": "2.9.0" },
+        "configId": { "anyOf": [{ "const": "dd-v2-dense-pipes-v1" }, { "pattern": "^dd-v1-config:.+$" }] }
+      }
+    },
+    {
+      "properties": {
+        "simulationVersion": { "const": "2.8.0" },
+        "generatorVersion": { "const": "2.8.0" },
+        "configId": { "anyOf": [{ "const": "dd-v2-pressure-pipes-v1" }, { "pattern": "^dd-v1-config:.+$" }] }
+      }
+    },
+    {
+      "properties": {
+        "simulationVersion": { "const": "2.7.0" },
+        "generatorVersion": { "const": "2.7.0" },
+        "configId": { "anyOf": [{ "const": "dd-v2-varied-pipes-v1" }, { "pattern": "^dd-v1-config:.+$" }] }
+      }
+    },
+    {
+      "properties": {
+        "simulationVersion": { "const": "2.6.0" },
+        "generatorVersion": { "const": "2.6.0" },
+        "configId": { "anyOf": [{ "const": "dd-v2-bonus-segments-v2" }, { "pattern": "^dd-v1-config:.+$" }] }
+      }
+    },
+    {
+      "properties": {
+        "simulationVersion": { "const": "2.5.0" },
+        "generatorVersion": { "const": "2.5.0" },
+        "configId": { "anyOf": [{ "const": "dd-v2-bonus-segments-v1" }, { "pattern": "^dd-v1-config:.+$" }] }
+      }
+    },
+    {
+      "properties": {
+        "simulationVersion": { "const": "2.4.0" },
+        "generatorVersion": { "const": "2.4.0" },
+        "configId": { "anyOf": [{ "const": "dd-v2-coin-course-v1" }, { "pattern": "^dd-v1-config:.+$" }] }
+      }
+    },
+    {
+      "properties": {
         "simulationVersion": { "const": "2.3.0" },
         "generatorVersion": { "const": "2.3.0" },
         "configId": { "anyOf": [{ "const": "dd-v2-currency-formations-v1" }, { "pattern": "^dd-v1-config:.+$" }] }

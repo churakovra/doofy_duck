@@ -83,6 +83,7 @@ type WetlandConfig struct {
 	IntroFamilies    []string               `json:"introFamilies"`
 	PressureFamilies []string               `json:"pressureFamilies"`
 	CatalogVersion   int64                  `json:"catalogVersion"`
+	StarFormations   *bool                  `json:"starFormations,omitempty"`
 	Families         []WetlandFamily        `json:"families"`
 	StarRoute        WetlandRewardPoint     `json:"starRoute"`
 	Geometry         *WetlandGeometryConfig `json:"geometry,omitempty"`
@@ -264,7 +265,7 @@ func PatternCatalog() []Pattern {
 
 // DefaultConfiguration returns an independent copy of the default rules.
 func PriorDefaultConfiguration() Config  { return cloneConfig(canonicalPriorDefaultConfig) }
-func DefaultConfiguration() Config       { return CurrencyFormationsConfiguration() }
+func DefaultConfiguration() Config       { return VariedBaseConfiguration() }
 func LegacyDefaultConfiguration() Config { return cloneConfig(canonicalLegacyDefaultConfig) }
 func WetlandConfiguration() Config {
 	c := cloneConfig(canonicalPriorDefaultConfig)
@@ -320,14 +321,92 @@ func CurrencyFormationsConfiguration() Config {
 	return c
 }
 
+func CoinCourseConfiguration() Config {
+	c := CurrencyFormationsConfiguration()
+	c.Wetland.CatalogVersion = 5
+	return c
+}
+
+func BonusSegmentsConfiguration() Config {
+	c := CoinCourseConfiguration()
+	c.StarSchedule = &StarSchedule{MinIntervalPipes: 12, MaxIntervalPipes: 16}
+	c.Wetland.CatalogVersion = 6
+	disabled := false
+	c.Wetland.StarFormations = &disabled
+	return c
+}
+
+func BonusSegmentsV2Configuration() Config {
+	c := BonusSegmentsConfiguration()
+	c.StarSchedule = &StarSchedule{MinIntervalPipes: 14, MaxIntervalPipes: 16}
+	c.Wetland.CatalogVersion = 7
+	return c
+}
+
+func VariedPipesConfiguration() Config {
+	c := BonusSegmentsV2Configuration()
+	c.Wetland.CatalogVersion = 8
+	return c
+}
+
+func PressurePipesConfiguration() Config {
+	c := VariedPipesConfiguration()
+	c.Wetland.CatalogVersion = 9
+	return c
+}
+
+func DensePipesConfiguration() Config {
+	c := PressurePipesConfiguration()
+	c.Wetland.CatalogVersion = 10
+	c.Limits.MaxActivePipes = 18
+	c.StarSchedule = &StarSchedule{MinIntervalPipes: 16, MaxIntervalPipes: 16}
+	return c
+}
+
+func BaseBonusConfiguration() Config {
+	c := DensePipesConfiguration()
+	c.Wetland.CatalogVersion = 11
+	return c
+}
+
+func VariedBaseConfiguration() Config {
+	c := BaseBonusConfiguration()
+	c.Wetland.CatalogVersion = 12
+	return c
+}
+
 const MaxCounter int64 = 9007199254740990
 const maxSafeInteger int64 = 9007199254740991
 const PairedRoutesSimulationVersion = "2.2.0"
 const PairedRoutesGeneratorVersion = "2.2.0"
 const PairedRoutesConfigID = "dd-v2-paired-routes-v1"
-const SimulationVersion = "2.3.0"
-const GeneratorVersion = "2.3.0"
-const DefaultConfigID = "dd-v2-currency-formations-v1"
+const VariedPipesSimulationVersion = "2.7.0"
+const VariedPipesGeneratorVersion = "2.7.0"
+const VariedPipesConfigID = "dd-v2-varied-pipes-v1"
+const PressurePipesSimulationVersion = "2.8.0"
+const PressurePipesGeneratorVersion = "2.8.0"
+const PressurePipesConfigID = "dd-v2-pressure-pipes-v1"
+const DensePipesSimulationVersion = "2.9.0"
+const DensePipesGeneratorVersion = "2.9.0"
+const DensePipesConfigID = "dd-v2-dense-pipes-v1"
+const BaseBonusSimulationVersion = "3.0.0"
+const BaseBonusGeneratorVersion = "3.0.0"
+const BaseBonusConfigID = "dd-v3-base-bonus-v1"
+const SimulationVersion = "3.1.0"
+const GeneratorVersion = "3.1.0"
+const DefaultConfigID = "dd-v3-varied-base-v1"
+const CurrencyFormationsSimulationVersion = "2.3.0"
+const CurrencyFormationsGeneratorVersion = "2.3.0"
+const CurrencyFormationsConfigID = "dd-v2-currency-formations-v1"
+const CoinCourseSimulationVersion = "2.4.0"
+const CoinCourseGeneratorVersion = "2.4.0"
+const CoinCourseConfigID = "dd-v2-coin-course-v1"
+const BonusSegmentsSimulationVersion = "2.5.0"
+const BonusSegmentsGeneratorVersion = "2.5.0"
+const BonusSegmentsConfigID = "dd-v2-bonus-segments-v1"
+const BonusSegmentsV2SimulationVersion = "2.6.0"
+const BonusSegmentsV2GeneratorVersion = "2.6.0"
+const BonusSegmentsV2ConfigID = "dd-v2-bonus-segments-v2"
 const VariedObstacleSimulationVersion = "2.1.0"
 const VariedObstacleGeneratorVersion = "2.1.0"
 const VariedObstacleDefaultConfigID = "dd-v2-varied-obstacles-v1"
@@ -520,10 +599,14 @@ func Step(input State, frames []Input) (Result, error) {
 		}
 		scheduledStar := s.Config.StarSchedule != nil && p.Index == nextStar
 		block := p.Index / 4
+		coinCourse := s.Config.Wetland != nil && s.Config.Wetland.CatalogVersion == 5 && isCoinCourseBlock(uint32(s.Descriptor.Seed), block)
+		bonusSegment := s.Config.Wetland != nil && s.Config.Wetland.CatalogVersion == 6 && isBonusSegmentBlock(uint32(s.Descriptor.Seed), block)
+		bonusSegmentV2 := s.Config.Wetland != nil && s.Config.Wetland.CatalogVersion >= 7 && isScheduledBonusBlock(s.Config, uint32(s.Descriptor.Seed), block)
 		recovery := p.EncounterFamily == "steady" && block >= 2 && block%2 == 1
 		smallTrail := p.EncounterFamily == "steady" && (block == 0 || recovery)
-		trail := s.Config.Wetland != nil && (!smallTrail || p.StationStep != nil && (*p.StationStep == 1 || *p.StationStep == 3))
-		if trail {
+		wetlandTrail := s.Config.Wetland != nil && s.Config.Wetland.CatalogVersion <= 5 && (coinCourse && p.StationStep != nil && *p.StationStep == 2 || !coinCourse && (!smallTrail || p.StationStep != nil && (*p.StationStep == 1 || *p.StationStep == 3)))
+		bonusSegmentReward := (bonusSegment || bonusSegmentV2) && p.StationStep != nil && *p.StationStep == 2
+		if wetlandTrail || bonusSegmentReward {
 			var definition *Definition
 			for i := range s.Config.Collectibles {
 				if s.Config.Collectibles[i].TypeID == "FEATHER" {
@@ -540,7 +623,9 @@ func Step(input State, frames []Input) (Result, error) {
 			}
 			for member, point := range points {
 				id := fmt.Sprintf("feather-trail-%d-%d", block, *p.StationStep)
-				if s.Config.Wetland.CatalogVersion == 4 {
+				if bonusSegmentReward {
+					id = fmt.Sprintf("bonus-segment-%d-%d", block, member)
+				} else if s.Config.Wetland.CatalogVersion >= 4 {
 					id += fmt.Sprintf("-%d", member)
 				}
 				spawned[id] = true
@@ -581,7 +666,7 @@ func Step(input State, frames []Input) (Result, error) {
 			}
 			for member, point := range points {
 				memberID := id
-				if s.Config.Wetland != nil && s.Config.Wetland.CatalogVersion == 4 {
+				if s.Config.Wetland != nil && s.Config.Wetland.CatalogVersion >= 4 {
 					memberID += fmt.Sprintf("-%d", member)
 				}
 				spawned[memberID] = true
@@ -614,7 +699,10 @@ func Step(input State, frames []Input) (Result, error) {
 		if s.Config.StarSchedule != nil {
 			reservedSlots = 1
 		}
-		if s.Config.Wetland == nil && chosen != nil && !scheduledStar && regularCount < s.Config.Limits.MaxActiveCollectibles-reservedSlots {
+		ordinaryPickupAllowed := s.Config.Wetland == nil ||
+			s.Config.Wetland.CatalogVersion == 6 && (!bonusSegment || p.StationStep != nil && *p.StationStep == 3) ||
+			s.Config.Wetland.CatalogVersion >= 7 && (!bonusSegmentV2 || p.StationStep != nil && *p.StationStep == 3)
+		if ordinaryPickupAllowed && chosen != nil && !scheduledStar && regularCount < s.Config.Limits.MaxActiveCollectibles-reservedSlots {
 			id := fmt.Sprintf("collectible-%d", p.Index)
 			spawned[id] = true
 			s.Collectibles = append(s.Collectibles, Collectible{id, chosen.TypeID, p.X, bonusY(s.Config, uint32(s.Descriptor.Seed), p, chosen.Radius), chosen.Amount, chosen.Radius, false})

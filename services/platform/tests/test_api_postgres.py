@@ -852,6 +852,121 @@ def test_paired_routes_policy_deduplicates_delivery_caps_feathers_and_preserves_
         )
 
 
+def test_coin_course_policy_caps_feathers_preserves_stars_and_keeps_catalog4(client):
+    from app import database
+    from app.economy.models import CompletionSettlement
+    from app.economy.settlement import process_settlement_batch
+    from app.economy.wallet.models import Wallet
+
+    _, account_id = _login(client, 420036)
+    course_run = UUID(int=442)
+    for life_index, feathers, stars in ((0, 20, 900), (1, 20, 700)):
+        _accept_completion(
+            client,
+            _completion_event(
+                account_id=account_id,
+                run_id=course_run,
+                life_index=life_index,
+                feathers=feathers,
+                stars=stars,
+                simulation_version="2.4.0",
+                generator_version="2.4.0",
+                config_id="dd-v2-coin-course-v1",
+            ),
+        )
+    _accept_completion(
+        client,
+        _completion_event(
+            account_id=account_id,
+            run_id=UUID(int=443),
+            feathers=5,
+            stars=50,
+            simulation_version="2.3.0",
+            generator_version="2.3.0",
+            config_id="dd-v2-currency-formations-v1",
+        ),
+    )
+    bonus_run = UUID(int=444)
+    _accept_completion(
+        client,
+        _completion_event(
+            account_id=account_id,
+            run_id=bonus_run,
+            feathers=40,
+            stars=800,
+            simulation_version="2.5.0",
+            generator_version="2.5.0",
+            config_id="dd-v2-bonus-segments-v1",
+        ),
+    )
+    bonus_v2_run = UUID(int=445)
+    _accept_completion(
+        client,
+        _completion_event(
+            account_id=account_id,
+            run_id=bonus_v2_run,
+            feathers=40,
+            stars=950,
+            simulation_version="2.6.0",
+            generator_version="2.6.0",
+            config_id="dd-v2-bonus-segments-v2",
+        ),
+    )
+    settings = replace(
+        client.app.state.settings,
+        economy_settlement_enabled=True,
+        economy_settlement_activated_at=datetime.now(UTC) - timedelta(minutes=1),
+    )
+    with database.EconomySession.begin() as session:
+        assert process_settlement_batch(session, settings=settings, limit=10) == 5
+    with database.EconomySession() as session:
+        course_rows = session.scalars(
+            select(CompletionSettlement)
+            .where(CompletionSettlement.run_id == course_run)
+            .order_by(CompletionSettlement.life_index)
+        ).all()
+        catalog4 = session.scalar(select(CompletionSettlement).where(CompletionSettlement.run_id == UUID(int=443)))
+        bonus_segments = session.scalar(select(CompletionSettlement).where(CompletionSettlement.run_id == bonus_run))
+        bonus_segments_v2 = session.scalar(
+            select(CompletionSettlement).where(CompletionSettlement.run_id == bonus_v2_run)
+        )
+        assert [(row.status, row.policy_version, row.feathers_credited, row.stars_credited) for row in course_rows] == [
+            ("committed", "verified-pickups-v7-coin-course", 20, 900),
+            ("committed", "verified-pickups-v7-coin-course", 10, 700),
+        ]
+        assert catalog4 is not None
+        assert (catalog4.status, catalog4.policy_version, catalog4.feathers_credited, catalog4.stars_credited) == (
+            "committed",
+            "verified-pickups-v6-currency-formations",
+            5,
+            50,
+        )
+        assert bonus_segments is not None
+        assert (
+            bonus_segments.status,
+            bonus_segments.policy_version,
+            bonus_segments.feathers_credited,
+            bonus_segments.stars_credited,
+        ) == ("committed", "verified-pickups-v8-bonus-segments", 30, 800)
+        assert bonus_segments_v2 is not None
+        assert (
+            bonus_segments_v2.status,
+            bonus_segments_v2.policy_version,
+            bonus_segments_v2.feathers_credited,
+            bonus_segments_v2.stars_credited,
+        ) == ("committed", "verified-pickups-v9-bonus-segments-v2", 30, 950)
+        assert (
+            session.scalar(select(Wallet.balance).where(Wallet.account_id == account_id, Wallet.currency == "FEATHER"))
+            == 95
+        )
+        assert (
+            session.scalar(
+                select(Wallet.balance).where(Wallet.account_id == account_id, Wallet.currency == "GAME_STAR")
+            )
+            == 3400
+        )
+
+
 def test_historical_backfill_credits_coins_for_both_known_profiles_and_no_stars(client):
     from app import database
     from app.economy.models import CompletionSettlement

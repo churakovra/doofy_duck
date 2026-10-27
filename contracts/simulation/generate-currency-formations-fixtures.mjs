@@ -2,11 +2,11 @@
 // Run after build:sim; this writes only currency-formations-v1.json.
 import { writeFileSync } from 'node:fs';
 const simulationModule = process.env.DUCK_SIM_MODULE ?? new URL('../../packages/game-sim/dist/index.js', import.meta.url).href;
-const { DEFAULT_CONFIG, SIMULATION_VERSION, GENERATOR_VERSION, DEFAULT_CONFIG_ID,
+const { CURRENCY_FORMATIONS_DEFAULT_CONFIG, CURRENCY_FORMATIONS_SIMULATION_VERSION, CURRENCY_FORMATIONS_GENERATOR_VERSION, CURRENCY_FORMATIONS_CONFIG_ID,
   canonicalState, createRun, createRunDescriptor, makeInput, step } = await import(simulationModule);
 
 const snapshot = state => JSON.parse(canonicalState(state));
-const descriptor = (runId, seed) => createRunDescriptor({ runId, seed }, DEFAULT_CONFIG);
+const descriptor = (runId, seed) => createRunDescriptor({ runId, seed }, CURRENCY_FORMATIONS_DEFAULT_CONFIG);
 const cases = [];
 function record(name, state, frames = []) {
   const result = step(state, frames);
@@ -30,7 +30,7 @@ const starState = { ...starBase, phase: 'RUNNING', nextStarPipeIndex: 1, starSch
 const stars = record('currency-scheduled-star-members-spawn-individually', starState);
 if (stars.state.collectibles.filter(item => item.typeId === 'GAME_STAR').length !== 5) throw new Error('five-member Star group missing');
 
-const fixture = { fixtureRevision: 'currency-formations-1', simulationVersion: SIMULATION_VERSION,
-  generatorVersion: GENERATOR_VERSION, configId: DEFAULT_CONFIG_ID, cases };
+const fixture = { fixtureRevision: 'currency-formations-1', simulationVersion: CURRENCY_FORMATIONS_SIMULATION_VERSION,
+  generatorVersion: CURRENCY_FORMATIONS_GENERATOR_VERSION, configId: CURRENCY_FORMATIONS_CONFIG_ID, cases };
 writeFileSync(new URL('./currency-formations-v1.json', import.meta.url), JSON.stringify(fixture, null, 2) + '\n');
 console.log(JSON.stringify({ fixtureRevision: fixture.fixtureRevision, cases: cases.map(item => item.name) }));
