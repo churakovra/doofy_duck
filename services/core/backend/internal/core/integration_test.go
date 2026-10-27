@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -506,9 +507,21 @@ func TestPostgresCompletionOutboxRetriesAndOutageGrace(t *testing.T) {
 		w.WriteHeader(http.StatusCreated)
 	}))
 	defer account.Close()
-	worker := &CompletionWorker{DB: pool, Endpoint: account.URL + "/internal/v1/run-completions", ServiceToken: "service-test", Client: account.Client(), Now: func() time.Time { return clock }}
+	var telemetry bytes.Buffer
+	worker := &CompletionWorker{DB: pool, Logger: slog.New(slog.NewJSONHandler(&telemetry, nil)), Endpoint: account.URL + "/internal/v1/run-completions", ServiceToken: "service-test", Client: account.Client(), Now: func() time.Time { return clock }}
 	if sent, e := worker.DispatchOne(context.Background()); e != nil || !sent {
 		t.Fatalf("first outbox attempt sent=%v err=%v", sent, e)
+	}
+	worker.logBacklog(context.Background())
+	telemetryEvents := telemetryEvents(t, &telemetry)
+	var retrySample bool
+	for _, event := range telemetryEvents {
+		if event["msg"] == "completion_backlog" && event["pending"] == float64(1) && event["retrying"] == float64(1) {
+			retrySample = true
+		}
+	}
+	if !retrySample {
+		t.Fatalf("missing retry backlog sample: %#v", telemetryEvents)
 	}
 	var status, verification, delivery string
 	if err = pool.QueryRow(context.Background(), `SELECT status,verification_status,delivery_status FROM core_runs WHERE id=$1`, run.RunID).Scan(&status, &verification, &delivery); err != nil || status != "completed" || verification != "verified" || delivery != "pending" {

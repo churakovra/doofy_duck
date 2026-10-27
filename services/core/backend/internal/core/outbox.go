@@ -28,6 +28,7 @@ type leasedEvent struct {
 	EventID, RunID, LeaseToken string
 	Body                       []byte
 	Attempts                   int
+	CreatedAt                  time.Time
 }
 
 func (w *CompletionWorker) DispatchOne(ctx context.Context) (bool, error) {
@@ -44,7 +45,7 @@ func (w *CompletionWorker) DispatchOne(ctx context.Context) (bool, error) {
 	}
 	defer tx.Rollback(ctx)
 	var event leasedEvent
-	err = tx.QueryRow(ctx, `SELECT event_id::text,run_id::text,body,attempts FROM core_outbox WHERE (status='pending' AND next_attempt_at <= $1) OR (status='leased' AND lease_until <= $1) ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1`, now).Scan(&event.EventID, &event.RunID, &event.Body, &event.Attempts)
+	err = tx.QueryRow(ctx, `SELECT event_id::text,run_id::text,body,attempts,created_at FROM core_outbox WHERE (status='pending' AND next_attempt_at <= $1) OR (status='leased' AND lease_until <= $1) ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1`, now).Scan(&event.EventID, &event.RunID, &event.Body, &event.Attempts, &event.CreatedAt)
 	if err == pgx.ErrNoRows {
 		return false, nil
 	}
@@ -117,6 +118,44 @@ func (w *CompletionWorker) logDispatch(event leasedEvent, status string, httpSta
 	w.Logger.Info("completion_delivery", "event_id", event.EventID, "run_id", event.RunID, "status", status, "http_status", httpStatus, "attempt", event.Attempts+1, "reason", reason)
 }
 
+// completion_delivery_age reports elapsed time since the outbox event was created.
+// Only acknowledged deliveries are observed; age is clamped against clock skew.
+func (w *CompletionWorker) logDeliveryAge(event leasedEvent, outcome string) {
+	if w.Logger == nil || event.CreatedAt.IsZero() {
+		return
+	}
+	now := time.Now().UTC()
+	if w.Now != nil {
+		now = w.Now().UTC()
+	}
+	age := max(time.Duration(0), now.Sub(event.CreatedAt))
+	w.Logger.Info("completion_delivery_age", "outcome", outcome, "age_ms", age.Milliseconds())
+}
+
+// completion_backlog samples pending and leased events at a fixed interval, not per request.
+// oldest_age_ms is zero when empty; retrying excludes a leased first attempt.
+func (w *CompletionWorker) logBacklog(ctx context.Context) {
+	if w.DB == nil || w.Logger == nil {
+		return
+	}
+	var count, retries int64
+	var oldest *time.Time
+	err := w.DB.QueryRow(ctx, `SELECT count(*), count(*) FILTER (WHERE (status='pending' AND attempts > 0) OR (status='leased' AND attempts > 1)), min(created_at) FROM core_outbox WHERE status IN ('pending','leased')`).Scan(&count, &retries, &oldest)
+	if err != nil {
+		w.Logger.Warn("completion_backlog_sample_failed", "reason", "query_failed")
+		return
+	}
+	now := time.Now().UTC()
+	if w.Now != nil {
+		now = w.Now().UTC()
+	}
+	var age time.Duration
+	if oldest != nil {
+		age = max(time.Duration(0), now.Sub(*oldest))
+	}
+	w.Logger.Info("completion_backlog", "pending", count, "retrying", retries, "oldest_age_ms", age.Milliseconds())
+}
+
 func (w *CompletionWorker) logWorkerFailure() {
 	if w.Logger == nil {
 		return
@@ -150,7 +189,13 @@ func (w *CompletionWorker) finish(ctx context.Context, e leasedEvent, accepted b
 	if tag.RowsAffected() != 1 {
 		return fmt.Errorf("verified run delivery state is no longer pending")
 	}
-	return tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		return err
+	}
+	if accepted {
+		w.logDeliveryAge(e, "delivered")
+	}
+	return nil
 }
 func (w *CompletionWorker) retry(ctx context.Context, e leasedEvent, cause error) error {
 	attempt := e.Attempts + 1
@@ -184,6 +229,24 @@ func (w *CompletionWorker) RunConcurrent(ctx context.Context, interval time.Dura
 		workers = 32
 	}
 	var wg sync.WaitGroup
+	if w.DB != nil && w.Logger != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ticker := time.NewTicker(30 * time.Second)
+			defer ticker.Stop()
+			for {
+				sampleCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+				w.logBacklog(sampleCtx)
+				cancel()
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+				}
+			}
+		}()
+	}
 	for i := 0; i < workers; i++ {
 		wg.Add(1)
 		go func() {

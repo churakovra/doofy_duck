@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import os
 from dataclasses import dataclass
 from datetime import datetime
@@ -20,6 +21,20 @@ class Settings:
     economy_settlement_enabled: bool = False
     economy_settlement_activated_at: datetime | None = None
     economy_shop_enabled: bool = False
+    platform_pool_size: int = 5
+    platform_pool_max_overflow: int = 10
+    platform_pool_timeout: float = 30.0
+    economy_pool_size: int = 5
+    economy_pool_max_overflow: int = 10
+    economy_pool_timeout: float = 30.0
+
+    def __post_init__(self) -> None:
+        for name in ("platform", "economy"):
+            size = getattr(self, f"{name}_pool_size")
+            overflow = getattr(self, f"{name}_pool_max_overflow")
+            timeout = getattr(self, f"{name}_pool_timeout")
+            if size <= 0 or overflow < 0 or not math.isfinite(timeout) or timeout <= 0:
+                raise RuntimeError(f"{name} pool requires size > 0, max overflow >= 0, and finite timeout > 0")
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -56,6 +71,12 @@ class Settings:
             economy_settlement_enabled=_bool("ECONOMY_SETTLEMENT_ENABLED", False),
             economy_settlement_activated_at=activated_at,
             economy_shop_enabled=_bool("ECONOMY_SHOP_ENABLED", False),
+            platform_pool_size=_int("PLATFORM_POOL_SIZE", 5),
+            platform_pool_max_overflow=_int("PLATFORM_POOL_MAX_OVERFLOW", 10),
+            platform_pool_timeout=_float("PLATFORM_POOL_TIMEOUT", 30.0),
+            economy_pool_size=_int("ECONOMY_POOL_SIZE", 5),
+            economy_pool_max_overflow=_int("ECONOMY_POOL_MAX_OVERFLOW", 10),
+            economy_pool_timeout=_float("ECONOMY_POOL_TIMEOUT", 30.0),
         )
 
     def validate_runtime(self) -> None:
@@ -83,3 +104,17 @@ def _bool(name: str, default: bool) -> bool:
     if value is None:
         return default
     return value.lower() in {"1", "true", "yes", "on"}
+
+
+def _int(name: str, default: int) -> int:
+    try:
+        return int(os.getenv(name, str(default)))
+    except ValueError as error:
+        raise RuntimeError(f"{name} must be an integer") from error
+
+
+def _float(name: str, default: float) -> float:
+    try:
+        return float(os.getenv(name, str(default)))
+    except ValueError as error:
+        raise RuntimeError(f"{name} must be a number") from error

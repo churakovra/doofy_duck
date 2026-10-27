@@ -1,8 +1,9 @@
 # Backend foundation implementation record
 
 ACCOUNT and RUN were approved on October 17, 2026, before SHOP. Local implementation
-is present; the sustained local capacity test passed. Outage recovery and external
-acceptance remain under verification.
+is present; the sustained local capacity test passed. The bounded outage scenario
+and external acceptance remain pending. PostgreSQL-specific tests were not run in
+this environment; hosted failover and restore acceptance are also pending.
 This record distinguishes requirements from executed verification. The later
 [SHOP implementation record](SHOP_IMPLEMENTATION_RESULTS.md) describes the gated
 wallet/shop extension; foundation test results below do not validate that extension.
@@ -56,7 +57,8 @@ can recover accepted server state, not the previous device's unsent inputs.
   production build passed. The build reports its existing large-chunk warning.
 - Python Ruff/format, strict mypy and unit checks passed. The pinned Linux test
   image ran all ten Python tests against real Platform/Economy PostgreSQL databases.
-- Core tests against real PostgreSQL, race checks and vet passed, including actual
+- Core tests against real PostgreSQL, race checks and vet passed in the recorded
+  environment, including actual
   Python-produced credential interoperability, migration concurrency/upgrade,
   ownership, sequence/idempotency, writer fencing, cap/deadline/outage behavior,
   completion retry and latest-result account isolation.

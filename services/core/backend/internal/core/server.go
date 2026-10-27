@@ -192,13 +192,17 @@ func (s *Server) user(next http.Handler) http.Handler {
 			return
 		}
 		queued := false
+		var waitStarted time.Time
 		select {
 		case s.RequestSlots <- struct{}{}:
 		default:
 			select {
 			case s.QueuedRequests <- struct{}{}:
 				queued = true
+				waitStarted = time.Now()
+				s.logAdmission("waiting", 0)
 			default:
+				s.logAdmission("queue_full", 0)
 				rejectAtCapacity(w)
 				return
 			}
@@ -208,21 +212,34 @@ func (s *Server) user(next http.Handler) http.Handler {
 			case s.RequestSlots <- struct{}{}:
 			case <-wait.C:
 				<-s.QueuedRequests
+				s.logAdmission("timeout", time.Since(waitStarted))
 				rejectAtCapacity(w)
 				return
 			case <-r.Context().Done():
 				<-s.QueuedRequests
+				s.logAdmission("canceled", time.Since(waitStarted))
 				return
 			}
 		}
 		if queued {
 			<-s.QueuedRequests
+			s.logAdmission("admitted", time.Since(waitStarted))
+		} else {
+			s.logAdmission("admitted", 0)
 		}
-		defer func() { <-s.RequestSlots }()
+		defer func() { <-s.RequestSlots; s.logAdmission("released", 0) }()
 		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 		defer cancel()
 		next.ServeHTTP(w, r.WithContext(context.WithValue(ctx, claimsKey{}, claims)))
 	})
+}
+
+// admission_state reports point-in-time channel occupancy and queue wait in milliseconds.
+// Outcome is a fixed set; no request identity or route is recorded.
+func (s *Server) logAdmission(outcome string, wait time.Duration) {
+	if s.Logger != nil {
+		s.Logger.Info("admission_state", "outcome", outcome, "active", len(s.RequestSlots), "waiting", len(s.QueuedRequests), "wait_ms", wait.Milliseconds())
+	}
 }
 
 func rejectAtCapacity(w http.ResponseWriter) {

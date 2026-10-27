@@ -119,7 +119,12 @@ def main() -> int:
     settings = Settings.from_env()
     try:
         settings.validate_settlement_config()
-        engine = create_bounded_engine(settings.economy_database_url)
+        engine = create_bounded_engine(
+            settings.economy_database_url,
+            pool_size=settings.economy_pool_size,
+            max_overflow=settings.economy_pool_max_overflow,
+            pool_timeout=settings.economy_pool_timeout,
+        )
         sessions = sessionmaker(engine, expire_on_commit=False)
         try:
             if args.command == "settle":

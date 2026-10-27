@@ -34,6 +34,39 @@ limits bound individual database operations, not a complete settlement batch or
 request. Tune overrides against measured work rather than disabling timeouts to
 hide contention.
 
+Platform and Economy SQLAlchemy pools are independently bounded per process.
+`PLATFORM_POOL_SIZE` and `ECONOMY_POOL_SIZE` default to 5; their corresponding
+`*_POOL_MAX_OVERFLOW` values default to 10 and `*_POOL_TIMEOUT` values default to
+30 seconds. Pool size must be positive, overflow nonnegative, and timeout finite
+and positive. PostgreSQL connections also use a five-second connect timeout and
+the statement/lock timeouts above unless explicitly supplied in the database URL.
+For capacity planning, calculate each service/database's maximum as
+`processes × replicas × (pool_size + max_overflow)`; include every concurrently
+running process, including settlement workers/CLI jobs where applicable. Add
+Core's separately configured `CORE_DB_MAX_CONNECTIONS` pool (default 32 per Core
+process), then reserve PostgreSQL capacity for migrations, administration and
+other workloads. Compare the resulting total with the actual database connection
+limit; choose values from measured workload and available reserved capacity rather
+than assuming the defaults fit a deployment.
+
+Core emits structured `admission_state` events with `outcome` values `admitted`,
+`released`, `waiting`, `queue_full`, `timeout` and `canceled`. Fields also include
+point-in-time `active` and `waiting` counts and `wait_ms`. Per
+instance, at most 256 authenticated handlers execute and 1,024 wait up to five
+seconds; authenticated handler work has a 30-second context timeout. Overflow or
+queue expiry returns 429 with `Retry-After: 1`; cancellation frees waiting capacity.
+These counters are event snapshots, not interval aggregates or a global rate limit.
+
+Outbox telemetry uses `completion_backlog` every 30 seconds (`pending`, `retrying`,
+`oldest_age_ms`); retrying excludes first-attempt leased events. Sampling has a
+two-second query deadline, and query failure emits `completion_backlog_sample_failed`
+with a fixed reason. Each delivery attempt emits `completion_delivery` with status,
+HTTP status, attempt and safe reason plus event/run IDs. Successful acknowledgements
+emit `completion_delivery_age` with outcome and elapsed `age_ms`; it excludes event
+and run identifiers. Worker-level failures emit `completion_dispatch_failed`.
+These logs expose outcomes and sampled backlog, but do not by themselves provide
+durable metrics, alert delivery, or hosted monitoring.
+
 ## Monitoring and incident response
 
 Alert on failed readiness, elevated checkpoint errors/latency, exhausted database

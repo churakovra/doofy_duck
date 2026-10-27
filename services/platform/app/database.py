@@ -22,16 +22,41 @@ PlatformSession = None
 EconomySession = None
 
 
-def configure_databases(platform_url: str, economy_url: str) -> None:
+def configure_databases(
+    platform_url: str,
+    economy_url: str,
+    *,
+    platform_pool_size: int = 5,
+    platform_max_overflow: int = 10,
+    platform_pool_timeout: float = 30.0,
+    economy_pool_size: int = 5,
+    economy_max_overflow: int = 10,
+    economy_pool_timeout: float = 30.0,
+) -> None:
     global platform_engine, economy_engine, PlatformSession, EconomySession
-    platform_engine = create_bounded_engine(platform_url)
-    economy_engine = create_bounded_engine(economy_url)
+    platform_engine = create_bounded_engine(
+        platform_url,
+        pool_size=platform_pool_size,
+        max_overflow=platform_max_overflow,
+        pool_timeout=platform_pool_timeout,
+    )
+    economy_engine = create_bounded_engine(
+        economy_url, pool_size=economy_pool_size, max_overflow=economy_max_overflow, pool_timeout=economy_pool_timeout
+    )
     PlatformSession = sessionmaker(platform_engine, expire_on_commit=False)
     EconomySession = sessionmaker(economy_engine, expire_on_commit=False)
 
 
-def create_bounded_engine(url: str) -> Engine:
+def create_bounded_engine(
+    url: str, *, pool_size: int = 5, max_overflow: int = 10, pool_timeout: float = 30.0
+) -> Engine:
     """Create an engine with bounded PostgreSQL connection and statement waits."""
+    pool_options = {
+        "pool_pre_ping": True,
+        "pool_size": pool_size,
+        "max_overflow": max_overflow,
+        "pool_timeout": pool_timeout,
+    }
     parsed = make_url(url)
     if not parsed.drivername.startswith("postgresql"):
         return create_engine(parsed, pool_pre_ping=True)
@@ -45,7 +70,7 @@ def create_bounded_engine(url: str) -> Engine:
     query["options"] = options
     query.setdefault("connect_timeout", "5")
     parsed = parsed.set(query=query)
-    return create_engine(parsed, pool_pre_ping=True)
+    return create_engine(parsed, **pool_options)
 
 
 def platform_session() -> Generator[Session]:
