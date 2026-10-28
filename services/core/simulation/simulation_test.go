@@ -9,11 +9,11 @@ import (
 )
 
 func TestCurrentContractIdentity(t *testing.T) {
-	if SimulationVersion != "3.1.0" || GeneratorVersion != "3.1.0" || DefaultConfigID != "dd-v3-varied-base-v1" {
+	if SimulationVersion != "3.2.0" || GeneratorVersion != "3.2.0" || DefaultConfigID != "dd-v3-curved-pipes-v1" {
 		t.Fatalf("unexpected bonus-segments-v2 identity: %s/%s/%s", SimulationVersion, GeneratorVersion, DefaultConfigID)
 	}
 	current, err := CreateRun(Descriptor{RunID: "current", Seed: 4, SimulationVersion: SimulationVersion, GeneratorVersion: GeneratorVersion, ConfigID: DefaultConfigID})
-	if err != nil || current.Config.Wetland == nil || current.Config.Wetland.CatalogVersion != 12 || current.NextPipeX == nil || current.Config.Wetland.StarFormations == nil || *current.Config.Wetland.StarFormations {
+	if err != nil || current.Config.Wetland == nil || current.Config.Wetland.CatalogVersion != 13 || current.NextPipeX == nil || current.Config.Wetland.StarFormations == nil || *current.Config.Wetland.StarFormations {
 		t.Fatalf("bonus-segments-v2 default run missing catalog/cursor/default Star policy: err=%v", err)
 	}
 	bonusSegmentsV1, err := CreateRun(Descriptor{RunID: "bonus-v1-frozen", Seed: 4, SimulationVersion: BonusSegmentsSimulationVersion, GeneratorVersion: BonusSegmentsGeneratorVersion, ConfigID: BonusSegmentsConfigID})
@@ -1748,6 +1748,43 @@ func TestVariedBaseSharedVectors(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, v := range fixture.Cases {
+		s, err := CreateRun(Descriptor{RunID: "vector", Seed: v.Seed, SimulationVersion: VariedBaseSimulationVersion, GeneratorVersion: VariedBaseGeneratorVersion, ConfigID: VariedBaseConfigID})
+		if err != nil {
+			t.Fatal(err)
+		}
+		x := int64(100000)
+		s.Pipes = nil
+		s.NextPipeIndex = v.Block * 4
+		s.NextPipeX = &x
+		s.LastGapCenter = 280000
+		result, err := GenerateNext(s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i, p := range result.State.Pipes[:4] {
+			if p.GapCenter != v.Centers[i] || *p.StationSpacing != v.Spacings[i] {
+				t.Fatalf("seed %d block %d station %d: got %d/%d want %d/%d", v.Seed, v.Block, i, p.GapCenter, *p.StationSpacing, v.Centers[i], v.Spacings[i])
+			}
+		}
+	}
+}
+func TestCurvedPipesSharedVectors(t *testing.T) {
+	data, err := os.ReadFile("../../../contracts/simulation/curved-pipes-v1.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture struct {
+		Cases []struct {
+			Seed     int64   `json:"seed"`
+			Block    int64   `json:"block"`
+			Centers  []int64 `json:"centers"`
+			Spacings []int64 `json:"spacings"`
+		} `json:"cases"`
+	}
+	if err := json.Unmarshal(data, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	for _, v := range fixture.Cases {
 		s, err := CreateRun(Descriptor{RunID: "vector", Seed: v.Seed, SimulationVersion: SimulationVersion, GeneratorVersion: GeneratorVersion, ConfigID: DefaultConfigID})
 		if err != nil {
 			t.Fatal(err)
@@ -1768,6 +1805,12 @@ func TestVariedBaseSharedVectors(t *testing.T) {
 		}
 	}
 }
+func TestCurvedPipesFullStateReplay(t *testing.T) {
+	if err := VerifyWetlandFixtures("../../../contracts/simulation/curved-pipes-replay-v1.json"); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestVariedBaseFullStateReplay(t *testing.T) {
 	if err := VerifyWetlandFixtures("../../../contracts/simulation/varied-base-replay-v1.json"); err != nil {
 		t.Fatal(err)

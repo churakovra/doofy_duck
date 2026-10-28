@@ -109,6 +109,10 @@ func ConfigIDFor(c Config) (string, error) {
 	}
 	def, _ := CanonicalJSON(DefaultConfiguration())
 	cur, _ := CanonicalJSON(c)
+	variedBase, _ := CanonicalJSON(VariedBaseConfiguration())
+	if cur == variedBase {
+		return VariedBaseConfigID, nil
+	}
 	baseBonus, _ := CanonicalJSON(BaseBonusConfiguration())
 	if cur == baseBonus {
 		return BaseBonusConfigID, nil

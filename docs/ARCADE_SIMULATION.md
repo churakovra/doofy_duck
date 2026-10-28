@@ -4,9 +4,21 @@ The deterministic game runs independently in TypeScript and Go. The modules expo
 
 ## Wetland rules
 
-The current varied-base default is simulation/generator `3.1.0`,
-configuration `dd-v3-varied-base-v1`, encounter catalog 12. Core issues this
-identity for new runs. Ordinary pipes use fixed 126,400-unit center spacing.
+The current curved-pipes default is simulation/generator `3.2.0`, configuration
+`dd-v3-curved-pipes-v1`, encounter catalog 13. Core issues this identity for
+new runs. Ordinary pipe spacing remains 126,400 units. Each four-pipe block
+uses a seeded direction and a seeded height offset. A seed selects one of three
+move-size and turning patterns. Each move adds a seeded offset of 0–15,000 units
+to its pattern size and respects the configured maximum gap delta. Moves reverse
+at the configured center bounds. The first pipe retains the existing safe lead-in.
+Bonus segments override these moves and keep their existing rules. The shared
+fixtures check TypeScript and Go parity. A small set of maximum-speed controller
+witnesses checks representative paths. These checks do not prove all paths are
+playable, and human playtest acceptance remains open.
+
+Catalog 12 remains available for issued runs. The varied-base rules use
+simulation/generator `3.1.0`, configuration `dd-v3-varied-base-v1`, encounter
+catalog 12. Ordinary pipes use fixed 126,400-unit center spacing.
 Their gap centers move a seeded 30,000–70,000 units in either direction from
 the previous center. If a move crosses a configured center bound, it reverses;
 the initial gap retains the prior safe bound of ±35,000 from the configured

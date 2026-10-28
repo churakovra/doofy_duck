@@ -32,6 +32,7 @@ func validateDescriptor(d Descriptor) error {
 		return fmt.Errorf("invalid seed")
 	}
 	currentRules := d.SimulationVersion == SimulationVersion && d.GeneratorVersion == GeneratorVersion
+	variedBaseRules := d.SimulationVersion == VariedBaseSimulationVersion && d.GeneratorVersion == VariedBaseGeneratorVersion
 	baseBonusRules := d.SimulationVersion == BaseBonusSimulationVersion && d.GeneratorVersion == BaseBonusGeneratorVersion
 	densePipesRules := d.SimulationVersion == DensePipesSimulationVersion && d.GeneratorVersion == DensePipesGeneratorVersion
 	pressurePipesRules := d.SimulationVersion == PressurePipesSimulationVersion && d.GeneratorVersion == PressurePipesGeneratorVersion
@@ -46,10 +47,10 @@ func validateDescriptor(d Descriptor) error {
 	legacyRules := d.SimulationVersion == LegacySimulationVersion && d.GeneratorVersion == LegacyGeneratorVersion
 	wetlandRules := d.SimulationVersion == WetlandSimulationVersion && d.GeneratorVersion == WetlandGeneratorVersion
 	customConfig := strings.HasPrefix(d.ConfigID, "dd-v1-config:") && len(d.ConfigID) > len("dd-v1-config:")
-	if strings.TrimSpace(d.RunID) == "" || !(currentRules || baseBonusRules || densePipesRules || pressurePipesRules || variedPipesRules || bonusSegmentsV2Rules || bonusSegmentsRules || coinCourseRules || currencyFormationsRules || pairedRules || variedRules || wetlandRules || priorRules || legacyRules) ||
-		!(d.ConfigID == DefaultConfigID || d.ConfigID == BaseBonusConfigID || d.ConfigID == DensePipesConfigID || d.ConfigID == PressurePipesConfigID || d.ConfigID == VariedPipesConfigID || d.ConfigID == BonusSegmentsV2ConfigID || d.ConfigID == BonusSegmentsConfigID || d.ConfigID == CoinCourseConfigID || d.ConfigID == CurrencyFormationsConfigID || d.ConfigID == PairedRoutesConfigID || d.ConfigID == VariedObstacleDefaultConfigID || d.ConfigID == WetlandDefaultConfigID || d.ConfigID == PriorDefaultConfigID || d.ConfigID == LegacyDefaultConfigID || customConfig) ||
+	if strings.TrimSpace(d.RunID) == "" || !(currentRules || variedBaseRules || baseBonusRules || densePipesRules || pressurePipesRules || variedPipesRules || bonusSegmentsV2Rules || bonusSegmentsRules || coinCourseRules || currencyFormationsRules || pairedRules || variedRules || wetlandRules || priorRules || legacyRules) ||
+		!(d.ConfigID == DefaultConfigID || d.ConfigID == VariedBaseConfigID || d.ConfigID == BaseBonusConfigID || d.ConfigID == DensePipesConfigID || d.ConfigID == PressurePipesConfigID || d.ConfigID == VariedPipesConfigID || d.ConfigID == BonusSegmentsV2ConfigID || d.ConfigID == BonusSegmentsConfigID || d.ConfigID == CoinCourseConfigID || d.ConfigID == CurrencyFormationsConfigID || d.ConfigID == PairedRoutesConfigID || d.ConfigID == VariedObstacleDefaultConfigID || d.ConfigID == WetlandDefaultConfigID || d.ConfigID == PriorDefaultConfigID || d.ConfigID == LegacyDefaultConfigID || customConfig) ||
 		(d.ConfigID == CurrencyFormationsConfigID && !currencyFormationsRules) ||
-		(d.ConfigID == CoinCourseConfigID && !coinCourseRules) || (d.ConfigID == BonusSegmentsConfigID && !bonusSegmentsRules) || (d.ConfigID == BonusSegmentsV2ConfigID && !bonusSegmentsV2Rules) || (d.ConfigID == VariedPipesConfigID && !variedPipesRules) || (d.ConfigID == PressurePipesConfigID && !pressurePipesRules) || (d.ConfigID == DensePipesConfigID && !densePipesRules) || (d.ConfigID == BaseBonusConfigID && !baseBonusRules) || (d.ConfigID == DefaultConfigID && !currentRules) ||
+		(d.ConfigID == CoinCourseConfigID && !coinCourseRules) || (d.ConfigID == BonusSegmentsConfigID && !bonusSegmentsRules) || (d.ConfigID == BonusSegmentsV2ConfigID && !bonusSegmentsV2Rules) || (d.ConfigID == VariedPipesConfigID && !variedPipesRules) || (d.ConfigID == PressurePipesConfigID && !pressurePipesRules) || (d.ConfigID == DensePipesConfigID && !densePipesRules) || (d.ConfigID == BaseBonusConfigID && !baseBonusRules) || (d.ConfigID == VariedBaseConfigID && !variedBaseRules) || (d.ConfigID == DefaultConfigID && !currentRules) ||
 		(d.ConfigID == PairedRoutesConfigID && !pairedRules) || (d.ConfigID == VariedObstacleDefaultConfigID && !variedRules) || (d.ConfigID == PriorDefaultConfigID && !priorRules) || (d.ConfigID == LegacyDefaultConfigID && !legacyRules) {
 		return fmt.Errorf("invalid descriptor")
 	}
@@ -247,7 +248,7 @@ func ValidateConfig(c Config) error {
 		if c.Challenges != nil {
 			return fmt.Errorf("wetland and legacy challenge modes are mutually exclusive")
 		}
-		if (wetland.CatalogVersion != 1 && wetland.CatalogVersion != 2 && wetland.CatalogVersion != 3 && wetland.CatalogVersion != 4 && wetland.CatalogVersion != 5 && wetland.CatalogVersion != 6 && wetland.CatalogVersion != 7 && wetland.CatalogVersion != 8 && wetland.CatalogVersion != 9 && wetland.CatalogVersion != 10 && wetland.CatalogVersion != 11 && wetland.CatalogVersion != 12) || len(wetland.StationSpacing) != 3 || wetland.RecoverySpacing != 360000 || len(wetland.IntroFamilies) != 2 || len(wetland.PressureFamilies) != 3 || len(wetland.Families) != 5 {
+		if (wetland.CatalogVersion != 1 && wetland.CatalogVersion != 2 && wetland.CatalogVersion != 3 && wetland.CatalogVersion != 4 && wetland.CatalogVersion != 5 && wetland.CatalogVersion != 6 && wetland.CatalogVersion != 7 && wetland.CatalogVersion != 8 && wetland.CatalogVersion != 9 && wetland.CatalogVersion != 10 && wetland.CatalogVersion != 11 && wetland.CatalogVersion != 12 && wetland.CatalogVersion != 13) || len(wetland.StationSpacing) != 3 || wetland.RecoverySpacing != 360000 || len(wetland.IntroFamilies) != 2 || len(wetland.PressureFamilies) != 3 || len(wetland.Families) != 5 {
 			return fmt.Errorf("wetland catalog")
 		}
 		if wetland.CatalogVersion >= 10 {
@@ -303,7 +304,7 @@ func ValidateConfig(c Config) error {
 		if wetland.CatalogVersion >= 7 && wetland.StarFormations != nil && *wetland.StarFormations && c.StarSchedule == nil {
 			return fmt.Errorf("catalog-7 Star formations require a scheduled Star route")
 		}
-		if wetland.CatalogVersion != 6 && wetland.CatalogVersion != 7 && wetland.CatalogVersion != 8 && wetland.CatalogVersion != 9 && wetland.CatalogVersion != 10 && wetland.CatalogVersion != 11 && wetland.CatalogVersion != 12 && wetland.StarFormations != nil {
+		if wetland.CatalogVersion != 6 && wetland.CatalogVersion != 7 && wetland.CatalogVersion != 8 && wetland.CatalogVersion != 9 && wetland.CatalogVersion != 10 && wetland.CatalogVersion != 11 && wetland.CatalogVersion != 12 && wetland.CatalogVersion != 13 && wetland.StarFormations != nil {
 			return fmt.Errorf("Star formations are only supported in catalog 6 and 7")
 		}
 		if strings.Join(wetland.IntroFamilies, ",") != "steady,quick-pairs" || strings.Join(wetland.PressureFamilies, ",") != "dive-climb,climb-dive,slalom" {

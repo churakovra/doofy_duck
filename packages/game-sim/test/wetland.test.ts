@@ -1058,7 +1058,7 @@ describe("wetland station contract", () => {
 
   it("issues paired routes while retaining frozen varied and 2.0 wetland identities", () => {
     expect([SIMULATION_VERSION, GENERATOR_VERSION, DEFAULT_CONFIG_ID]).toEqual([
-      "3.1.0", "3.1.0", "dd-v3-varied-base-v1",
+      "3.2.0", "3.2.0", "dd-v3-curved-pipes-v1",
     ]);
     expect(createRunDescriptor({ runId: "paired", seed: 4 })).toMatchObject({
       simulationVersion: SIMULATION_VERSION, generatorVersion: GENERATOR_VERSION, configId: DEFAULT_CONFIG_ID,

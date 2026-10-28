@@ -223,9 +223,10 @@ func VerifyWetlandFixtures(path string) error {
 		fixture.GeneratorVersion == DensePipesGeneratorVersion && fixture.ConfigID == DensePipesConfigID && len(fixture.Cases) >= 1
 	baseBonusFixture := fixture.FixtureRevision == "base-bonus-replay-1" && fixture.SimulationVersion == BaseBonusSimulationVersion &&
 		fixture.GeneratorVersion == BaseBonusGeneratorVersion && fixture.ConfigID == BaseBonusConfigID && len(fixture.Cases) >= 1
-	variedBaseFixture := fixture.FixtureRevision == "varied-base-replay-1" && fixture.SimulationVersion == SimulationVersion &&
-		fixture.GeneratorVersion == GeneratorVersion && fixture.ConfigID == DefaultConfigID && len(fixture.Cases) >= 1
-	if !variedBaseFixture && !baseBonusFixture && !denseFixture && !pressureFixture && !priorFixture && !variedFixture && !pairedFixture && !currencyFixture && !coinCourseFixture && !bonusSegmentsFixture && !bonusSegmentsRecoveryFixture && !bonusSegmentsV2Fixture {
+	variedBaseFixture := fixture.FixtureRevision == "varied-base-replay-1" && fixture.SimulationVersion == VariedBaseSimulationVersion &&
+		fixture.GeneratorVersion == VariedBaseGeneratorVersion && fixture.ConfigID == VariedBaseConfigID && len(fixture.Cases) >= 1
+	curvedFixture := fixture.FixtureRevision == "curved-pipes-replay-1" && fixture.SimulationVersion == SimulationVersion && fixture.GeneratorVersion == GeneratorVersion && fixture.ConfigID == DefaultConfigID && len(fixture.Cases) >= 1
+	if !curvedFixture && !variedBaseFixture && !baseBonusFixture && !denseFixture && !pressureFixture && !priorFixture && !variedFixture && !pairedFixture && !currencyFixture && !coinCourseFixture && !bonusSegmentsFixture && !bonusSegmentsRecoveryFixture && !bonusSegmentsV2Fixture {
 		return fmt.Errorf("unexpected wetland fixture identity/case count")
 	}
 	for _, example := range fixture.Cases {

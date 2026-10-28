@@ -120,6 +120,21 @@ function irregularBaseCenter(seed: number, index: number, previous: number, conf
   return target;
 }
 
+function curvedBaseCenter(seed: number, index: number, previous: number, config: GameConfig): number {
+  const p = config.pipes;
+  const block = Math.floor(index / 4);
+  const sample = mix32((seed ^ Math.imul(block + 1, 0x6a09e667)) >>> 0);
+  const step = index % 4;
+  const shape = sample % 3;
+  const magnitudes = [[30_000, 60_000, 70_000, 30_000], [45_000, 70_000, 35_000, 60_000], [60_000, 35_000, 70_000, 45_000]];
+  const turns = [[1, 1, 1, 1], [1, 1, -1, -1], [1, 1, 1, -1]];
+  const magnitude = Math.min(p.maxGapDelta, magnitudes[shape]![step]! + (sample >>> 2) % 15_001);
+  const direction = ((sample & 0x80000000) === 0 ? 1 : -1) * turns[shape]![step]!;
+  let target = previous + direction * magnitude;
+  if (target < p.gapMinCenter || target > p.gapMaxCenter) target = previous - direction * magnitude;
+  return Math.max(p.gapMinCenter, Math.min(p.gapMaxCenter, target));
+}
+
 function variedPipeCenter(seed: number, index: number, previous: number, recovery: boolean, config: GameConfig): number {
   const delta = Math.min(config.pipes.maxGapDelta, recovery ? 35_000 : 75_000);
   const low = Math.max(config.pipes.gapMinCenter, previous - delta);
@@ -283,7 +298,9 @@ export function generateNext(s: RunState): StepResult {
         ? scaledClearanceSpacing(baseStationSpacing, p.width, 60) : baseStationSpacing;
     let raw = p.gapMinCenter + sample % (p.gapMaxCenter - p.gapMinCenter + 1);
     if (familySpec) raw = familySpec.gapCenters[stationStep]!;
-    if ((wetland?.catalogVersion ?? 0) >= 11) raw = wetland!.catalogVersion === 12 && index > 0
+    if ((wetland?.catalogVersion ?? 0) >= 11) raw = wetland!.catalogVersion === 13 && index > 0
+      ? curvedBaseCenter(s.descriptor.seed, index, previousGap, s.config)
+      : wetland!.catalogVersion === 12 && index > 0
       ? irregularBaseCenter(s.descriptor.seed, index, previousGap, s.config)
       : bonusSegmentV2OrdinaryCenter(s.descriptor.seed, index, previousGap, s.config);
     if (coinCourse && stationStep < 3) raw = coinCourseGapCenter(s.descriptor.seed, wetlandBlock, stationStep);

@@ -113,7 +113,7 @@ capacity and real Telegram/device acceptance are separate gates.
 - Velocity tilt, wing/flap motion, restrained squash/stretch and bounded visual effects improve feedback without changing authoritative hitboxes. Extra motion respects the reduced-motion setting.
 - Original synthesized flap/pickup/death sounds and a quiet music loop unlock from a user gesture. Separate sound/music controls are saved locally; backgrounding and pause silence playback.
 
-The shared simulation default is simulation/generator `3.1.0`, config ID `dd-v3-varied-base-v1` (catalog 12). New account runs use that identity. Ordinary pipes use fixed 126.4-pixel center spacing with seeded 30–70-pixel gap-center moves in either direction; moves reverse at configured bounds. The initial gap retains its existing safe bound. Catalog 11's bonus and coin schedule is unchanged. Issued catalog-11 runs retain `3.0.0` / `dd-v3-base-bonus-v1`; older catalogs keep their original rules. See [`docs/ARCADE_SIMULATION.md`](docs/ARCADE_SIMULATION.md) for the rules and verification limits.
+The shared simulation default is simulation/generator `3.2.0`, config ID `dd-v3-curved-pipes-v1` (catalog 13). New account runs use this identity. Ordinary pipes retain 126.4-pixel center spacing. Seeded four-pipe curves vary gap heights, with moves bounded by the configured limits. Issued catalog-12 runs retain `3.1.0` / `dd-v3-varied-base-v1`. Earlier catalogs also retain their rules. See [`docs/ARCADE_SIMULATION.md`](docs/ARCADE_SIMULATION.md) for the rules and verification limits.
 
 ## Verification commands
 

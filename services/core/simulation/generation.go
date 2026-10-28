@@ -232,6 +232,26 @@ func irregularBaseCenter(seed uint32, index, previous int64, c Config) int64 {
 	return target
 }
 
+func curvedBaseCenter(seed uint32, index, previous int64, c Config) int64 {
+	p := c.Pipes
+	block := index / 4
+	sample := Mix32(seed ^ uint32(block+1)*uint32(0x6a09e667))
+	shape := sample % 3
+	magnitudes := [3][4]int64{{30000, 60000, 70000, 30000}, {45000, 70000, 35000, 60000}, {60000, 35000, 70000, 45000}}
+	turns := [3][4]int64{{1, 1, 1, 1}, {1, 1, -1, -1}, {1, 1, 1, -1}}
+	magnitude := min64(p.MaxGapDelta, magnitudes[shape][index%4]+int64((sample>>2)%15001))
+	direction := int64(1)
+	if sample&0x80000000 != 0 {
+		direction = -1
+	}
+	direction *= turns[shape][index%4]
+	target := previous + direction*magnitude
+	if target < p.GapMinCenter || target > p.GapMaxCenter {
+		target = previous - direction*magnitude
+	}
+	return max64(p.GapMinCenter, min64(p.GapMaxCenter, target))
+}
+
 func variedPipeCenter(seed uint32, index, previous int64, recovery bool, c Config) int64 {
 	delta := int64(75000)
 	if recovery {
@@ -619,6 +639,8 @@ func CreateRun(d Descriptor, configurations ...Config) (State, error) {
 	if len(configurations) == 1 {
 		c = configurations[0]
 	} else if d.ConfigID == DefaultConfigID {
+		c = CurvedPipesConfiguration()
+	} else if d.ConfigID == VariedBaseConfigID {
 		c = VariedBaseConfiguration()
 	} else if d.ConfigID == BaseBonusConfigID {
 		c = BaseBonusConfiguration()
@@ -687,8 +709,11 @@ func CreateRun(d Descriptor, configurations ...Config) (State, error) {
 		if c.Wetland.CatalogVersion == 11 && (d.SimulationVersion != BaseBonusSimulationVersion || d.GeneratorVersion != BaseBonusGeneratorVersion) {
 			return State{}, fmt.Errorf("catalog-11 requires base-bonus versions")
 		}
-		if c.Wetland.CatalogVersion == 12 && (d.SimulationVersion != SimulationVersion || d.GeneratorVersion != GeneratorVersion) {
+		if c.Wetland.CatalogVersion == 12 && (d.SimulationVersion != VariedBaseSimulationVersion || d.GeneratorVersion != VariedBaseGeneratorVersion) {
 			return State{}, fmt.Errorf("catalog-12 requires varied-base versions")
+		}
+		if c.Wetland.CatalogVersion == 13 && (d.SimulationVersion != SimulationVersion || d.GeneratorVersion != GeneratorVersion) {
+			return State{}, fmt.Errorf("catalog-13 requires curved-pipes versions")
 		}
 	}
 	s := State{Descriptor: d, Config: cloneConfig(c), Phase: Ready, Duck: Duck{X: c.Flight.DuckX, Y: floorHalf(c.Pipes.FloorY + c.Pipes.CeilingY)}, Pipes: []Pipe{}, Collectibles: []Collectible{}, Totals: map[string]int64{}, RNGState: uint32(d.Seed), LastGapCenter: floorHalf(c.Pipes.GapMinCenter + c.Pipes.GapMaxCenter), LastCollectiblePipe: -1000000, InputHistory: []Input{}}
@@ -798,7 +823,9 @@ func generateNextOwned(s State) (Result, error) {
 			stationSpacing = &spacing
 			raw = familySpec.GapCenters[stationStep]
 			if wetland.CatalogVersion >= 11 {
-				if wetland.CatalogVersion == 12 && index > 0 {
+				if wetland.CatalogVersion == 13 && index > 0 {
+					raw = curvedBaseCenter(uint32(s.Descriptor.Seed), index, previousGap, s.Config)
+				} else if wetland.CatalogVersion == 12 && index > 0 {
 					raw = irregularBaseCenter(uint32(s.Descriptor.Seed), index, previousGap, s.Config)
 				} else {
 					raw = bonusSegmentV2OrdinaryCenter(uint32(s.Descriptor.Seed), index, previousGap, s.Config)

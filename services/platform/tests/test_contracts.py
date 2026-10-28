@@ -147,6 +147,9 @@ def test_settlement_policies_keep_legacy_stars_out_and_credit_new_stars_without_
     bonus_segments_v2_identity = ("2.6.0", "2.6.0", "dd-v2-bonus-segments-v2")
 
     assert settlement_rewards(
+        ("3.2.0", "3.2.0", "dd-v3-curved-pipes-v1"), feathers=40, game_stars=900, feathers_remaining=30
+    ) == (30, 900)
+    assert settlement_rewards(
         ("3.1.0", "3.1.0", "dd-v3-varied-base-v1"), feathers=40, game_stars=900, feathers_remaining=30
     ) == (30, 900)
     assert settlement_rewards(

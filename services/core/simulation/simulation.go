@@ -265,7 +265,7 @@ func PatternCatalog() []Pattern {
 
 // DefaultConfiguration returns an independent copy of the default rules.
 func PriorDefaultConfiguration() Config  { return cloneConfig(canonicalPriorDefaultConfig) }
-func DefaultConfiguration() Config       { return VariedBaseConfiguration() }
+func DefaultConfiguration() Config       { return CurvedPipesConfiguration() }
 func LegacyDefaultConfiguration() Config { return cloneConfig(canonicalLegacyDefaultConfig) }
 func WetlandConfiguration() Config {
 	c := cloneConfig(canonicalPriorDefaultConfig)
@@ -392,9 +392,19 @@ const DensePipesConfigID = "dd-v2-dense-pipes-v1"
 const BaseBonusSimulationVersion = "3.0.0"
 const BaseBonusGeneratorVersion = "3.0.0"
 const BaseBonusConfigID = "dd-v3-base-bonus-v1"
-const SimulationVersion = "3.1.0"
-const GeneratorVersion = "3.1.0"
-const DefaultConfigID = "dd-v3-varied-base-v1"
+
+func CurvedPipesConfiguration() Config {
+	c := VariedBaseConfiguration()
+	c.Wetland.CatalogVersion = 13
+	return c
+}
+
+const VariedBaseSimulationVersion = "3.1.0"
+const VariedBaseGeneratorVersion = "3.1.0"
+const VariedBaseConfigID = "dd-v3-varied-base-v1"
+const SimulationVersion = "3.2.0"
+const GeneratorVersion = "3.2.0"
+const DefaultConfigID = "dd-v3-curved-pipes-v1"
 const CurrencyFormationsSimulationVersion = "2.3.0"
 const CurrencyFormationsGeneratorVersion = "2.3.0"
 const CurrencyFormationsConfigID = "dd-v2-currency-formations-v1"

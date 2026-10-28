@@ -20,10 +20,10 @@ describe('shared contract fixtures', () => {
     expect(fixture.fixtureRevision).toBe('stepped-challenges-1');
     expect(fixture.contractVersion).toBe(LEGACY_SIMULATION_VERSION);
     expect(fixture.defaultConfig).toEqual(LEGACY_DEFAULT_CONFIG);
-    expect(DEFAULT_CONFIG_ID).toBe('dd-v3-varied-base-v1');
+    expect(DEFAULT_CONFIG_ID).toBe('dd-v3-curved-pipes-v1');
     expect(createRunDescriptor({ runId: 'fixture-contract', seed: 1 }).configId).toBe(DEFAULT_CONFIG_ID);
-    expect([SIMULATION_VERSION, GENERATOR_VERSION, DEFAULT_CONFIG_ID]).toEqual(['3.1.0', '3.1.0', 'dd-v3-varied-base-v1']);
-    expect(DEFAULT_CONFIG.wetland?.catalogVersion).toBe(12);
+    expect([SIMULATION_VERSION, GENERATOR_VERSION, DEFAULT_CONFIG_ID]).toEqual(['3.2.0', '3.2.0', 'dd-v3-curved-pipes-v1']);
+    expect(DEFAULT_CONFIG.wetland?.catalogVersion).toBe(13);
     expect(BONUS_SEGMENTS_DEFAULT_CONFIG.wetland?.catalogVersion).toBe(6);
     expect(BONUS_SEGMENTS_DEFAULT_CONFIG.wetland?.starFormations).toBe(false);
     expect(BONUS_SEGMENTS_V2_DEFAULT_CONFIG.wetland?.catalogVersion).toBe(7);
@@ -62,7 +62,7 @@ describe('shared contract fixtures', () => {
     const current = createRun(createRunDescriptor({ runId: 'wetland-state', seed: 7 }));
     expect(current.nextPipeX).toBeDefined();
     expect(current.config.wetland).toBeDefined();
-    expect(current.config.wetland?.catalogVersion).toBe(12);
+    expect(current.config.wetland?.catalogVersion).toBe(13);
     const priorDescriptor = createRunDescriptor({ runId: 'prior-state', seed: 7 }, PRIOR_DEFAULT_CONFIG);
     const prior = createRun(priorDescriptor, PRIOR_DEFAULT_CONFIG);
     expect(prior).not.toHaveProperty('nextPipeX');
@@ -166,6 +166,18 @@ describe('shared contract fixtures', () => {
   });
   it('replays catalog-11 generated bonus state and events', () => {
     const fixture = JSON.parse(readFileSync('contracts/simulation/base-bonus-replay-v1.json', 'utf8')) as { cases: Case[] };
+    for (const example of fixture.cases) {
+      let state = example.initialState;
+      for (const operation of example.operations) {
+        const result = step(state, operation.frames ?? []);
+        expect(canonicalState(result.state)).toBe(canonicalState(operation.expectedState));
+        expect(result.events).toEqual(operation.expectedEvents);
+        state = result.state;
+      }
+    }
+  });
+  it('replays catalog-13 generated bonus state and events', () => {
+    const fixture = JSON.parse(readFileSync('contracts/simulation/curved-pipes-replay-v1.json', 'utf8')) as { cases: Case[] };
     for (const example of fixture.cases) {
       let state = example.initialState;
       for (const operation of example.operations) {

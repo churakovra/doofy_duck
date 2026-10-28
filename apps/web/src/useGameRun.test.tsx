@@ -65,9 +65,9 @@ afterEach(() => {
 describe('run clock integration', () => {
   it('restarts a fresh default run with the varied-base identity', () => {
     act(() => run.restart());
-    expect(run.getState().config.wetland?.catalogVersion).toBe(12);
+    expect(run.getState().config.wetland?.catalogVersion).toBe(13);
     expect(run.getState().descriptor).toMatchObject({
-      simulationVersion: '3.1.0', generatorVersion: '3.1.0', configId: 'dd-v3-varied-base-v1',
+      simulationVersion: '3.2.0', generatorVersion: '3.2.0', configId: 'dd-v3-curved-pipes-v1',
     });
     expect(run.getState().config).toEqual(DEFAULT_CONFIG);
   });

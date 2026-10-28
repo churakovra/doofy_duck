@@ -143,8 +143,8 @@ describe('account run transport', () => {
     await vi.waitFor(() => expect(harness.createRun).toHaveBeenCalled());
 
     expect(harness.runOptions?.initialState).toMatchObject({
-      descriptor: { simulationVersion: '3.1.0', generatorVersion: '3.1.0', configId: 'dd-v3-varied-base-v1' },
-      config: { wetland: { catalogVersion: 12 } },
+      descriptor: { simulationVersion: '3.2.0', generatorVersion: '3.2.0', configId: 'dd-v3-curved-pipes-v1' },
+      config: { wetland: { catalogVersion: 13 } },
     });
   });
 
@@ -665,8 +665,8 @@ describe('account run transport', () => {
     for (let tick = 121; tick <= 127; tick++) act(() => onTick({ phase: 'RUNNING', tick } as never, []));
     await act(async () => { finishRequest(runSnapshot({ checkpointSequence: 0, activeTicks: 120 })); });
     expect(harness.runOptions?.initialState).toMatchObject({
-      descriptor: { simulationVersion: '3.1.0', generatorVersion: '3.1.0', configId: 'dd-v3-varied-base-v1' },
-      config: { wetland: { catalogVersion: 12 } },
+      descriptor: { simulationVersion: '3.2.0', generatorVersion: '3.2.0', configId: 'dd-v3-curved-pipes-v1' },
+      config: { wetland: { catalogVersion: 13 } },
     });
     await vi.waitFor(() => {
       const trace = harness.traceRecords.get(`${account.account_id}:${initialState.descriptor.runId}`) as { activeTicks: number; unsentTicks: unknown[]; pending: unknown[] };

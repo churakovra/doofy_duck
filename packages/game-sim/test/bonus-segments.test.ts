@@ -13,6 +13,7 @@ import {
   PRESSURE_PIPES_DEFAULT_CONFIG,
   DENSE_PIPES_DEFAULT_CONFIG,
   BASE_BONUS_DEFAULT_CONFIG,
+  VARIED_BASE_DEFAULT_CONFIG,
   BONUS_SEGMENTS_V2_CONFIG_ID,
   BONUS_SEGMENTS_V2_GENERATOR_VERSION,
   BONUS_SEGMENTS_V2_SIMULATION_VERSION,
@@ -127,15 +128,15 @@ describe("catalog-6 bonus segments", () => {
     expect(BONUS_SEGMENTS_DEFAULT_CONFIG.wetland?.catalogVersion).toBe(6);
     expect(BONUS_SEGMENTS_DEFAULT_CONFIG.wetland?.starFormations).toBe(false);
     const descriptor = createRunDescriptor({ runId: "bonus-default", seed: 17 });
-    expect([SIMULATION_VERSION, GENERATOR_VERSION, DEFAULT_CONFIG_ID]).toEqual(["3.1.0", "3.1.0", "dd-v3-varied-base-v1"]);
+    expect([SIMULATION_VERSION, GENERATOR_VERSION, DEFAULT_CONFIG_ID]).toEqual(["3.2.0", "3.2.0", "dd-v3-curved-pipes-v1"]);
     expect(BONUS_SEGMENTS_V2_DEFAULT_CONFIG.wetland?.catalogVersion).toBe(7);
     expect(createRunDescriptor({ runId: "bonus-v2-frozen", seed: 17 }, BONUS_SEGMENTS_V2_DEFAULT_CONFIG)).toMatchObject({
       simulationVersion: BONUS_SEGMENTS_V2_SIMULATION_VERSION, generatorVersion: BONUS_SEGMENTS_V2_GENERATOR_VERSION,
       configId: BONUS_SEGMENTS_V2_CONFIG_ID,
     });
-    expect(DEFAULT_CONFIG.wetland?.catalogVersion).toBe(12);
-    expect(descriptor).toMatchObject({ simulationVersion: "3.1.0", generatorVersion: "3.1.0", configId: DEFAULT_CONFIG_ID });
-    expect(createRun(descriptor).config.wetland?.catalogVersion).toBe(12);
+    expect(DEFAULT_CONFIG.wetland?.catalogVersion).toBe(13);
+    expect(descriptor).toMatchObject({ simulationVersion: "3.2.0", generatorVersion: "3.2.0", configId: DEFAULT_CONFIG_ID });
+    expect(createRun(descriptor).config.wetland?.catalogVersion).toBe(13);
     const oldBonusDescriptor = createRunDescriptor({ runId: "bonus-v1-frozen", seed: 17 }, BONUS_SEGMENTS_DEFAULT_CONFIG);
     expect(oldBonusDescriptor).toMatchObject({ simulationVersion: BONUS_SEGMENTS_SIMULATION_VERSION,
       generatorVersion: BONUS_SEGMENTS_GENERATOR_VERSION, configId: BONUS_SEGMENTS_CONFIG_ID });
@@ -289,18 +290,18 @@ describe("catalog-6 bonus segments", () => {
 describe("catalog-7 bonus segments v2", () => {
   it("issues the 2.6 default and preserves the catalog-6 config identity", () => {
     expect([SIMULATION_VERSION, GENERATOR_VERSION, DEFAULT_CONFIG_ID]).toEqual([
-      "3.1.0",
-      "3.1.0",
-      "dd-v3-varied-base-v1",
+      "3.2.0",
+      "3.2.0",
+      "dd-v3-curved-pipes-v1",
     ]);
-    expect(DEFAULT_CONFIG.wetland?.catalogVersion).toBe(12);
+    expect(DEFAULT_CONFIG.wetland?.catalogVersion).toBe(13);
     const descriptor = createRunDescriptor({ runId: "bonus-v2-default", seed: 29 });
     expect(descriptor).toMatchObject({
-      simulationVersion: "3.1.0",
-      generatorVersion: "3.1.0",
-      configId: "dd-v3-varied-base-v1",
+      simulationVersion: "3.2.0",
+      generatorVersion: "3.2.0",
+      configId: "dd-v3-curved-pipes-v1",
     });
-    expect(createRun(descriptor).config.wetland?.catalogVersion).toBe(12);
+    expect(createRun(descriptor).config.wetland?.catalogVersion).toBe(13);
     const oldDescriptor = createRunDescriptor({ runId: "bonus-v1-still-supported", seed: 29 }, BONUS_SEGMENTS_DEFAULT_CONFIG);
     expect(oldDescriptor).toMatchObject({ simulationVersion: "2.5.0", generatorVersion: "2.5.0", configId: BONUS_SEGMENTS_CONFIG_ID });
     expect(createRun(oldDescriptor).config.wetland?.catalogVersion).toBe(6);
@@ -747,6 +748,52 @@ describe("catalog-11 bonus coin figure", () => {
   }, 30_000);
 });
 
+describe("curved pipe paths", () => {
+  it("matches shared curved-pipe vectors", async () => {
+    const { readFileSync } = await import("node:fs");
+    const fixture = JSON.parse(readFileSync("contracts/simulation/curved-pipes-v1.json", "utf8")) as { cases: { seed: number; block: number; centers: number[]; spacings: number[] }[] };
+    for (const example of fixture.cases) {
+      const pipes = preparedBlock(example.seed, example.block, DEFAULT_CONFIG).pipes.slice(0, 4);
+      expect(pipes.map(pipe => pipe.gapCenter)).toEqual(example.centers);
+      expect(pipes.map(pipe => pipe.stationSpacing)).toEqual(example.spacings);
+    }
+  });
+  it("uses seeded curved paths for new runs", () => {
+    expect(DEFAULT_CONFIG.wetland?.catalogVersion).toBe(13);
+    const routes = new Set<string>();
+    const directions = new Set<string>();
+    let curves = 0;
+    for (let seed = 0; seed < 32; seed++) {
+      const pipes = preparedBlock(seed, 2, DEFAULT_CONFIG, 280_000).pipes.slice(0, 4);
+      const deltas = pipes.map((pipe, index) => pipe.gapCenter - (index ? pipes[index - 1]!.gapCenter : 280_000));
+      expect(deltas.every(delta => Math.abs(delta) <= DEFAULT_CONFIG.pipes.maxGapDelta)).toBe(true);
+      if (deltas.some((delta, index) => index > 0 && delta * deltas[index - 1]! > 0)) curves++;
+      directions.add(deltas.map(delta => Math.sign(delta)).join(","));
+      routes.add(pipes.map(pipe => pipe.gapCenter).join(","));
+    }
+    expect(routes.size).toBeGreaterThan(8);
+    expect(curves).toBeGreaterThan(20);
+    expect(directions.size).toBeGreaterThan(3);
+  });
+  it("has max-speed controller witnesses for representative curves", () => {
+    for (const seed of [0, 1, 42, 99]) {
+      expect(witnessAtMaxSpeed(seed, 2, 280_000, 0, DEFAULT_CONFIG), `seed ${seed}`).toBe(true);
+    }
+  }, 30_000);
+  it("has controller witnesses across ordinary and bonus block boundaries", () => {
+    for (const seed of [0, 1, 42, 99]) {
+      const bonus = [6, 7, 8].find(block => isScheduledBonusBlock(DEFAULT_CONFIG, seed, block))!;
+      for (const block of [2, bonus, bonus + 1]) {
+        const previous = preparedBlock(seed, block - 1, DEFAULT_CONFIG, 280_000).pipes[3]!.gapCenter;
+        for (const velocity of [-500, 500]) {
+          expect(witnessAtMaxSpeed(seed, block, previous, velocity, DEFAULT_CONFIG, true),
+            `seed ${seed}, block ${block}, entry ${previous}, velocity ${velocity}`).toBe(true);
+        }
+      }
+    }
+  }, 60_000);
+});
+
 describe("catalog-12 varied base", () => {
   it("matches shared vectors and retains catalog-11 replay", async () => {
     const { readFileSync } = await import("node:fs");
@@ -754,7 +801,7 @@ describe("catalog-12 varied base", () => {
       cases: { seed: number; block: number; centers: number[]; spacings: number[] }[];
     };
     for (const example of fixture.cases) {
-      const pipes = preparedBlock(example.seed, example.block, DEFAULT_CONFIG).pipes.slice(0, 4);
+      const pipes = preparedBlock(example.seed, example.block, VARIED_BASE_DEFAULT_CONFIG).pipes.slice(0, 4);
       expect(pipes.map(pipe => pipe.gapCenter)).toEqual(example.centers);
       expect(pipes.map(pipe => pipe.stationSpacing)).toEqual(example.spacings);
     }
@@ -765,7 +812,7 @@ describe("catalog-12 varied base", () => {
   it("moves base openings visibly in both directions without forced alternation", () => {
     let positive = 0, negative = 0, repeatedDirection = 0;
     for (let seed = 0; seed < 128; seed++) for (const entry of [160_000, 280_000, 400_000]) {
-      const pipes = preparedBlock(seed, 2, DEFAULT_CONFIG, entry).pipes.slice(0, 4);
+      const pipes = preparedBlock(seed, 2, VARIED_BASE_DEFAULT_CONFIG, entry).pipes.slice(0, 4);
       const centers = [entry, ...pipes.map(pipe => pipe.gapCenter)];
       const deltas = centers.slice(1).map((value, index) => value - centers[index]!);
       for (const delta of deltas) {
@@ -775,16 +822,16 @@ describe("catalog-12 varied base", () => {
       }
       repeatedDirection += deltas.slice(1).filter((delta, index) => delta * deltas[index]! > 0).length;
       expect(pipes.map(pipe => pipe.stationSpacing)).toEqual([126_400, 126_400, 126_400, 126_400]);
-      expect(pipes.every(pipe => pipe.gapCenter >= DEFAULT_CONFIG.pipes.gapMinCenter && pipe.gapCenter <= DEFAULT_CONFIG.pipes.gapMaxCenter)).toBe(true);
+      expect(pipes.every(pipe => pipe.gapCenter >= VARIED_BASE_DEFAULT_CONFIG.pipes.gapMinCenter && pipe.gapCenter <= VARIED_BASE_DEFAULT_CONFIG.pipes.gapMaxCenter)).toBe(true);
     }
     expect(positive).toBeGreaterThan(100);
     expect(negative).toBeGreaterThan(100);
     expect(repeatedDirection).toBeGreaterThan(100);
   });
   it("keeps custom narrow bounds and the first-pipe lead-in safe", () => {
-    const config: GameConfig = { ...DEFAULT_CONFIG, pipes: { ...DEFAULT_CONFIG.pipes,
+    const config: GameConfig = { ...VARIED_BASE_DEFAULT_CONFIG, pipes: { ...VARIED_BASE_DEFAULT_CONFIG.pipes,
       gapMinCenter: 240_000, gapMaxCenter: 320_000, maxGapDelta: 80_000 },
-      wetland: { ...DEFAULT_CONFIG.wetland!, families: DEFAULT_CONFIG.wetland!.families.map(family => ({ ...family,
+      wetland: { ...VARIED_BASE_DEFAULT_CONFIG.wetland!, families: VARIED_BASE_DEFAULT_CONFIG.wetland!.families.map(family => ({ ...family,
         gapCenters: [280_000, 280_000, 280_000, 280_000] })) } };
     expect(validateConfig(config)).toBe(config);
     for (let seed = 0; seed < 64; seed++) for (const entry of [240_000, 280_000, 320_000]) {
@@ -798,21 +845,21 @@ describe("catalog-12 varied base", () => {
         previous = pipe.gapCenter;
       }
       const first = createRun(createRunDescriptor({ runId: `first-${seed}`, seed }));
-      expect(first.pipes[0]!.x).toBe(DEFAULT_CONFIG.pipes.safeLeadIn);
+      expect(first.pipes[0]!.x).toBe(VARIED_BASE_DEFAULT_CONFIG.pipes.safeLeadIn);
       expect(Math.abs(first.pipes[0]!.gapCenter - 280_000)).toBeLessThanOrEqual(35_000);
     }
   });
   it("collects all four mirrored hard patterns under the varied-base rules", () => {
     for (const seed of [0, 2, 5, 18]) {
-      const block = [6, 7, 8].find(value => isScheduledBonusBlock(DEFAULT_CONFIG, seed, value))!;
-      expect(collectBonusAtMaxSpeed(seed, block, 280_000, DEFAULT_CONFIG, true), `bonus ${seed}`).toBe(true);
+      const block = [6, 7, 8].find(value => isScheduledBonusBlock(VARIED_BASE_DEFAULT_CONFIG, seed, value))!;
+      expect(collectBonusAtMaxSpeed(seed, block, 280_000, VARIED_BASE_DEFAULT_CONFIG, true), `bonus ${seed}`).toBe(true);
     }
   }, 30_000);
   it("replays max-speed base changes and collects bonus figures", () => {
     for (const [seed, y, vy] of [[0, 240_000, -2_000], [1, 280_000, 0], [42, 320_000, 2_000], [99, 280_000, -2_000]] as const) {
-      expect(collectBonusAtMaxSpeed(seed, 2, y, DEFAULT_CONFIG, false, vy), `base ${seed}/${y}/${vy}`).toBe(true);
-      const block = [6, 7, 8].find(value => isScheduledBonusBlock(DEFAULT_CONFIG, seed, value))!;
-      expect(collectBonusAtMaxSpeed(seed, block, y, DEFAULT_CONFIG, true, vy), `bonus ${seed}/${y}/${vy}`).toBe(true);
+      expect(collectBonusAtMaxSpeed(seed, 2, y, VARIED_BASE_DEFAULT_CONFIG, false, vy), `base ${seed}/${y}/${vy}`).toBe(true);
+      const block = [6, 7, 8].find(value => isScheduledBonusBlock(VARIED_BASE_DEFAULT_CONFIG, seed, value))!;
+      expect(collectBonusAtMaxSpeed(seed, block, y, VARIED_BASE_DEFAULT_CONFIG, true, vy), `bonus ${seed}/${y}/${vy}`).toBe(true);
     }
   }, 30_000);
 });
