@@ -12,9 +12,7 @@ This is a development foundation, **not a commercial release**. Local startup
 connects a development Telegram identity and enables verified pickup settlement
 and the cosmetic shop unless explicitly disabled in local configuration. Production
 requires real Telegram authentication and separate economy activation. Paid
-continue, XTR funding, gifts and leaderboards remain unimplemented. Hosted capacity
-and real Telegram acceptance remain open; see the
-[backend implementation record](docs/BACKEND_FOUNDATION.md).
+continue, XTR funding, gifts and leaderboards remain unimplemented. Hosted capacity and real Telegram acceptance remain open.
 
 ## Project navigation
 
@@ -24,11 +22,6 @@ and real Telegram acceptance remain open; see the
 - [Foundation](docs/FOUNDATION.md): extension points for rules, cosmetics, and event consumers.
 - [Documentation map](docs/README.md): current rules, product vision, future architecture, and supporting research.
 - [Telegram bot setup](docs/TELEGRAM_BOT_SETUP.md): automatic launch identity and first real-bot test.
-- [Unified account game](docs/UNIFIED_ACCOUNT_GAME.md): single game path, complete local startup and verification.
-- [SHOP implementation](docs/SHOP_IMPLEMENTATION_RESULTS.md): delivered wallet/inventory/purchase code and verification limits.
-- [Backend verification](docs/BACKEND_FOUNDATION.md): ACCOUNT/RUN checks, capacity measurements and external acceptance gates.
-- [Challenge verification](docs/CHALLENGE_RESULTS.md): October 17 challenge checks and bounded physics evidence.
-- [Wetland challenges](docs/WETLAND_CHALLENGES.md): varied obstacles, collectible routes, compatibility and current verification status.
 
 ## Requirements
 
@@ -114,13 +107,13 @@ capacity and real Telegram/device acceptance are separate gates.
 
 - Wallet balances, purchases and equipment belong to the signed-in account. Verified completed-run pickups become spendable after settlement; pending rewards are shown separately. In-game Stars are not Telegram Stars or redeemable rewards.
 - One writer controls an active account run. Another tab or device must explicitly take over; account ownership and server verification govern persistent progress.
-- Seeded four-station wetland encounters use paired pipes. Current catalog-7 rules retain 50% of authored edge-to-edge clearance on ordinary stations and 10% on occasional hard bonus segments, followed by a 360-pixel recovery interval and a three-coin figure reward. Star formations are off by default. Two introductory families lead into alternating pressure and recovery routes; pause freezes play and restart resets the schedule. Mixed obstacles remain supported by their frozen legacy identities for future development.
+- Seeded wetland encounters use paired pipes and occasional hard bonus patterns. Bonus patterns offer a three-coin figure reward. Pause freezes play and restart resets the schedule. Older rules remain available for issued runs.
 - Active-time world speed ramps from 180 to 288 pixels/second over 45 seconds. Score adds speed in 10% steps per 10 cleared obstacle stations until the same cap, which can be reached earlier. Each station scores once, including a pair of pipes.
-- Optional coin routes and seeded Stars reward harder flight paths. Verified coin credit retains its 30-per-run wallet cap; collecting more does not raise that cap. See the wetland record for controller evidence and remaining owner playtesting.
+- Optional coin routes and seeded Stars reward harder flight paths. Verified coin credit retains its 30-per-run wallet cap; collecting more does not raise that cap. Gameplay tuning still requires owner playtesting.
 - Velocity tilt, wing/flap motion, restrained squash/stretch and bounded visual effects improve feedback without changing authoritative hitboxes. Extra motion respects the reduced-motion setting.
 - Original synthesized flap/pickup/death sounds and a quiet music loop unlock from a user gesture. Separate sound/music controls are saved locally; backgrounding and pause silence playback.
 
-The shared simulation default is simulation/generator `3.1.0`, config ID `dd-v3-varied-base-v1` (catalog 12). New account runs use that identity. Ordinary pipes use fixed 126.4-pixel center spacing with seeded 30–70-pixel gap-center moves in either direction; moves reverse at configured bounds. The initial gap retains its existing safe bound. Catalog 11's bonus and coin schedule is unchanged. Issued catalog-11 runs retain `3.0.0` / `dd-v3-base-bonus-v1`; older catalogs keep their original rules. See [`docs/ARCADE_SIMULATION.md`](docs/ARCADE_SIMULATION.md) for the rules and [wetland challenges](docs/WETLAND_CHALLENGES.md) for verification status.
+The shared simulation default is simulation/generator `3.1.0`, config ID `dd-v3-varied-base-v1` (catalog 12). New account runs use that identity. Ordinary pipes use fixed 126.4-pixel center spacing with seeded 30–70-pixel gap-center moves in either direction; moves reverse at configured bounds. The initial gap retains its existing safe bound. Catalog 11's bonus and coin schedule is unchanged. Issued catalog-11 runs retain `3.0.0` / `dd-v3-base-bonus-v1`; older catalogs keep their original rules. See [`docs/ARCADE_SIMULATION.md`](docs/ARCADE_SIMULATION.md) for the rules and verification limits.
 
 ## Verification commands
 
@@ -161,7 +154,7 @@ go -C services/core/simulation vet ./...
 go -C services/core/simulation test -run '^$' -bench 'BenchmarkDefault(Step|Replay300Ticks)$' -benchmem -count=3
 ```
 
-Playwright starts an isolated **production preview on127.0.0.1:4174** and an isolated **development server on127.0.0.1:4175**. Browser suites use one worker to isolate software-rendering load. Run the two suites sequentially because they share their artifact directory. Both suites disable server reuse so they test the configured build and source reliably. Browser screenshots are saved as test artifacts, not written over documentation images. Push/PR CI runs routine Node/Go checks without installing or launching Chromium. Browser checks are available through a manual workflow run with `browser_tests` enabled. A committed workflow file is not evidence of a GitHub-hosted run.
+Playwright starts an isolated **production preview on 127.0.0.1:4174** and an isolated **development server on 127.0.0.1:4175**. Browser suites use one worker to isolate software-rendering load. Run the two suites sequentially because they share their artifact directory. Both suites disable server reuse so they test the configured build and source reliably. Browser screenshots are saved as test artifacts, not written over documentation images. Push/PR CI runs routine Node/Go checks without installing or launching Chromium. Browser checks are available through a manual workflow run with `browser_tests` enabled. A committed workflow file is not evidence of a GitHub-hosted run.
 
 ## Source layout
 

@@ -45,8 +45,7 @@ separately resolvable at `2.3.0` / `dd-v2-currency-formations-v1`, catalog 4.
 The prior paired-route rules remain frozen at simulation/generator `2.2.0`, configuration
 `dd-v2-paired-routes-v1`, encounter catalog 3. Existing runs retain their issued
 identity, including frozen `2.1.0` / `2.1.0` / `dd-v2-varied-obstacles-v1`,
-`2.0.0` / `2.0.0` / `dd-v2-wetland-v1` and earlier rules. See
-[wetland challenges](WETLAND_CHALLENGES.md) for current verification status.
+`2.0.0` / `2.0.0` / `dd-v2-wetland-v1` and earlier rules.
 
 Catalog 3 generates paired pipes at every station. It uses the catalog-1 authored
 gap centers and paired pickup resolver, the 156-pixel opening and varied

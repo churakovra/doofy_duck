@@ -1,61 +1,22 @@
-# Local wardrobe and cosmetic authoring
+# Cosmetic authoring
 
-The wardrobe is local development functionality. Classic, Mint and Rose ducks
-and Meadow, Dusk and Winter worlds are freely selectable test content, not
-commercial inventory or approved launch artwork. Accounts, purchases and
-authoritative ownership remain separate features.
+The account shop owns the player-facing catalog and equipment flow. The Economy
+service defines offers in `services/platform/app/economy/shop/catalog.py`. It
+checks ownership and stores equipment. The client previews offers in
+`AccountShop.tsx` and resolves their procedural palettes in
+`account-shop-assets.ts`. Unknown assets fall back to the default appearance.
+See the [shop contract](../contracts/http/economy-shop-v1.md) for purchases and
+equipment.
 
-## Player flow
+To add or change an account cosmetic, coordinate stable server item IDs, names,
+prices and client appearance mappings. Check both languages, preview, equipment
+and ownership. Approved artwork and release policy remain separate decisions.
+Cosmetics do not change physics or collision bounds.
 
-Open **Wardrobe / Гардероб** outside a flight: before starting, while paused or
-after death. Select a duck and background to preview their combination. **Apply**
-equips both and closes the frame; Close or Escape discards the draft. Opening or
-closing the wardrobe does not start, resume or restart a run. Menu and wardrobe
-frames are mutually exclusive.
-
-Equipment saves on this device when browser storage works. A storage failure
-keeps selection available for the current session with a saving warning. Tabs
-have independent equipment state; there is no cross-tab synchronization.
-
-## Add or replace content
-
-The web application's `src/wardrobe.ts` owns the skin/background catalogs and
-equipment resolution. Each entry has a stable ID, Russian and English names,
-and a procedural appearance fallback. Skins and backgrounds are selected
-independently. Keep collectible colors and gameplay rules separate from the
-cosmetic world palette.
-
-To add a cosmetic:
-
-1. Add an entry to the appropriate catalog with a unique, permanent ID and both
-   names. Catalog validation rejects duplicate IDs.
-2. Supply its fallback appearance. Skin entries provide the duck appearance;
-   background entries provide the world palette, including readable pipes.
-3. Optionally supply image resources using the catalog's image fields. Keep
-   resources bundled locally; final art must have an approved source/license
-   record before release.
-4. Check preview and gameplay together, both languages, and the fallback with
-   resources unavailable. Extend catalog tests for the new entry.
-
-To replace temporary artwork, retain the entry's ID and update its appearance
-and image resources. Existing saved equipment then resolves to the new art.
-Removing or renaming an ID makes saved selections fall back to the default for
-that category; it does not invalidate the other selected category.
-
-For example, add the following optional field to the existing `rose` skin entry
-after placing the images in `apps/web/src/assets/`:
-
-```ts
-image: {
-  body: new URL('./assets/rose-body.png', import.meta.url).href,
-  wing: new URL('./assets/rose-wing.png', import.meta.url).href,
-},
-```
-
-A world entry uses `image: { background: new URL('./assets/winter.png',
-import.meta.url).href }` instead. Omit any resource to retain that part's
-procedural drawing. These URLs are resolved relative to `wardrobe.ts` and
-bundled by Vite. No wardrobe screen or saved-equipment changes are needed.
+`wardrobe.ts`, `GameWardrobe.tsx` and the image helpers also contain legacy local
+wardrobe functionality. The account game does not use its local storage as proof
+of ownership. The image conventions below describe those helpers. The account
+shop currently resolves procedural palettes and does not use these image fields.
 
 ## Image convention
 
@@ -77,15 +38,8 @@ completions, and renderer cleanup must not destroy shared cached textures.
 Preview and gameplay share cosmetic rendering helpers; preview does not advance
 the simulation.
 
-## Persistence and boundaries
+## Boundaries
 
-The `doofy-duck:wardrobe:v1` local-storage record contains version 1 and an
-`equipment` object with `skinId` and `backgroundId` only. Missing/corrupt records
-use defaults; unknown IDs fall back independently. This record is an untrusted
-local preference, never proof of ownership.
-
-Cosmetics must not enter run descriptors, physics configuration, simulation RNG,
-scores or replay identity. Relevant unit tests cover catalog resolution,
-persistence, draft/apply behavior and resource lifecycle. Run the root routine
-checks after code changes; browser suites and real Telegram/device acceptance
-remain separate, on-demand verification.
+The legacy `doofy-duck:wardrobe:v1` record is a local preference. It does not
+authorize account equipment. Cosmetics do not enter simulation identity, physics,
+scores or replay. Preview and gameplay share rendering helpers.

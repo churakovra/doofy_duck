@@ -25,7 +25,7 @@ The controller synthesizes original short descending triangle-wave flap/whoosh, 
 
 ## UI integration
 
-`useGameAudio.ts` owns the controller and saved preferences; `Game.tsx` connects
+`useGameAudio.ts` owns the controller and saved preferences; `AccountGame.tsx` connects
 gestures, phase changes, and gameplay events. Integration requirements:
 
 1. Construct one controller from `loadAudioPreferences()` and own its lifetime.
@@ -42,6 +42,4 @@ preferences, lifecycle, node cleanup, and offline rendering. Browser evidence
 does not establish human-audible output or Telegram mobile behavior.
 
 Manual Telegram iOS/Android and physical output validation remains open,
-including foreground/background recovery. See the
-[audio research](TELEGRAM_AUDIO_RESEARCH.md) for the browser-policy basis and
-[root README](../README.md) for check commands.
+including foreground/background recovery. See the [root README](../README.md) for check commands.

@@ -1,7 +1,6 @@
 # Backend operations and hosted acceptance
 
-This runbook accompanies the [approved backend foundation](BACKEND_FOUNDATION.md).
-It does not authorize a deployment or establish hosted availability.
+This runbook describes operational checks. It does not establish hosted availability.
 
 ## Before enabling account-backed play
 

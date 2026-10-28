@@ -24,7 +24,7 @@ The legacy contract contains 13 complete-state cases, 40 operations, 29200 accum
 
 Run `npm run build:sim && node contracts/simulation/generate-fixtures.mjs` only after inspecting a deliberate simulation change. Run `npm run test:parity` to verify committed expectations with both implementations.
 
-See [wetland challenges](../../docs/WETLAND_CHALLENGES.md) for the new encounter contract and current verification status. New wetland fixtures supplement the existing frozen fixtures; they do not replace or regenerate them.
+See [simulation rules](../../docs/ARCADE_SIMULATION.md) for the encounter contract and verification limits. New wetland fixtures supplement the existing frozen fixtures; they do not replace or regenerate them.
 
 The deferred catalog-2 controller matrix and local counterfactual are experimental
 checks enabled with `RUN_MIXED_OBSTACLE_EXPERIMENTS=1`; they are not paired-route

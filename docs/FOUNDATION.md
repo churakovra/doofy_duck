@@ -2,7 +2,7 @@
 
 The [product vision](PRODUCT_VISION.md) targets a Telegram arcade game with
 progression, cosmetic equipment, purchases, and later additional mechanics.
-The current foundation is a local game. This guide describes where to extend
+The current foundation is an account-backed game. This guide describes where to extend
 implemented code; it does not specify those future features.
 
 ## Rules and runs
@@ -54,12 +54,9 @@ The renderer draws floor and ceiling boundaries from the run configuration.
 Its current viewport remains 360 by 580 presentation pixels. A rule set intended
 for a different world extent also needs a deliberately designed camera; accepting
 a simulation configuration alone does not guarantee it fits the browser view.
-The local wardrobe resolves independently selected stable skin/background IDs
-into this appearance boundary and optional body, wing and background textures.
-Preview and gameplay share image placement; procedural art remains the fallback
-while resources load or after failure. Equipment is an untrusted device-local
-preference, not commercial inventory or ownership. See the
-[cosmetic authoring guide](COSMETICS.md) for adding and replacing content.
+The account shop resolves server-owned equipment IDs into procedural appearance.
+The legacy local wardrobe and image helpers remain in the repository. They do not
+control account ownership. See the [cosmetic authoring guide](COSMETICS.md).
 
 ## Events, statistics, and progress
 
@@ -71,17 +68,11 @@ Observers should be synchronous and lightweight. Observer exceptions are reporte
 without rewinding or stopping gameplay; this is not a delivery guarantee. Network
 delivery needs a separate bounded transport and retry policy.
 
-Existing explicit audio and completed-run progress callbacks remain in place.
-Local balances are untrusted browser data. Do not credit balances or update
-once-per-run statistics independently from an accepted settlement. A future
-durable statistics model must share the acceptance/idempotency boundary with its
-progress update and define how duplicates and rejected runs are handled.
-
-Local wallet deduplication retains only the last 128 run IDs. It protects the
-current local completion flow; it does not support unlimited delayed replays or
-imported run histories. Personal best uses best-effort local storage and does
-not promise atomic cross-tab updates. Authoritative accounts, inventory, economy,
-payments, continues, and verified checkpoints remain separate feature work.
+The account flow records input for Core verification. Verified completion facts
+are delivered to Economy for settlement. Account balances and equipment are
+server-owned. Legacy local progress helpers do not authorize account rewards or
+purchases. See the [wallet contract](../contracts/http/economy-wallet-v1.md) and
+[shop contract](../contracts/http/economy-shop-v1.md).
 
 ## Verification
 

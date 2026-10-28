@@ -816,3 +816,23 @@ describe("catalog-12 varied base", () => {
     }
   }, 30_000);
 });
+
+
+describe("challenging ordinary paths", () => {
+  it("includes larger seeded moves while keeping each opening in bounds", () => {
+    let largeMoves = 0;
+    for (let seed = 0; seed < 128; seed++) {
+      const pipes = preparedBlock(seed, 2, DEFAULT_CONFIG, 280_000).pipes.slice(0, 4);
+      let previous = 280_000;
+      for (const pipe of pipes) {
+        const delta = Math.abs(pipe.gapCenter - previous);
+        expect(delta).toBeLessThanOrEqual(DEFAULT_CONFIG.pipes.maxGapDelta);
+        expect(pipe.gapCenter).toBeGreaterThanOrEqual(DEFAULT_CONFIG.pipes.gapMinCenter);
+        expect(pipe.gapCenter).toBeLessThanOrEqual(DEFAULT_CONFIG.pipes.gapMaxCenter);
+        if (delta > 70_000) largeMoves++;
+        previous = pipe.gapCenter;
+      }
+    }
+    expect(largeMoves).toBeGreaterThan(30);
+  });
+});

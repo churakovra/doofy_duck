@@ -113,9 +113,7 @@ simulation 2.3.0, generator 2.3.0, config dd-v2-currency-formations-v1. It
 credits each individual FEATHER and GAME_STAR member at 1:1 under the same
 30-FEATHER run cap and uncapped in-game Star policy. Formations do not combine
 member values. Custom configurations and mismatched version/config tuples are
-ineligible. Core issues the currency-formations identity for new runs. Integration
-verification is recorded in
-[wetland challenges](../../docs/WETLAND_CHALLENGES.md).
+ineligible. Core continues to accept eligible runs issued under this identity.
 
 Other simulation identities become actionable_failure and receive no currency.
 

@@ -35,8 +35,7 @@ isolated from account authority and their balances are never imported.
 Python owns separate Platform/Economy modules and databases; Core owns its database.
 There are no cross-service SQL reads. Completion receipts durably store verified
 facts; settlement credits the Economy ledger under a pinned policy. Shop debit,
-entitlement and purchase result share one transaction. See
-[approved ownership](ADR-001-MICROSERVICES.md) and the versioned
+entitlement and purchase result share one transaction. See the versioned
 [account](../contracts/http/account-auth-v1.md)/[run](../contracts/http/core-run-v1.md) contracts.
 
 ## Source ownership
@@ -76,7 +75,7 @@ entitlement and purchase result share one transaction. See
 | --- | --- | --- |
 | Controls, pause/resume, startup/restart | `useGameRun`, `clock`, `input` | Relevant Vitest tests; browser/StrictMode suites only on request |
 | Appearance or viewport | `scene`, `appearance`, `GameCanvas`, `feel`, `style.css` | Relevant unit cases; browser/visual checks only on request |
-| Local balances or best | `local-progress`, `useGameProgress`, `wallet`, `wallet-session`, `storage` | Wallet/session unit cases; browser cases only on request |
+| Account balances or best | `AccountWallet`, Economy settlement and ledger, Core account progress | Relevant service and client tests; integration checks when required |
 | Sound/music | `audio`, `useGameAudio` | Audio unit cases; browser cases only on request; physical playback is separate evidence |
 | Physics, gaps, speed, scoring, pickups | TS simulation and Go simulation together | Semantic tests in both languages and `npm run test:parity` |
 | Descriptor/config/state/event shape | Both simulations, descriptor schema, fixtures and browser consumers | Schema/fixture tests and parity; review identity compatibility |
@@ -119,5 +118,4 @@ Account progress uses verified completion evidence and never imports browser
 balances. Frozen client snapshots cannot transfer authority to client balances.
 Paid continue transitions and their accounting remain feature work.
 
-[Go benchmarks](SIMULATION_BENCHMARKS.md) establish a deterministic native
-simulation baseline, not HTTP/database throughput or production player capacity.
+Native simulation benchmarks do not measure HTTP/database throughput or production player capacity.

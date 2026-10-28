@@ -80,7 +80,7 @@ The checked Bot API `sendGift` contract says its recipient cannot convert that
 gift to Telegram Stars. Gift delivery must not be described as Stars withdrawal.
 The selected gift, availability, delivery, and recipient behavior need verification
 before launch. See [Telegram's method contract](https://core.telegram.org/bots/api#sendgift)
-and the [technical reward research](ADR-002-CLIENT-AND-REWARDS.md).
+for the current provider contract.
 
 ## Future development and open decisions
 
@@ -110,12 +110,9 @@ real Telegram sign-in. There is no anonymous practice mode. Browser-only balance
 are never imported into account wallets. Payments, paid continues and gift
 redemption remain unimplemented. Local difficulty uses seeded wetland obstacle
 encounters and recovery sections alongside a speed ramp, with optional authored
-reward routes. See [wetland challenges](WETLAND_CHALLENGES.md) for current
-verification and acceptance status. Tuning, production economy
+reward routes. See [simulation rules](ARCADE_SIMULATION.md) for implementation limits. Tuning, production economy
 activation, hosted acceptance and real-device evidence remain separate work.
 
 [Current simulation rules](ARCADE_SIMULATION.md) describe what runs today.
 This vision defines the commercial target; current local implementation limits
-are not exclusions from that target. Technical ADRs describe the selected future
-architecture and unresolved engineering proposals. See the
-[documentation map](README.md).
+are not exclusions from that target. See the [documentation map](README.md) for current technical details.

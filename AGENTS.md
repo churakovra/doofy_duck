@@ -12,4 +12,9 @@ Doofy Duck is a development foundation for an account-backed Telegram Mini App g
 - `services/core`: Go verification; `services/platform`: Python identity and economy.
 - `deploy`: local service stack and smoke tooling.
 
-Read the nearest component `AGENTS.md` and the current topic documentation for details. Product intent, implemented behavior, dated verification and future work are documented separately.
+Read the nearest component `AGENTS.md` and the current topic documentation for details. Keep product intent distinct from implemented behavior.
+
+## Instruction scope
+
+Follow system, developer, and user instructions before repository guidance.
+Use component instructions for local context. Check the code and contracts for current behavior.
