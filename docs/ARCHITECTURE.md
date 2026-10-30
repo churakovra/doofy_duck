@@ -1,6 +1,6 @@
 # Code map
 
-The repository contains one account-backed game with a Python/Go/PostgreSQL
+The repository contains one account-backed game with a TypeScript/Python/PostgreSQL
 stack. Local development connects a development Telegram identity; production
 requires Telegram authentication. Verified pickup settlement and the cosmetic shop
 are enabled by normal local startup unless explicitly disabled. Production economy
@@ -19,12 +19,12 @@ apps/web/index.html → src/main.tsx → Game → AccountGame
                                            └─ GameCanvas → scene + appearance + feel → Pixi
 
 Browser → one-origin gateway → Python Platform: identity/session/account/economy
-                            → Go Core: issued run → replay → PostgreSQL checkpoints
+                            → TypeScript Core: issued run → replay → PostgreSQL checkpoints
                                                      └→ durable outbox → Python inbox
                                                                         └→ settlement worker → wallet ledger
 ```
 
-The browser runs the TypeScript simulation; Go independently replays the contract.
+The browser and Core run the same TypeScript simulation; Core independently replays submitted inputs. The retained Go implementation provides parity and migration comparison.
 AccountGame automatically authenticates the launch identity and provides no
 account-selection or logout UI. The API client pins refreshes to the verified
 account. AccountGame coordinates memory-only access credentials, per-tick input recording,
@@ -46,7 +46,8 @@ entitlement and purchase result share one transaction. See the versioned
 | `apps/web/src/AccountGame.tsx`, `account-api.ts`, `account-trace.ts`, `checkpoint-backoff.ts`, `account-logout.ts` | Account lifecycle, bounded authenticated requests, shared checkpoint retry deadlines, ordered logout cleanup, exact input transport and validated IndexedDB recovery |
 | `services/platform/app`, `services/platform/migrations` | Telegram auth, signed tokens, rotating refresh sessions, account lookup and idempotent completion inbox |
 | `services/platform/app/economy` | Wallet ledger, gated completion settlement, catalog, inventory, revisioned equipment, atomic purchases and operator worker/audit commands |
-| `services/core/backend` | Go HTTP authorization, run ownership, replay/checkpoints, writer fencing, outage windows, outbox and load harness |
+| `services/core/typescript` | TypeScript Core HTTP authorization, replay, run ownership, checkpoints, migrations and outbox |
+| `services/core/backend` | Retained Go Core and load harness for comparison |
 | `deploy` | Compose, gateway routing, isolated development credentials and cross-service smoke |
 | [Game.tsx](../apps/web/src/Game.tsx), [GameButton.tsx](../apps/web/src/GameButton.tsx), [GameSettings.tsx](../apps/web/src/GameSettings.tsx) | Single account entry point, shared button variants/input isolation, and the settings menu |
 | [useGameRun.ts](../apps/web/src/useGameRun.ts) | Run descriptors, lifecycle, queued input, fixed-step advancement |
@@ -77,7 +78,7 @@ entitlement and purchase result share one transaction. See the versioned
 | Appearance or viewport | `scene`, `appearance`, `GameCanvas`, `feel`, `style.css` | Relevant unit cases; browser/visual checks only on request |
 | Account balances or best | `AccountWallet`, Economy settlement and ledger, Core account progress | Relevant service and client tests; integration checks when required |
 | Sound/music | `audio`, `useGameAudio` | Audio unit cases; browser cases only on request; physical playback is separate evidence |
-| Physics, gaps, speed, scoring, pickups | TS simulation and Go simulation together | Semantic tests in both languages and `npm run test:parity` |
+| Physics, gaps, speed, scoring, pickups | TypeScript simulation; preserve Go parity while retained | Semantic tests in both languages and `npm run test:parity` |
 | Descriptor/config/state/event shape | Both simulations, descriptor schema, fixtures and browser consumers | Schema/fixture tests and parity; review identity compatibility |
 | Documentation | Relevant current document and documentation map | Local links and diff review |
 
@@ -99,8 +100,6 @@ entitlement and purchase result share one transaction. See the versioned
 - `npm run check` runs routine types, lint, unit/fixture tests, Go tests, and build.
   Browser suites are opt-in through `npm run check:browser` or `npm run check:full`.
   Routine fixes do not automatically launch browser tests.
-- [.github/workflows/ci.yml](../.github/workflows/ci.yml) defines routine CI checks and an optional manual browser run.
-  A workflow file alone is not evidence of a hosted CI run.
 
 Keep these paths stable unless a task requires moving them: workspace exports,
 test fixture paths, Playwright configs, and documentation links depend on them.
@@ -118,4 +117,4 @@ Account progress uses verified completion evidence and never imports browser
 balances. Frozen client snapshots cannot transfer authority to client balances.
 Paid continue transitions and their accounting remain feature work.
 
-Native simulation benchmarks do not measure HTTP/database throughput or production player capacity.
+Simulation benchmarks do not measure HTTP/database throughput or production player capacity.

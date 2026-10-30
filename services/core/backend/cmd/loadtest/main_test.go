@@ -52,6 +52,25 @@ func TestAwaitCompletionAcceptsOnlyDeliveredVerifiedRun(t *testing.T) {
 	}
 }
 
+type stalledTransport struct{}
+
+func (stalledTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	<-req.Context().Done()
+	return nil, req.Context().Err()
+}
+
+func TestAwaitCompletionBoundsStalledRequest(t *testing.T) {
+	client := &http.Client{Transport: stalledTransport{}}
+	start := time.Now()
+	_, err := awaitCompletion(client, "http://core.invalid", "", 1, "token", "run-id", start.Add(100*time.Millisecond), &metrics{})
+	if err == nil {
+		t.Fatal("stalled completion unexpectedly succeeded")
+	}
+	if time.Since(start) > time.Second {
+		t.Fatal("completion request exceeded deadline")
+	}
+}
+
 type responseTransport struct {
 	status int
 	body   string

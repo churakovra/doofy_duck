@@ -188,7 +188,7 @@ def main() -> None:
             assert status == 201, f"run creation failed: HTTP {status}"
         trace = simulate_run(current_run)
         verified = submit_simulated_run(current_run, token, trace["ticks"])
-        assert verified["state"]["totals"]["FEATHER"] == trace["feathers"], (
+        assert verified["state"]["totals"].get("FEATHER", 0) == trace["feathers"], (
             "Core replay disagreed with the local trace"
         )
         wait_for_delivery(current_run["runId"], token)

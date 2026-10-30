@@ -19,22 +19,24 @@
     "check:full": "npm run check && npm run check:browser",
     "test:browser": "npm run build && playwright test -c apps/web/playwright.config.ts",
     "test:dev": "npm run build:sim && playwright test -c apps/web/playwright.dev.config.ts",
-    "typecheck": "npm run build:sim && tsc --noEmit && tsc -p apps/web/tsconfig.json",
+    "typecheck": "npm run build:sim && tsc --noEmit && tsc -p apps/web/tsconfig.json && tsc -p services/core/typescript/tsconfig.json",
     "build:sim": "tsc -p packages/game-sim/tsconfig.build.json",
     "build:web": "vite build --config apps/web/vite.config.ts",
     "build": "npm run build:sim && npm run build:web",
-    "lint": "eslint packages/game-sim/src packages/game-sim/test apps/web/src apps/web/test",
+    "lint": "eslint packages/game-sim/src packages/game-sim/test apps/web/src apps/web/test services/core/typescript/src services/core/typescript/test",
     "check:backend": "npm run check:backend:python && npm run check:backend:core",
     "check:backend:python": "cd services/platform && uv sync --locked --group dev && uv run ruff format --check app migrations tests ../../deploy/scripts/backend-smoke.py && uv run ruff check app migrations tests ../../deploy/scripts/backend-smoke.py && uv run mypy app && uv run python -m pytest -q",
     "check:backend:python:integration": "test -n \"$PLATFORM_TEST_DATABASE_URL\" || { echo 'missing PLATFORM_TEST_DATABASE_URL'; exit 2; }; test -n \"$ECONOMY_TEST_DATABASE_URL\" || { echo 'missing ECONOMY_TEST_DATABASE_URL'; exit 2; }; cd services/platform && uv sync --locked --group dev && uv run ruff format --check app migrations tests ../../deploy/scripts/backend-smoke.py && uv run ruff check app migrations tests ../../deploy/scripts/backend-smoke.py && uv run mypy app && uv run python -m pytest -q",
-    "check:backend:core": "go -C services/core/backend test -count=1 ./... && go -C services/core/backend test -race -count=1 ./... && go -C services/core/backend vet ./...",
-    "check:backend:core:integration": "go -C services/core/backend test -count=1 ./...",
+    "check:backend:core": "npm run build:sim && tsc -p services/core/typescript/tsconfig.json && vitest run services/core/typescript/test && go -C services/core/backend test -count=1 ./... && go -C services/core/backend test -race -count=1 ./... && go -C services/core/backend vet ./...",
+    "check:backend:core:integration": "test -n \"$CORE_TEST_DATABASE_URL\" || { echo 'missing CORE_TEST_DATABASE_URL'; exit 2; }; vitest run services/core/typescript/test && go -C services/core/backend test -count=1 ./...",
     "check:backend:integration": "test -n \"$PLATFORM_TEST_DATABASE_URL\" || { echo 'missing PLATFORM_TEST_DATABASE_URL'; exit 2; }; test -n \"$ECONOMY_TEST_DATABASE_URL\" || { echo 'missing ECONOMY_TEST_DATABASE_URL'; exit 2; }; test -n \"$CORE_TEST_DATABASE_URL\" || { echo 'missing CORE_TEST_DATABASE_URL'; exit 2; }; npm run check:backend:python:integration && npm run check:backend:core:integration",
-    "check:backend:smoke": "cd services/platform && uv run python ../../deploy/scripts/backend-smoke.py"
+    "check:backend:smoke": "cd services/platform && uv run python ../../deploy/scripts/backend-smoke.py",
+    "build:core:typescript": "npm run build:sim && tsc -p services/core/typescript/tsconfig.build.json"
   },
   "devDependencies": {
     "@playwright/test": "1.64.1",
     "@types/node": "24.10.0",
+    "@types/pg": "8.15.6",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "5.2.0",
@@ -46,6 +48,7 @@
     "vitest": "5.0.4"
   },
   "dependencies": {
+    "pg": "8.16.3",
     "pixi.js": "8.22.0",
     "react": "19.3.0",
     "react-dom": "19.3.0"

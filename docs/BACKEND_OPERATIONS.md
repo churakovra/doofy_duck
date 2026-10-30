@@ -48,10 +48,11 @@ other workloads. Compare the resulting total with the actual database connection
 limit; choose values from measured workload and available reserved capacity rather
 than assuming the defaults fit a deployment.
 
-Core emits structured `admission_state` events with `outcome` values `admitted`,
-`released`, `waiting`, `queue_full`, `timeout` and `canceled`. Fields also include
+TypeScript Core emits structured `admission_state` events with `outcome` values
+`admitted`, `released`, and `rejected`. The retained Go fallback also distinguishes
+waiting, queue-full, timeout and cancellation outcomes. Fields also include
 point-in-time `active` and `waiting` counts and `wait_ms`. Per
-instance, at most 256 authenticated handlers execute and 1,024 wait up to five
+instance, by default at most 256 authenticated handlers execute and 1,024 wait up to five
 seconds; authenticated handler work has a 30-second context timeout. Overflow or
 queue expiry returns 429 with `Retry-After: 1`; cancellation frees waiting capacity.
 These counters are event snapshots, not interval aggregates or a global rate limit.

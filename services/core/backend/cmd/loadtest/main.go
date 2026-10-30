@@ -4,6 +4,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -421,7 +422,8 @@ func clientLoop(client *http.Client, base, platform string, accountID int64, tok
 			}
 		}
 		if dead || flightCap {
-			if _, err := awaitCompletion(client, base, platform, accountID, token, run.RunID, deadline, m); err != nil {
+			// Give receipts for already completed flights a bounded drain period after load generation stops.
+			if _, err := awaitCompletion(client, base, platform, accountID, token, run.RunID, deadline.Add(5*time.Second), m); err != nil {
 				atomic.AddInt64(&m.errors, 1)
 				return
 			}
@@ -741,20 +743,40 @@ func submitCheckpoint(c *http.Client, base, platform string, accountID int64, to
 	}
 	return snapshot{}, token, fmt.Errorf("checkpoint remained unacknowledged until load deadline")
 }
+
+type deadlineTransport struct {
+	ctx  context.Context
+	base http.RoundTripper
+}
+
+func (t deadlineTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	return t.base.RoundTrip(req.WithContext(t.ctx))
+}
+
 func awaitCompletion(c *http.Client, base, platform string, accountID int64, token, runID string, deadline time.Time, m *metrics) (string, error) {
+	ctx, cancel := context.WithDeadline(context.Background(), deadline)
+	defer cancel()
+	boundedClient := *c
+	transport := c.Transport
+	if transport == nil {
+		transport = http.DefaultTransport
+	}
+	boundedClient.Transport = deadlineTransport{ctx: ctx, base: transport}
 	nextRefresh := time.Now().Add(8 * time.Minute)
 	for time.Now().Before(deadline) {
 		if time.Now().After(nextRefresh) {
-			refreshed, err := authToken(c, platform, accountID)
+			refreshed, err := authTokenUntil(&boundedClient, platform, accountID, deadline, nil)
 			if err != nil {
 				return token, err
 			}
 			token = refreshed
 			nextRefresh = time.Now().Add(8 * time.Minute)
 		}
-		req, err := authorized(c, http.MethodGet, strings.TrimRight(base, "/")+"/api/v1/runs/"+runID, token, nil)
+		req, err := authorized(&boundedClient, http.MethodGet, strings.TrimRight(base, "/")+"/api/v1/runs/"+runID, token, nil)
 		if err != nil {
-			time.Sleep(time.Second)
+			if !sleepBefore(deadline, time.Second) {
+				break
+			}
 			continue
 		}
 		var run snapshot
@@ -772,7 +794,9 @@ func awaitCompletion(c *http.Client, base, platform string, accountID int64, tok
 		if req.StatusCode == http.StatusServiceUnavailable {
 			atomic.AddInt64(&m.retried, 1)
 		}
-		time.Sleep(500 * time.Millisecond)
+		if !sleepBefore(deadline, 500*time.Millisecond) {
+			break
+		}
 	}
 	return token, fmt.Errorf("completion delivery remained pending until load deadline")
 }

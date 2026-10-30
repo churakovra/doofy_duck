@@ -460,6 +460,7 @@ export function AccountGame() {
     const accountId = account.account_id;
     const runId = snapshot.runId;
     let cancelled = false;
+    let inFlight = false;
     const isCurrentPoll = () => {
       const current = snapshotRef.current;
       return !cancelled
@@ -469,6 +470,8 @@ export function AccountGame() {
         && (current.status === 'completion_pending' || current.deliveryStatus === 'pending');
     };
     const timer = window.setInterval(() => {
+      if (inFlight) return;
+      inFlight = true;
       void api.getRun(runId).then(async (latest) => {
         if (!isCurrentPoll()) return;
         setSnapshot(latest);
@@ -483,8 +486,8 @@ export function AccountGame() {
             traceRef.current = null; setTrace(null);
           }
         }
-      }).catch(() => undefined);
-    }, 5_000);
+      }).catch(() => undefined).finally(() => { inFlight = false; });
+    }, 1_000);
     return () => { cancelled = true; window.clearInterval(timer); };
   }, [account?.account_id, api, refreshAccountProgress, snapshot?.deliveryStatus, snapshot?.runId, snapshot?.status, storage]);
 
