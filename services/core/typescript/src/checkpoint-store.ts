@@ -39,7 +39,7 @@ export function snapshot(run: RunRow, submissionDeadline: Date) {
   };
 }
 
-/** Apply a checkpoint under the same row lock and atomic commit as Go Core. */
+/** Apply a checkpoint under a row lock and commit its effects atomically. */
 export async function submitCheckpoint(pool: Pool, accountId: string, runId: string, req: CheckpointRequest, fixedNow?: Date, signal?: AbortSignal): Promise<unknown> {
   if (!Number.isSafeInteger(req.checkpointSequence) || req.checkpointSequence < 0 || !Number.isSafeInteger(req.writerGeneration) || req.writerGeneration < 1 ||
       typeof req.writerToken !== 'string' || typeof req.idempotencyKey !== 'string' || Buffer.byteLength(req.idempotencyKey, 'utf8') < 8 || Buffer.byteLength(req.idempotencyKey, 'utf8') > 128 ||

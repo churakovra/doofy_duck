@@ -102,7 +102,7 @@ by local unit tests.
 ## Local verification for this change
 
 `npm run check` passed after the final authentication fix: TypeScript, ESLint,
-346 unit/fixture tests across 38 files, Go simulation tests and the production
+346 unit/fixture tests across 38 files and the production
 build. The existing large-bundle warning remains. Five deployment-helper tests
 passed, including both real-Telegram overlay checks using dummy credentials.
 The local static web container was rebuilt; no real-bot configuration was started.

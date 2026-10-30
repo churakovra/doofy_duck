@@ -1,6 +1,6 @@
 # Arcade simulation rules
 
-The deterministic game runs independently in TypeScript and Go. The modules exported by `packages/game-sim/src/index.ts` and the native `services/core/simulation` package are the executable specifications. Existing committed replay fixtures remain frozen. See the [code map](ARCHITECTURE.md) for module ownership.
+The deterministic game runs from the shared TypeScript simulation. The modules exported by `packages/game-sim/src/index.ts` are the executable specification. Existing committed replay fixtures remain frozen. See the [code map](ARCHITECTURE.md) for module ownership.
 
 ## Wetland rules
 
@@ -12,7 +12,7 @@ move-size and turning patterns. Each move adds a seeded offset of 0–15,000 uni
 to its pattern size and respects the configured maximum gap delta. Moves reverse
 at the configured center bounds. The first pipe retains the existing safe lead-in.
 Bonus segments override these moves and keep their existing rules. The shared
-fixtures check TypeScript and Go parity. A small set of maximum-speed controller
+fixtures check simulation results. A small set of maximum-speed controller
 witnesses checks representative paths. These checks do not prove all paths are
 playable, and human playtest acceptance remains open.
 
@@ -169,7 +169,7 @@ serialized state. New wetland fields are omitted from their states.
 - Default gap center range is `160000..400000`, gap height `156000`, spacing `300000`, and adjacent generated centers differ by at most `85000`. Default generation uses the challenge families below. Custom configs with absent or `null` challenges retain indexed gap sampling using `mix32(seed XOR imul(index+1, 0x9e3779b9))`, clamped to the configured range and previous center ± maximum delta. The first center is additionally bounded to ±35000 from the configured range midpoint. `lastGapCenter` is explicit run state so generation remains stable after horizon refill and pipe pruning. No currency outcome feeds back into map layout.
 - Ordinary collectible definitions retain weighted NONE-first selection and eligibility/spacing rules. Prior 1.4 default FEATHER uses weight 34, minimum pipe index 1 and one-pipe spacing; NONE weight is 66, preserving the prior 34% ordinary-pickup probability. The legacy configuration keeps the former weighted GAME_STAR opportunity (weight 8, minimum index 4, three-pipe spacing) and NONE weight 58. Ordinary collectible opportunities advance the same indexed RNG cursor in both rulesets.
 - Prior 1.4 default GAME_STAR pickups use an independent seeded schedule. The first target pipe index is 8–16, and each later target is another 8–16 pipe indices after it, inclusive. The schedule is stored in run state, so pauses, restarts and replay remain deterministic; it does not consume the ordinary collectible RNG or change the ordinary collectible cooldown. A scheduled Star is generated when two ordinary collectibles are active. The default holds up to two ordinary collectibles plus one Star, and validates that the minimum schedule interval moves the previous Star beyond the active viewport before the next can appear. A Star credits exactly one only when the duck intersects it.
-- `PATTERN_CATALOG` / Go `PatternCatalog()` remain only as legacy exported constants for compatibility. They do not choose gaps or constrain valid gap geometry. Config identities retain these public legacy entries; the two pipe-only default identity sentinels are `dd-v1-star-interval-v1` and `dd-v1-stepped-v1`, and custom identities include canonical configuration plus the legacy catalog.
+- `PATTERN_CATALOG` remains only as legacy exported constants for compatibility. They do not choose gaps or constrain valid gap geometry. Config identities retain these public legacy entries; the two pipe-only default identity sentinels are `dd-v1-star-interval-v1` and `dd-v1-stepped-v1`, and custom identities include canonical configuration plus the legacy catalog.
 
 ## Stepped challenge schedule
 
@@ -204,11 +204,11 @@ configuration IDs carry canonical configuration content. A legacy descriptor
 without an explicit config resolves to the legacy default, whose serialized state
 omits Star schedule fields so replay remains unchanged.
 
-## Bounds and parity
+## Bounds and fixtures
 
-All new fields must be safe integers; gap limits must keep the entire configured opening within ceiling/floor; max gap delta and speed interval must be positive; ramp multiplication is bounded to JavaScript's exact integer range. Score passed to `worldSpeedAt(config,tick,score=0)` is a nonnegative safe simulation counter. Go's `WorldSpeedAt(config,tick,scores ...int64)` preserves old two-argument calls while accepting at most one optional score.
+All new fields must be safe integers; gap limits must keep the entire configured opening within ceiling/floor; max gap delta and speed interval must be positive; ramp multiplication is bounded to JavaScript's exact integer range. Score passed to `worldSpeedAt(config,tick,score=0)` is a nonnegative safe simulation counter.
 
-Generation uses independent indexed sampling, not mutable PRNG draws for map shape. Existing PRNG cursor behavior remains for spawn opportunities; every eligible pipe opportunity, including NONE and capacity suppression, advances it. Go fixture verification compares raw expected JSON, including state fields and event serialization.
+Generation uses independent indexed sampling, not mutable PRNG draws for map shape. Existing PRNG cursor behavior remains for spawn opportunities; every eligible pipe opportunity, including NONE and capacity suppression, advances it.
 
 ## Verification and limits
 
@@ -218,7 +218,7 @@ gap-only custom-physics 24000-tick witness retains the previous speed/spacing; i
 is not default-world evidence. A separate 5000-tick prior-default trace records ten
 snapshots across all bands and refill, with controls based on observed gaps.
 
-Both languages also test all 26 selectable family edges from nine sampled entry
+The simulation tests all 26 selectable family edges from nine sampled entry
 states per edge and a 64-seed, 5000-tick prior-default corpus. The direct witnesses keep
 the previous lane target for 18 ticks after the new pipe center reaches X360000
 before adapting. This is bounded controller-specific evidence; the sampled
@@ -228,7 +228,7 @@ acceptance remain open. Arbitrary custom configurations have no universal
 reachability guarantee.
 
 The separate `contracts/simulation/star-schedule-v1.json` holds authored Star
-schedule vectors shared by TypeScript and Go. It supplements the frozen legacy
+schedule vectors. It supplements the frozen legacy
 golden file and does not replace or regenerate those expectations.
 
-Run `npm run build:sim`, `npx vitest run packages/game-sim/test`, `npm run test:parity`, `npm run test:go:race`, and `go -C services/core/simulation vet ./...`. Regenerate fixtures only after reviewing a deliberate rule change: build the sim, then run `node contracts/simulation/generate-fixtures.mjs`.
+Run `npm run build:sim` and `npx vitest run packages/game-sim/test`. Regenerate fixtures only after reviewing a deliberate rule change: build the sim, then run `node contracts/simulation/generate-fixtures.mjs`.

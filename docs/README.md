@@ -6,7 +6,7 @@ The [code map](ARCHITECTURE.md) identifies source ownership.
 
 | Document | Use it for |
 | --- | --- |
-| [Arcade simulation](ARCADE_SIMULATION.md) | Rules, compatibility and parity limits |
+| [Arcade simulation](ARCADE_SIMULATION.md) | Rules, compatibility and fixture limits |
 | [Simulation contract](../contracts/simulation/README.md) | Fixtures and deliberate regeneration |
 | [Foundation](FOUNDATION.md) | Extension boundaries |
 | [Wallet and progress](WALLET_UPDATE.md) | Settlement and account balances |

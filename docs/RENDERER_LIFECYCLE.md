@@ -24,8 +24,7 @@ flight with the new appearance. No new renderer console errors appeared.
 
 Both cleanup call sites have regression assertions. Focused renderer tests,
 typecheck, lint and the full routine check passed after the fix (250 unit/fixture
-tests, Go tests and build); the routine command used a writable temporary Go
-cache. Independent dependency/lifecycle review passed. This targeted manual
+tests and build). Independent dependency/lifecycle review passed. This targeted manual
 browser check is not a run of either Playwright suite, resource-decoding
 acceptance, or physical Telegram/device verification.
 

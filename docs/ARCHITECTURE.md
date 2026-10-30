@@ -24,7 +24,7 @@ Browser → one-origin gateway → Python Platform: identity/session/account/eco
                                                                         └→ settlement worker → wallet ledger
 ```
 
-The browser and Core run the same TypeScript simulation; Core independently replays submitted inputs. The retained Go implementation provides parity and migration comparison.
+The browser and Core run the same TypeScript simulation; Core independently replays submitted inputs.
 AccountGame automatically authenticates the launch identity and provides no
 account-selection or logout UI. The API client pins refreshes to the verified
 account. AccountGame coordinates memory-only access credentials, per-tick input recording,
@@ -47,7 +47,6 @@ entitlement and purchase result share one transaction. See the versioned
 | `services/platform/app`, `services/platform/migrations` | Telegram auth, signed tokens, rotating refresh sessions, account lookup and idempotent completion inbox |
 | `services/platform/app/economy` | Wallet ledger, gated completion settlement, catalog, inventory, revisioned equipment, atomic purchases and operator worker/audit commands |
 | `services/core/typescript` | TypeScript Core HTTP authorization, replay, run ownership, checkpoints, migrations and outbox |
-| `services/core/backend` | Retained Go Core and load harness for comparison |
 | `deploy` | Compose, gateway routing, isolated development credentials and cross-service smoke |
 | [Game.tsx](../apps/web/src/Game.tsx), [GameButton.tsx](../apps/web/src/GameButton.tsx), [GameSettings.tsx](../apps/web/src/GameSettings.tsx) | Single account entry point, shared button variants/input isolation, and the settings menu |
 | [useGameRun.ts](../apps/web/src/useGameRun.ts) | Run descriptors, lifecycle, queued input, fixed-step advancement |
@@ -65,9 +64,6 @@ entitlement and purchase result share one transaction. See the versioned
 | [types.ts](../packages/game-sim/src/types.ts), [config.ts](../packages/game-sim/src/config.ts), [canonical.ts](../packages/game-sim/src/canonical.ts) | Shared types, rule defaults/validation, canonical configuration identity |
 | [simulation.ts](../packages/game-sim/src/simulation.ts), [generation.ts](../packages/game-sim/src/generation.ts) | Run lifecycle, ordered tick rules, seeded world generation |
 | [collectibles.ts](../packages/game-sim/src/collectibles.ts) | Public compatibility collectible helpers |
-| [services/core/simulation/simulation.go](../services/core/simulation/simulation.go) | Native state types, tick rules, and lifecycle |
-| [config.go](../services/core/simulation/config.go), [canonical.go](../services/core/simulation/canonical.go), [generation.go](../services/core/simulation/generation.go) | Native configuration, identity encoding, and generation |
-| [fixtures.go](../services/core/simulation/fixtures.go) | Offline raw-JSON contract verifier |
 | [contracts/simulation](../contracts/simulation/README.md) | Reviewed full-state/event fixtures, descriptor schema, explicit producer |
 
 ## Change routing
@@ -78,8 +74,8 @@ entitlement and purchase result share one transaction. See the versioned
 | Appearance or viewport | `scene`, `appearance`, `GameCanvas`, `feel`, `style.css` | Relevant unit cases; browser/visual checks only on request |
 | Account balances or best | `AccountWallet`, Economy settlement and ledger, Core account progress | Relevant service and client tests; integration checks when required |
 | Sound/music | `audio`, `useGameAudio` | Audio unit cases; browser cases only on request; physical playback is separate evidence |
-| Physics, gaps, speed, scoring, pickups | TypeScript simulation; preserve Go parity while retained | Semantic tests in both languages and `npm run test:parity` |
-| Descriptor/config/state/event shape | Both simulations, descriptor schema, fixtures and browser consumers | Schema/fixture tests and parity; review identity compatibility |
+| Physics, gaps, speed, scoring, pickups | TypeScript simulation | Semantic and fixture tests |
+| Descriptor/config/state/event shape | Simulation, descriptor schema, fixtures and browser consumers | Schema/fixture tests; review identity compatibility |
 | Documentation | Relevant current document and documentation map | Local links and diff review |
 
 ## Check locations and build boundaries
@@ -95,9 +91,7 @@ entitlement and purchase result share one transaction. See the versioned
 - Browser suites use one worker to isolate SwiftShader CPU load from game timing.
 - Production browser checks use port 4174; development checks use 4175. Manual
   play uses 4173. Browser suites intentionally refuse server reuse.
-- The Go module is isolated in `services/core/simulation` and uses the standard
-  library. Its tests read the same committed fixtures as TypeScript.
-- `npm run check` runs routine types, lint, unit/fixture tests, Go tests, and build.
+- `npm run check` runs routine types, lint, unit/fixture tests, and build.
   Browser suites are opt-in through `npm run check:browser` or `npm run check:full`.
   Routine fixes do not automatically launch browser tests.
 

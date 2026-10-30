@@ -181,7 +181,7 @@ components:
         simulationVersion: { type: string }
         generatorVersion: { type: string }
         configId: { type: string }
-        state: { type: object, description: Complete serialized Go simulation state. }
+        state: { type: object, description: Complete serialized simulation state. }
         status: { type: string, enum: [active, completion_pending, completed, rejected, abandoned], description: Gameplay lifecycle; verified runs are completed independently of delivery. }
         verificationStatus: { type: string, enum: [in_progress, verified, rejected] }
         deliveryStatus: { type: string, enum: [not_ready, pending, delivered, rejected], description: Platform delivery outcome, independent of gameplay lifecycle and verification. }

@@ -2,7 +2,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import type { Pool, PoolClient } from 'pg';
 
 export async function migrationFiles(): Promise<string[]> {
-  const directory = new URL('../../backend/migrations/', import.meta.url);
+  const directory = new URL('../migrations/', import.meta.url);
   const files = (await readdir(directory)).filter(name => name.endsWith('.sql')).sort();
   if (!files.length || files.some(name => !/^\d+_.+\.sql$/.test(name))) throw Error('invalid migration files');
   return files;
@@ -15,7 +15,7 @@ export async function migrationsReady(pool: Pool | PoolClient): Promise<boolean>
 }
 
 export async function migrate(pool: Pool): Promise<void> {
-  const directory = new URL('../../backend/migrations/', import.meta.url);
+  const directory = new URL('../migrations/', import.meta.url);
   const files = await migrationFiles();
   const client = await pool.connect();
   try {

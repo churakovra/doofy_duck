@@ -8,7 +8,7 @@ yet a commercial release.
 
 ## Run locally
 
-Install Node.js, npm, Go, Python, uv and Docker Compose. The pinned toolchain is
+Install Node.js, npm, Python, uv and Docker Compose. The pinned toolchain is
 listed in the repository configuration. With Docker running:
 
 ```sh
@@ -30,9 +30,8 @@ activation is separate. Internal coins and game Stars are not Telegram Stars.
 ## Checks
 
 ```sh
-npm run check                    # types, lint, JS/Go tests and build
-npm run check:backend            # Python and Go backend checks
-npm run test:parity              # shared simulation fixtures
+npm run check                    # types, lint, tests and build
+npm run check:backend            # Python and TypeScript backend checks
 npm run check:backend:smoke      # cross-service smoke, after local startup
 npm run check:backend:integration # requires dedicated PostgreSQL test databases
 ```
@@ -49,7 +48,6 @@ for configuration and recovery.
 - `apps/web`: Telegram-facing React/PixiJS application.
 - `packages/game-sim`: deterministic TypeScript gameplay rules.
 - `services/core/typescript`: TypeScript run verification service and migration runner.
-- `services/core/backend` and `services/core/simulation`: retained Go implementation and parity tests.
 - `services/platform`: Python authentication, accounts and economy.
 - `contracts`: HTTP, event and versioned simulation contracts and fixtures.
 - `deploy`: local stack, gateway and operational helpers.
