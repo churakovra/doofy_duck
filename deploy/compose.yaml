@@ -62,19 +62,19 @@ services:
   core-migrate:
     build:
       context: ..
-      dockerfile: services/core/backend/Dockerfile
+      dockerfile: services/core/typescript/Dockerfile
     environment:
       CORE_DATABASE_URL: postgres://core:${CORE_DB_PASSWORD}@postgres:5432/core?sslmode=disable
     depends_on:
       postgres:
         condition: service_healthy
-    entrypoint: ["/core-migrate"]
+    entrypoint: ["node", "services/core/typescript/dist/migrate-main.js"]
     networks: [backend]
 
   core:
     build:
       context: ..
-      dockerfile: services/core/backend/Dockerfile
+      dockerfile: services/core/typescript/Dockerfile
     environment:
       DD_ENV: development
       CORE_DATABASE_URL: postgres://core:${CORE_DB_PASSWORD}@postgres:5432/core?sslmode=disable

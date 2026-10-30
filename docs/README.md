@@ -6,7 +6,7 @@ The [code map](ARCHITECTURE.md) identifies source ownership.
 
 | Document | Use it for |
 | --- | --- |
-| [Arcade simulation](ARCADE_SIMULATION.md) | Rules, compatibility and parity limits |
+| [Arcade simulation](ARCADE_SIMULATION.md) | Rules, compatibility and fixture limits |
 | [Simulation contract](../contracts/simulation/README.md) | Fixtures and deliberate regeneration |
 | [Foundation](FOUNDATION.md) | Extension boundaries |
 | [Wallet and progress](WALLET_UPDATE.md) | Settlement and account balances |
@@ -17,7 +17,6 @@ The [code map](ARCHITECTURE.md) identifies source ownership.
 | [Flight feel](FLIGHT_FEEL.md) | Cosmetic motion and reduced motion |
 | [Renderer lifecycle](RENDERER_LIFECYCLE.md) | Pixi initialization and cleanup |
 | [Verification assumptions](VERIFICATION.md) | Simulation and controller evidence limits |
-| [Workflow telemetry](agent-workflow/README.md) | Optional local session report |
 
 HTTP contracts describe [account authentication](../contracts/http/account-auth-v1.md),
 [runs](../contracts/http/core-run-v1.md), [wallets](../contracts/http/economy-wallet-v1.md)

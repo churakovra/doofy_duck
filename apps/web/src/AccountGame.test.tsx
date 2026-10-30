@@ -373,7 +373,7 @@ describe('account run transport', () => {
     });
     expect(host.textContent).toContain(messagesRu.accountPendingVerification);
 
-    await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
 
     expect(host.textContent).not.toContain('Проверено');
     expect(host.textContent).not.toContain(messagesRu.accountPendingVerification);
@@ -391,7 +391,7 @@ describe('account run transport', () => {
       root.render(<LocaleProvider><AccountGame key="delivery-poll-rejected" /></LocaleProvider>);
     });
 
-    await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
 
     expect(host.textContent).toContain(messagesRu.accountDeliveryRejected);
     expect(host.textContent).not.toContain('подтвердить');

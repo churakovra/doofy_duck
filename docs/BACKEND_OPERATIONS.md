@@ -48,10 +48,10 @@ other workloads. Compare the resulting total with the actual database connection
 limit; choose values from measured workload and available reserved capacity rather
 than assuming the defaults fit a deployment.
 
-Core emits structured `admission_state` events with `outcome` values `admitted`,
-`released`, `waiting`, `queue_full`, `timeout` and `canceled`. Fields also include
+TypeScript Core emits structured `admission_state` events with `outcome` values
+`admitted`, `released`, and `rejected`. Fields also include
 point-in-time `active` and `waiting` counts and `wait_ms`. Per
-instance, at most 256 authenticated handlers execute and 1,024 wait up to five
+instance, by default at most 256 authenticated handlers execute and 1,024 wait up to five
 seconds; authenticated handler work has a 30-second context timeout. Overflow or
 queue expiry returns 429 with `Retry-After: 1`; cancellation frees waiting capacity.
 These counters are event snapshots, not interval aggregates or a global rate limit.
@@ -121,6 +121,9 @@ Reopen starts only after readiness and recovery checks pass.
 
 ## Required hosted evidence
 
+The repository does not currently provide a load generator for these scenarios.
+Implement or select one before collecting hosted capacity evidence.
+
 - One hour of 1,000 active flights: approximately 500 checkpoints/second and 60,000
   replay ticks/second, checkpoint p95 below one second, unexpected failures below 1%,
   no lost acknowledged records and no growing completion backlog.
@@ -140,9 +143,7 @@ separate owner approval.
 
 ## Hosting shortlist — researched October 17, 2026
 
-The local preflight observed roughly one CPU of Core work and substantially less
-than one CPU of PostgreSQL work at the target rate. These are snapshots on shared
-local hardware, not cloud sizing guarantees. Start hosted evaluation with two Core
+Hosted capacity for the current Core has not been established. Start evaluation with two Core
 replicas of 2 vCPU/4 GiB each so one can carry the traffic, two Python replicas,
 redundant ingress and a synchronously protected managed database. Separate owned
 databases/roles may share a managed cluster; separate clusters cost more.

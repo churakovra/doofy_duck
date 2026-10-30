@@ -18,7 +18,7 @@ describe('active-time world speed ramp', () => {
       expect(() => worldSpeedAt(PRIOR_DEFAULT_CONFIG, tick!)).toThrow();
     },
   );
-  it('keeps zero and negative ticks at base speed as Go does, and accepts MAX_COUNTER', () => {
+  it('keeps zero and negative ticks at base speed, and accepts MAX_COUNTER', () => {
     expect(worldSpeedAt(PRIOR_DEFAULT_CONFIG, 0)).toBe(3000);
     expect(worldSpeedAt(PRIOR_DEFAULT_CONFIG, -1)).toBe(3000);
     expect(worldSpeedAt(PRIOR_DEFAULT_CONFIG, Number.MAX_SAFE_INTEGER - 1)).toBe(4800);

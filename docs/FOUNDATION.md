@@ -9,9 +9,7 @@ implemented code; it does not specify those future features.
 
 Import the simulation through `@doofy-duck/game-sim`. Its public entrypoint
 remains stable while internal modules separate configuration, canonical identity,
-generation, tick orchestration, and compatibility collectible helpers. The native
-Go package separates the same responsibilities, including its offline fixture
-verifier.
+generation, tick orchestration, and compatibility collectible helpers.
 
 Configuration is data, not a callback into application code. A run owns an
 immutable copy of its configuration and descriptor. Editing a preset cannot
@@ -27,16 +25,16 @@ run configuration. Omitted or `null` challenges select the gap-only custom path
 and normalize to the same configuration identity. Challenge metadata is part of
 pipe state, while the renderer continues to consume the actual pipe geometry.
 
-Change physics, scoring, generation, or pickup effects in both simulations.
+Change physics, scoring, generation, or pickup effects in the shared simulation.
 Keep collision, scoring, generation, and collection ordering explicit. Follow
 the [simulation contract](../contracts/simulation/README.md), add semantic tests
-in both languages, and review identities before changing observable rules.
+and review identities before changing observable rules.
 Do not regenerate fixtures to hide a mismatch. New abilities need their own
 state, timing, ordering, and replay design; a generic plugin engine is not part
 of the current implementation.
 
 Canonical identity uses JavaScript JSON string encoding and UTF-16 key ordering
-in both languages. Collectible IDs are arbitrary nonempty strings, including
+for the simulation. Collectible IDs are arbitrary nonempty strings, including
 names inherited by ordinary JavaScript objects; consumers must use own-property
 lookups for dictionaries. Configuration weights use the safe-integer domain,
 which is distinct from the slightly smaller simulation-counter domain.
@@ -79,7 +77,7 @@ purchases. See the [wallet contract](../contracts/http/economy-wallet-v1.md) and
 Vitest resolves the simulation package to source so a clean checkout and edited
 source cannot silently exercise missing or stale generated output. Production
 builds still use the package's generated entrypoint. Routine verification is
-`npm run check`; native changes additionally require Go race checks and vet.
+`npm run check`.
 Browser checks remain on demand. Regression tests cover custom identifiers,
 canonical text, negative coordinate rounding, configuration ownership, hidden
 input, renderer startup failures, palettes, and event delivery.

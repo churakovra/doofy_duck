@@ -16,7 +16,7 @@ const legacyFixture = JSON.parse(readFileSync('contracts/simulation/golden-v1.js
 };
 
 describe('scheduled game Stars', () => {
-  it('matches the independently authored TS/Go schedule vectors', () => {
+  it('matches the independently authored schedule vectors', () => {
     for (const example of authoredSchedule.cases) {
       const descriptor = createRunDescriptor({ runId: `star-vector-${example.seed}`, seed: example.seed }, PRIOR_DEFAULT_CONFIG);
       const initial = createRun(descriptor);

@@ -18,7 +18,7 @@ Returns the most recently created run owned by the authenticated account, includ
 
 ## `GET /api/v1/runs/progress`
 
-Returns the authenticated account's authoritative cross-device best score as `{"bestScore":0}`. The projection is raised monotonically in the same transaction as a Go-verified death or flight-cap checkpoint. Pending or rejected account delivery does not erase the verified score. Local-practice scores are never imported.
+Returns the authenticated account's authoritative cross-device best score as `{"bestScore":0}`. The projection is raised monotonically in the same transaction as a server-verified death or flight-cap checkpoint. Pending or rejected account delivery does not erase the verified score. Local-practice scores are never imported.
 
 ## `POST /api/v1/runs/{run_id}/checkpoints`
 
@@ -34,7 +34,7 @@ Body:
 }
 ```
 
-A checkpoint contains 1–120 exact simulation ticks. `writerToken` and `writerGeneration` are required request fields; the token stays client-held and is stored only as a hash. Each tick advances one active simulation tick, including the initial READY-to-RUNNING tick; a READY run must begin with `FLAP`. Each tick has zero or one `FLAP`; input sequence numbers are contiguous across the run. The server advances the Go simulation for each tick. A run ends on `DEAD` or after 216000 active ticks (`flight_cap`). State, tick count, checkpoint sequence, and completion outbox row commit in one transaction before acknowledgement. A duplicate sequence/key/body returns the original response; a reused key or sequence with different contents is `409`. Stale writer generations are fenced with `409`; gaps are `409`; malformed/oversized batches are `400`/`413`; expired submission windows are persisted as rejected and return `410`.
+A checkpoint contains 1–120 exact simulation ticks. `writerToken` and `writerGeneration` are required request fields; the token stays client-held and is stored only as a hash. Each tick advances one active simulation tick, including the initial READY-to-RUNNING tick; a READY run must begin with `FLAP`. Each tick has zero or one `FLAP`; input sequence numbers are contiguous across the run. The server advances the shared TypeScript simulation for each tick. A run ends on `DEAD` or after 216000 active ticks (`flight_cap`). State, tick count, checkpoint sequence, and completion outbox row commit in one transaction before acknowledgement. A duplicate sequence/key/body returns the original response; a reused key or sequence with different contents is `409`. Stale writer generations are fenced with `409`; gaps are `409`; malformed/oversized batches are `400`/`413`; expired submission windows are persisted as rejected and return `410`.
 
 ## `POST /api/v1/runs/{run_id}/takeover`
 
@@ -42,7 +42,7 @@ An explicit account-owner action rotates `writerGeneration` and the opaque `writ
 
 ## Snapshot and errors
 
-Run routes return a direct JSON object with `runId`, `accountId`, `lifeIndex`, `seed`, `simulationVersion`, `generatorVersion`, `configId`, `state` (the complete Go simulation `State`), `status`, `verificationStatus`, `deliveryStatus`, `checkpointSequence`, `writerGeneration`, `activeTicks`, `activeTickLimit`, and RFC3339 `submissionDeadline`; `completionReason` and `writerToken` are present when applicable. Status is `active`, `completion_pending`, `completed`, `rejected`, or `abandoned`. `verificationStatus` is `in_progress`, `verified`, or `rejected`; `deliveryStatus` is `not_ready`, `pending`, `delivered`, or `rejected`. Errors use `{"error":{"code":"...","message":"..."}}`. A foreign run ID is indistinguishable from a missing run (`404`).
+Run routes return a direct JSON object with `runId`, `accountId`, `lifeIndex`, `seed`, `simulationVersion`, `generatorVersion`, `configId`, `state` (the complete simulation `State`), `status`, `verificationStatus`, `deliveryStatus`, `checkpointSequence`, `writerGeneration`, `activeTicks`, `activeTickLimit`, and RFC3339 `submissionDeadline`; `completionReason` and `writerToken` are present when applicable. Status is `active`, `completion_pending`, `completed`, `rejected`, or `abandoned`. `verificationStatus` is `in_progress`, `verified`, or `rejected`; `deliveryStatus` is `not_ready`, `pending`, `delivered`, or `rejected`. Errors use `{"error":{"code":"...","message":"..."}}`. A foreign run ID is indistinguishable from a missing run (`404`).
 
 ## `POST /api/v1/runs/{run_id}/abandon`
 

@@ -103,7 +103,7 @@ after a pilot; low redemption alone is not a success criterion.
 ## Current implementation and document authority
 
 The repository currently contains one account-backed React/PixiJS game, a pure
-TypeScript simulation and matching native Go simulation, Telegram account/session
+shared TypeScript simulation, Telegram account/session
 services, verified runs, wallet settlement and a cosmetic shop. Local startup uses
 a persistent development Telegram identity and PostgreSQL; production requires
 real Telegram sign-in. There is no anonymous practice mode. Browser-only balances
