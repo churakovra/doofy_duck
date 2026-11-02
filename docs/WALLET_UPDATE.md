@@ -11,7 +11,5 @@ Neither currency is Telegram Stars (`XTR`). The
 idempotency and API behavior. The [operations runbook](BACKEND_OPERATIONS.md)
 covers worker operation and recovery.
 
-`apps/web/src/local-progress.ts`, `wallet.ts` and `wallet-session.ts` are legacy
-local helpers. The account game does not use their balances as account funds and
-does not import earlier browser balances. See the [code map](ARCHITECTURE.md)
+The account game does not import earlier browser balances. See the [code map](ARCHITECTURE.md)
 for the account flow and the [root README](../README.md) for current commands.

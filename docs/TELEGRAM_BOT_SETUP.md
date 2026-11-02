@@ -98,28 +98,3 @@ The backend validates signed `initData`; `initDataUnsafe` does not establish
 identity. Bot creation and real Telegram/device acceptance require the owner's
 Telegram account, a real bot token and an HTTPS origin and are not established
 by local unit tests.
-
-## Local verification for this change
-
-`npm run check` passed after the final authentication fix: TypeScript, ESLint,
-346 unit/fixture tests across 38 files and the production
-build. The existing large-bundle warning remains. Five deployment-helper tests
-passed, including both real-Telegram overlay checks using dummy credentials.
-The local static web container was rebuilt; no real-bot configuration was started.
-
-Tests were run red before implementing launch-authority/account-refresh changes,
-the missing-token overlay and subsequent review fixes. Regression coverage includes
-foreign-cookie bypass prevention, fixed local identity, frozen Telegram retries,
-no account controls, preserved pending traces, rejection of foreign-account
-refresh before purchase replay, no usable credentials before initial account
-validation, bounded account lookup/refresh validation,
-cancellation, lock release and ignored late responses. Independent review findings
-were corrected by the same implementation owner and rechecked.
-
-Browser suites, real Telegram/device checks and hosted deployment were not run.
-No bot or HTTPS endpoint has been configured. Backend persistence code and
-simulation behavior were unchanged; no database regression suite was run for
-this frontend/configuration milestone.
-
-Temporary local logs: `/tmp/duffy-launch-check.log` and
-`/tmp/duffy-launch-web.log`. These are local evidence, not hosted acceptance.

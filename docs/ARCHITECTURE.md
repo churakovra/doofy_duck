@@ -29,8 +29,7 @@ AccountGame automatically authenticates the launch identity and provides no
 account-selection or logout UI. The API client pins refreshes to the verified
 account. AccountGame coordinates memory-only access credentials, per-tick input recording,
 IndexedDB recovery, checkpoint submission and reconciliation. There is no public
-practice path or browser-wallet fallback. Legacy local progress utilities remain
-isolated from account authority and their balances are never imported.
+practice path or browser-wallet fallback. Browser balances are never imported.
 
 Python owns separate Platform/Economy modules and databases; Core owns its database.
 There are no cross-service SQL reads. Completion receipts durably store verified
@@ -55,8 +54,6 @@ entitlement and purchase result share one transaction. See the versioned
 | [scene.ts](../apps/web/src/scene.ts), [appearance.ts](../apps/web/src/appearance.ts), [feel.ts](../apps/web/src/feel.ts) | Scene drawing, physics-neutral palettes, bounded cosmetic effects |
 | [GameWardrobe.tsx](../apps/web/src/GameWardrobe.tsx), [GameWardrobePreview.tsx](../apps/web/src/GameWardrobePreview.tsx), [wardrobe.ts](../apps/web/src/wardrobe.ts) | Legacy local wardrobe helpers, static preview and shared cosmetic catalog definitions |
 | [wardrobe-assets.ts](../apps/web/src/wardrobe-assets.ts), [wardrobe-image-layer.ts](../apps/web/src/wardrobe-image-layer.ts) | Asynchronous cosmetic texture loading and shared preview/gameplay image placement with procedural fallback |
-| [useGameProgress.ts](../apps/web/src/useGameProgress.ts), [local-progress.ts](../apps/web/src/local-progress.ts) | Legacy browser-progress adapter and pure local progress session |
-| [wallet.ts](../apps/web/src/wallet.ts), [wallet-session.ts](../apps/web/src/wallet-session.ts), [storage.ts](../apps/web/src/storage.ts) | Legacy browser-wallet validation, deduplication, tab ownership and persistence fallback |
 | [useGameAudio.ts](../apps/web/src/useGameAudio.ts), [audio.ts](../apps/web/src/audio.ts) | Audio lifecycle, preferences, synthesized sounds/music |
 | [locale.tsx](../apps/web/src/locale.tsx), [messages.ru.ts](../apps/web/src/messages.ru.ts), [messages.en.ts](../apps/web/src/messages.en.ts) | Saved locale preference, typed bilingual catalogs, count formatting, and document language |
 | [style.css](../apps/web/src/style.css) | Viewport scaling and interface layout |
@@ -106,7 +103,6 @@ executing that frame's ticks. The clock stays latched until explicit resume;
 idle/paused/dead presentation does not accumulate simulation debt. Interpolation
 is bounded to 0–1. Inputs queued before an overload pause are discarded.
 
-Legacy browser progress is untrusted and unreachable through the game entry point.
 Account progress uses verified completion evidence and never imports browser
 balances. Frozen client snapshots cannot transfer authority to client balances.
 Paid continue transitions and their accounting remain feature work.

@@ -44,9 +44,7 @@ console.log(JSON.stringify({ ticks, feathers, totals: state.totals }));
 """
 
 
-def request(
-    path: str, *, token: str | None = None, body: object | None = None
-) -> tuple[int, object]:
+def request(path: str, *, token: str | None = None, body: object | None = None) -> tuple[int, object]:
     headers = {"Accept": "application/json"}
     payload = None
     if body is not None:
@@ -69,8 +67,9 @@ def simulate_run(run: dict[str, object]) -> dict[str, object]:
             "node",
             "--input-type=module",
             "-e",
-            "const input=JSON.parse(await new Promise(r=>{let s='';process.stdin.setEncoding('utf8');process.stdin.on('data',c=>s+=c);process.stdin.on('end',()=>r(s))}));\n"
-            + SIMULATION_TRACE,
+            "const input=JSON.parse(await new Promise(r=>{let s='';"
+            "process.stdin.setEncoding('utf8');process.stdin.on('data',c=>s+=c);"
+            "process.stdin.on('end',()=>r(s))}));\n" + SIMULATION_TRACE,
         ],
         input=json.dumps({"runId": run["runId"], "seed": run["seed"]}),
         check=False,
@@ -80,16 +79,11 @@ def simulate_run(run: dict[str, object]) -> dict[str, object]:
         cwd=ROOT,
     )
     if result.returncode != 0:
-        raise RuntimeError(
-            "local simulation trace failed without backend credentials: "
-            f"{result.stderr.strip()}"
-        )
+        raise RuntimeError(f"local simulation trace failed without backend credentials: {result.stderr.strip()}")
     return json.loads(result.stdout)
 
 
-def submit_simulated_run(
-    run: dict[str, object], token: str, ticks: list[list[dict[str, object]]]
-) -> dict[str, object]:
+def submit_simulated_run(run: dict[str, object], token: str, ticks: list[list[dict[str, object]]]) -> dict[str, object]:
     verified: dict[str, object] | None = None
     for sequence, start in enumerate(range(0, len(ticks), 120)):
         batch = ticks[start : start + 120]
@@ -108,12 +102,8 @@ def submit_simulated_run(
         if ack.get("verificationStatus") == "verified":
             verified = ack
             break
-    assert verified is not None, (
-        "simulated flight did not complete within submitted checkpoints"
-    )
-    assert verified.get("status") == "completed", (
-        "verified gameplay did not reach a terminal lifecycle state"
-    )
+    assert verified is not None, "simulated flight did not complete within submitted checkpoints"
+    assert verified.get("status") == "completed", "verified gameplay did not reach a terminal lifecycle state"
     return verified
 
 
@@ -122,15 +112,12 @@ def wait_for_delivery(run_id: str, token: str) -> None:
     while time.monotonic() < deadline:
         status, snapshot = request(f"/api/v1/runs/{run_id}", token=token)
         assert status == 200, f"verified run lookup failed: HTTP {status}"
-        assert (
-            snapshot.get("status") == "completed"
-            and snapshot.get("verificationStatus") == "verified"
-        ), f"delivery changed verified gameplay lifecycle: {snapshot!r}"
+        assert snapshot.get("status") == "completed" and snapshot.get("verificationStatus") == "verified", (
+            f"delivery changed verified gameplay lifecycle: {snapshot!r}"
+        )
         if snapshot.get("deliveryStatus") == "delivered":
             return
-        assert snapshot.get("deliveryStatus") != "rejected", (
-            "Platform permanently rejected completion delivery"
-        )
+        assert snapshot.get("deliveryStatus") != "rejected", "Platform permanently rejected completion delivery"
         time.sleep(0.25)
     raise AssertionError("completion delivery did not finish")
 
@@ -142,9 +129,7 @@ def wait_for_settlement(run_id: str, token: str) -> dict[str, object]:
         assert status == 200, f"completion settlement lookup failed: HTTP {status}"
         if settlement.get("status") == "committed":
             return settlement
-        assert settlement.get("status") != "actionable_failure", (
-            f"settlement failed: {settlement!r}"
-        )
+        assert settlement.get("status") != "actionable_failure", f"settlement failed: {settlement!r}"
         time.sleep(0.25)
     raise AssertionError("local settlement worker did not commit the completion")
 
@@ -153,9 +138,7 @@ def main() -> None:
     global smoke_deadline
     smoke_deadline = time.monotonic() + SMOKE_TIMEOUT_SECONDS
     subprocess.run(["npm", "run", "build:sim"], check=True, cwd=ROOT)
-    status, login = request(
-        "/api/v1/auth/dev", body={"telegram_user_id": secrets.randbelow(2**52) + 1}
-    )
+    status, login = request("/api/v1/auth/dev", body={"telegram_user_id": secrets.randbelow(2**52) + 1})
     assert status == 200, f"development login failed: HTTP {status}"
     token = login["access_token"]
 
@@ -165,13 +148,9 @@ def main() -> None:
     status, run = request("/api/v1/runs", token=token, body={})
     assert status == 201, f"run creation failed: HTTP {status}"
 
-    other_status, other_login = request(
-        "/api/v1/auth/dev", body={"telegram_user_id": secrets.randbelow(2**52) + 1}
-    )
+    other_status, other_login = request("/api/v1/auth/dev", body={"telegram_user_id": secrets.randbelow(2**52) + 1})
     assert other_status == 200, "second development login failed"
-    cross_status, _ = request(
-        f"/api/v1/runs/{run['runId']}", token=other_login["access_token"]
-    )
+    cross_status, _ = request(f"/api/v1/runs/{run['runId']}", token=other_login["access_token"])
     assert cross_status == 404, f"cross-account run access returned HTTP {cross_status}"
 
     # Replay a real local simulation trace. Try a small bounded set of server seeds
@@ -179,9 +158,7 @@ def main() -> None:
     positive_run: dict[str, object] | None = None
     observed_feathers = 0
     for attempt in range(8):
-        assert time.monotonic() < smoke_deadline, (
-            "backend smoke exceeded its 180-second budget"
-        )
+        assert time.monotonic() < smoke_deadline, "backend smoke exceeded its 180-second budget"
         current_run = run if attempt == 0 else None
         if current_run is None:
             status, current_run = request("/api/v1/runs", token=token, body={})
@@ -196,56 +173,37 @@ def main() -> None:
             positive_run = current_run
             observed_feathers = trace["feathers"]
             break
-    assert positive_run is not None, (
-        "none of eight safe simulated flights collected a FEATHER"
-    )
+    assert positive_run is not None, "none of eight safe simulated flights collected a FEATHER"
 
     settlement = wait_for_settlement(positive_run["runId"], token)
-    assert int(settlement["credited"]["FEATHER"]) == observed_feathers, (
-        f"unexpected FEATHER settlement: {settlement!r}"
-    )
-    assert int(settlement["credited"]["FEATHER"]) > 0, (
-        "positive simulated pickup was not credited"
-    )
+    assert int(settlement["credited"]["FEATHER"]) == observed_feathers, f"unexpected FEATHER settlement: {settlement!r}"
+    assert int(settlement["credited"]["FEATHER"]) > 0, "positive simulated pickup was not credited"
 
     status, catalog = request("/api/v1/shop/catalog", token=token)
-    assert status == 200 and catalog.get("enabled") is True, (
-        f"local shop mutations are disabled: {catalog!r}"
-    )
+    assert status == 200 and catalog.get("enabled") is True, f"local shop mutations are disabled: {catalog!r}"
     status, inventory = request("/api/v1/shop/inventory?limit=100", token=token)
     assert status == 200 and {("skin", "classic"), ("background", "meadow")} <= {
         (item["item_type"], item["item_id"]) for item in inventory["items"]
     }, f"starter account inventory is missing: {inventory!r}"
     status, equipment = request("/api/v1/shop/equipment", token=token)
-    assert status == 200 and {
-        (row["item_type"], row["item_id"]) for row in equipment["equipment"]
-    } >= {("skin", "classic"), ("background", "meadow")}, (
-        f"starter account equipment is missing: {equipment!r}"
-    )
+    assert status == 200 and {(row["item_type"], row["item_id"]) for row in equipment["equipment"]} >= {
+        ("skin", "classic"),
+        ("background", "meadow"),
+    }, f"starter account equipment is missing: {equipment!r}"
 
     status, wallet = request("/api/v1/wallets", token=token)
     assert status == 200, f"account wallet read failed: HTTP {status}"
     balances = {item["currency"]: item["balance"] for item in wallet["balances"]}
-    assert int(balances.get("FEATHER", "0")) >= observed_feathers, (
-        f"wallet missed settled earnings: {wallet!r}"
-    )
+    assert int(balances.get("FEATHER", "0")) >= observed_feathers, f"wallet missed settled earnings: {wallet!r}"
 
     # A fresh development login for the same Telegram identity reads the same
     # account-owned wallet and equipment state; no browser balance is supplied.
-    status, relogin = request(
-        "/api/v1/auth/dev", body={"telegram_user_id": account["telegram_user_id"]}
-    )
+    status, relogin = request("/api/v1/auth/dev", body={"telegram_user_id": account["telegram_user_id"]})
     assert status == 200, f"development re-login failed: HTTP {status}"
     status, restored_wallet = request("/api/v1/wallets", token=relogin["access_token"])
-    assert status == 200 and restored_wallet == wallet, (
-        "wallet state did not survive account re-login"
-    )
-    status, restored_equipment = request(
-        "/api/v1/shop/equipment", token=relogin["access_token"]
-    )
-    assert status == 200 and restored_equipment == equipment, (
-        "equipment state did not survive account re-login"
-    )
+    assert status == 200 and restored_wallet == wallet, "wallet state did not survive account re-login"
+    status, restored_equipment = request("/api/v1/shop/equipment", token=relogin["access_token"])
+    assert status == 200 and restored_equipment == equipment, "equipment state did not survive account re-login"
 
     query = (
         "SELECT count(*) || ':' || min(payload::text) FROM completion_inbox "
@@ -269,9 +227,7 @@ def main() -> None:
                 "postgres",
                 "sh",
                 "-ec",
-                'PGPASSWORD=$ECONOMY_DB_PASSWORD psql -h 127.0.0.1 -U economy -d economy -At -c "'
-                + query
-                + '"',
+                'PGPASSWORD=$ECONOMY_DB_PASSWORD psql -h 127.0.0.1 -U economy -d economy -At -c "' + query + '"',
             ],
             check=True,
             capture_output=True,
@@ -282,13 +238,9 @@ def main() -> None:
         if evidence.startswith("1:"):
             break
         time.sleep(0.25)
-    assert evidence.startswith("1:"), (
-        f"expected one stored completion, got {evidence!r}"
-    )
+    assert evidence.startswith("1:"), f"expected one stored completion, got {evidence!r}"
     event = json.loads(evidence[2:])
-    schema = json.loads(
-        (ROOT / "contracts/events/run-life-completed-v1.schema.json").read_text()
-    )
+    schema = json.loads((ROOT / "contracts/events/run-life-completed-v1.schema.json").read_text())
     RunLifeCompleted.model_validate(event)
     validate(event, schema)
     print(
