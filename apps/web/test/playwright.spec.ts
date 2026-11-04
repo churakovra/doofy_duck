@@ -4,8 +4,6 @@ import { installAccountBackend, prepareAccountFlight } from './account-backend.f
 test.beforeEach(async ({ page }) => installAccountBackend(page));
 
 async function waitForPlayableGame(page: Page) {
-  await expect(page.locator('.account-id')).toHaveText('100000001');
-  await expect(page.getByRole('button', { name: /Начать полёт/ })).toBeEnabled();
   await prepareAccountFlight(page);
 }
 
@@ -24,7 +22,7 @@ test('ready screen starts one playable run from the first Space press', async ({
   await page.goto('/');
   await waitForPlayableGame(page);
   await expect(page.locator('script[src="/@vite/client"]')).toHaveCount(0);
-  await expect(page.getByRole('heading', { name: /Привет/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Утёнок Дуби' })).toBeVisible();
   await expect(page.locator('canvas[aria-label="Игровое поле Doofy Duck"]')).toBeVisible();
   await page.keyboard.press('Space');
   await page.clock.runFor(70);
@@ -49,15 +47,15 @@ test('screen start, pause, explicit resume, death, and restart survive three cyc
     await expect(page.getByRole('heading', { name: 'На паузе' })).toBeVisible();
     await changeVisibility(page, false);
     await page.locator('.screen-card .primary-button').evaluate((button: HTMLButtonElement) => button.click());
-    for (let elapsed = 0; elapsed < 8_000 && !(await page.locator('.account-settlement').isVisible().catch(() => false)); elapsed += 200) {
+    for (let elapsed = 0; elapsed < 8_000 && !(await page.locator('.result-screen').isVisible().catch(() => false)); elapsed += 200) {
       if (await page.getByRole('heading', { name: 'На паузе' }).isVisible().catch(() => false)) {
         await page.locator('.screen-card .primary-button').evaluate((button: HTMLButtonElement) => button.click());
       }
       await page.waitForTimeout(200);
     }
-    await expect(page.locator('.account-settlement')).toContainText(/Зачислено|Расчёт/);
-    await page.getByRole('button', { name: /Начать полёт/ }).click();
-    await expect(page.getByRole('heading', { name: /Привет/ })).toBeVisible();
+    await expect(page.locator('.result-screen')).toBeVisible();
+    await page.getByRole('button', { name: 'Ещё раз' }).click();
+    await expect(page.getByRole('heading', { name: 'Утёнок Дуби' })).toBeVisible();
     await expect(page.locator('canvas')).toHaveCount(1);
   }
 });
@@ -67,7 +65,7 @@ test('short landscape viewports keep the complete playfield and HUD inside the s
   await prepareAccountFlight(page);
   for (const viewport of [{ width: 844, height: 390 }, { width: 320, height: 390 }]) {
     await page.setViewportSize(viewport);
-    await expect(page.getByRole('heading', { name: /Привет/ })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Утёнок Дуби' })).toBeVisible();
     await expect(page.locator('canvas')).toBeVisible();
     const bounds = await page.evaluate(() => {
       const rect = (selector: string) => {
@@ -78,7 +76,7 @@ test('short landscape viewports keep the complete playfield and HUD inside the s
       return {
         viewport: { width: innerWidth, height: innerHeight },
         shell: rect('.game-shell'), canvas: rect('canvas'),
-        hud: rect('.hud'), wallet: rect('.wallet-status-strip'), card: rect('.screen-card'),
+        hud: rect('.hud'), wallet: rect('.account-wallet'), card: rect('.screen-card'),
         controls: [...document.querySelectorAll<HTMLElement>('.game-shell button')].map((button) => {
           const box = button.getBoundingClientRect();
           return { left: box.left, top: box.top, right: box.right, bottom: box.bottom };
@@ -103,7 +101,7 @@ test('field touch starts gameplay while the ready menu remains isolated from fie
   await page.getByRole('button', { name: 'Меню' }).dispatchEvent('pointerdown', { pointerId: 2, pointerType: 'touch', isPrimary: true, button: 0, bubbles: true });
   await page.getByRole('button', { name: 'Меню' }).click();
   await expect(page.getByRole('dialog')).toBeVisible();
-  await expect(page.getByRole('heading', { name: /Привет/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Утёнок Дуби' })).toBeVisible();
   await page.getByRole('button', { name: 'Закрыть настройки' }).click();
   const canvas = page.locator('canvas');
   await canvas.dispatchEvent('pointerdown', { pointerId: 1, pointerType: 'touch', isPrimary: true, button: 0, bubbles: true });
@@ -140,10 +138,10 @@ test('renderer failure blocks gameplay input and reports a visible error', async
   });
   await page.goto('/');
   await expect(page.getByRole('alert')).toBeVisible();
-  await expect(page.getByRole('alert')).toContainText(/Игровая симуляция остановлена из-за ошибки/);
+  await expect(page.getByRole('alert')).toContainText('Графика не запустилась');
   await expect(page.getByRole('button', { name: 'Обновить страницу' })).toBeVisible();
   await page.locator('.game-shell').dispatchEvent('pointerdown', { button: 0, pointerType: 'touch', isPrimary: true, bubbles: true });
-  await expect(page.getByRole('alert')).toContainText(/Игровая симуляция остановлена из-за ошибки/);
+  await expect(page.getByRole('alert')).toContainText('Графика не запустилась');
   await expect(page.getByRole('button', { name: 'Обновить страницу' })).toBeVisible();
 });
 
@@ -205,15 +203,17 @@ test('resizes while keeping its single fixed-ratio playfield and pauses after vi
 
 test('account session restores without importing browser wallet balances', async ({ page }) => {
   await page.goto('/');
-  await expect(page.locator('.account-id')).toHaveText('100000001');
+  await expect(page.locator('.account-wallet')).toBeVisible();
   await page.reload();
-  await expect(page.locator('.account-id')).toHaveText('100000001');
+  await expect(page.locator('.account-wallet')).toBeVisible();
   const keys = await page.evaluate(() => Object.keys(localStorage));
   expect(keys.some((key) => /wallet|balance|coin/i.test(key))).toBe(false);
 });
 
 test('a verified account run settles server-side once and survives re-login', async ({ page }, testInfo) => {
   test.setTimeout(30_000);
+  // This seed has a reachable pickup on the input path below under the current rules.
+  await installAccountBackend(page, { seed: 7 });
   await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') });
   await page.clock.pauseAt(new Date('2026-01-01T00:00:01Z'));
   await page.addInitScript(() => {
@@ -243,13 +243,17 @@ test('a verified account run settles server-side once and survives re-login', as
     previousTapTick = tapTick;
   }
   await advanceFrames(160);
-  await expect(page.locator('.account-settlement')).toContainText(/Зачислено|credited/);
+  await expect(page.locator('.result-screen')).toBeVisible();
   const gains = await page.locator('.earnings-summary strong').allTextContents();
-  expect(gains.map((value) => Number(value.match(/\d+/)?.[0] ?? 0)).some((amount) => amount > 0)).toBe(true);
+  const amounts = gains.map((value) => Number(value.match(/\d+/)?.[0] ?? 0));
+  expect(amounts.some((amount) => amount > 0)).toBe(true);
+  const expectedBalances = [String(11 + amounts[0]!), String(7 + amounts[1]!)];
+  await expect.poll(() => page.locator('.wallet-summary-button strong').allTextContents()).toEqual(expectedBalances);
   await page.screenshot({ path: testInfo.outputPath('account-settlement.png'), fullPage: true });
   await page.reload();
-  await expect(page.locator('.account-id')).toHaveText('100000001');
-  await expect(page.locator('.account-settlement')).toContainText(/Зачислено|credited/);
+  await expect(page.locator('.account-wallet')).toBeVisible();
+  await expect(page.locator('.result-screen')).toBeVisible();
+  await expect.poll(() => page.locator('.wallet-summary-button strong').allTextContents()).toEqual(expectedBalances);
   const balanceImport = await page.evaluate(() => Object.keys(localStorage).filter((key) => /wallet|balance|coin/i.test(key)));
   expect(balanceImport).toEqual([]);
 });

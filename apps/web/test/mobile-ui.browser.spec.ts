@@ -40,7 +40,7 @@ test('phone layouts keep controls readable and clear of the ready card and walle
         hud: box('.hud'),
         card: box('.screen-card'),
         panel: box('.screen-panel'),
-        wallet: box('.wallet-status-strip'),
+        wallet: box('.account-wallet'),
         action: box('.screen-panel .primary-button'),
         controls: [...document.querySelectorAll<HTMLElement>('.hud button, .screen-card button')].map((button) => {
           const rect = button.getBoundingClientRect();
@@ -54,8 +54,8 @@ test('phone layouts keep controls readable and clear of the ready card and walle
     expect(layout.controls.every(({ width, height }) => width >= 44 && height >= 44)).toBe(true);
     const intersects = (a: typeof layout.card, b: typeof layout.card) =>
       a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
-    expect(intersects(layout.card, layout.hud)).toBe(false);
-    expect(intersects(layout.card, layout.wallet)).toBe(false);
+    expect(intersects(layout.panel, layout.hud)).toBe(false);
+    expect(intersects(layout.panel, layout.wallet)).toBe(false);
     expect(layout.action.top).toBeGreaterThanOrEqual(layout.frame.top);
     expect(layout.action.bottom).toBeLessThanOrEqual(layout.frame.bottom);
     if (viewport.width === 320 && viewport.height === 568) {
@@ -97,7 +97,7 @@ test('running game shows only the score; backgrounding reveals the paused contro
   }
   await changeVisibility(page, true);
   await expect(page.getByRole('heading', { name: 'На паузе' })).toBeVisible();
-  for (const selector of ['.brand', '.score-card', '.menu-trigger', '.wallet-status-strip']) await expect(page.locator(selector)).toBeVisible();
+  for (const selector of ['.score-card', '.menu-trigger', '.account-wallet']) await expect(page.locator(selector)).toBeVisible();
 });
 
 test('game frame stays fixed while the running state shows only the score', async ({ page }, testInfo) => {
@@ -111,7 +111,7 @@ test('game frame stays fixed while the running state shows only the score', asyn
   const readySize = await size();
   expect(readySize).not.toBeNull();
   expect(await page.locator('.hud').evaluate((node) => node.closest('.game-frame') !== null)).toBe(true);
-  expect(await page.locator('.wallet-status-strip').evaluate((node) => node.closest('.game-frame') !== null)).toBe(true);
+  expect(await page.locator('.account-wallet').evaluate((node) => node.closest('.game-frame') !== null)).toBe(true);
   expect(await page.locator('.screen-card').evaluate((node) => node.closest('.game-frame') !== null)).toBe(true);
   await page.locator('.screen-panel .primary-button').click();
   await page.clock.runFor(70);
@@ -139,7 +139,7 @@ test('game frame stays fixed while the running state shows only the score', asyn
   expect(canvasInside.inside).toBe(true);
   await changeVisibility(page, true);
   await expect(page.getByRole('heading', { name: 'На паузе' })).toBeVisible();
-  for (const selector of ['.brand', '.score-card', '.menu-trigger', '.wallet-status-strip']) await expect(page.locator(selector)).toBeVisible();
+  for (const selector of ['.score-card', '.menu-trigger', '.account-wallet']) await expect(page.locator(selector)).toBeVisible();
   const pauseSize = await size();
   expect(pauseSize?.width).toBeCloseTo(readySize!.width, 0);
   expect(pauseSize?.height).toBeCloseTo(readySize!.height, 0);
@@ -147,9 +147,8 @@ test('game frame stays fixed while the running state shows only the score', asyn
   await page.getByRole('button', { name: /Продолжить/ }).click();
   await expect(score).toBeVisible();
   await page.clock.runFor(8_000);
-  await expect(page.locator('.account-settlement')).toContainText(/Зачислено|credited/);
-  for (const selector of ['.brand', '.menu-trigger', '.wallet-status-strip']) await expect(page.locator(selector)).toBeVisible();
-  await expect(page.locator('.score-card')).toHaveCount(0);
+  await expect(page.locator('.result-screen')).toBeVisible();
+  for (const selector of ['.menu-trigger', '.account-wallet', '.score-card']) await expect(page.locator(selector)).toBeVisible();
   const accountSize = await size();
   expect(accountSize?.width).toBeCloseTo(readySize!.width, 0);
   expect(accountSize?.height).toBeCloseTo(readySize!.height, 0);
@@ -187,7 +186,7 @@ test('Telegram viewport and content safe-area insets shape the app shell', async
       return { left: rect.left, right: rect.right };
     })(),
     wallet: (() => {
-      const rect = document.querySelector('.wallet-status-strip')!.getBoundingClientRect();
+      const rect = document.querySelector('.account-wallet')!.getBoundingClientRect();
       return { left: rect.left, right: rect.right };
     })(),
     panel: (() => {
@@ -196,7 +195,7 @@ test('Telegram viewport and content safe-area insets shape the app shell', async
     })(),
   }));
   expect(dimensions.height).toBe(700);
-  expect(dimensions.top).toBe('10px');
+  expect(dimensions.top).toBe('18px');
   expect(dimensions.stage.left).toBe(dimensions.frame.left);
   expect(dimensions.stage.right).toBe(dimensions.frame.right);
   expect(dimensions.stage.left).toBeGreaterThanOrEqual(72);
@@ -257,7 +256,7 @@ test('account status fits below the ready action on a small phone', async ({ bro
       const rect = document.querySelector(selector)!.getBoundingClientRect();
       return { top: rect.top, bottom: rect.bottom };
     };
-    return { frame: bounds('.game-frame'), status: bounds('.wallet-status-strip'), card: bounds('.screen-card'), action: bounds('.screen-panel .primary-button') };
+    return { frame: bounds('.game-frame'), status: bounds('.account-wallet'), card: bounds('.screen-card'), action: bounds('.screen-panel .primary-button') };
   });
   expect(layout.status.top).toBeGreaterThanOrEqual(layout.frame.top);
   expect(layout.status.bottom).toBeLessThanOrEqual(layout.frame.bottom);
@@ -276,7 +275,7 @@ test('language dropdown is styled, keyboard operable, persistent, and bounded on
       const triggerName = locale === 'ru' ? 'Меню' : 'Menu';
       await page.getByRole('button', { name: triggerName }).click();
       const dialog = page.getByRole('dialog');
-      await expect(dialog).toContainText(/Telegram Stars \(XTR\)/);
+      await expect(dialog).toContainText(locale === 'ru' ? 'Настройки' : 'Settings');
       const selectedName = locale === 'ru' ? 'Русский' : 'English';
       const otherName = locale === 'ru' ? 'English' : 'Русский';
       const languageTrigger = page.getByTestId('language-dropdown-trigger');

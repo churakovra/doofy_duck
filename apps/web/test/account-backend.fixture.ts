@@ -3,7 +3,7 @@ import { expect, type BrowserContext, type Page, type Route } from '@playwright/
 import { createRun, createRunDescriptor, step, type RunState } from '@doofy-duck/game-sim';
 
 type RouteTarget = Pick<Page, 'route' | 'addInitScript'> | Pick<BrowserContext, 'route' | 'addInitScript'>;
-type FixtureOptions = { balances?: { FEATHER: number; GAME_STAR: number } };
+type FixtureOptions = { balances?: { FEATHER: number; GAME_STAR: number }; seed?: number };
 type FixtureRun = {
   id: string;
   state: RunState;
@@ -64,7 +64,7 @@ export async function installAccountBackend(target: RouteTarget, options: Fixtur
     }
     if (path === '/api/v1/runs' && method === 'POST') {
       const id = randomUUID();
-      const state = createRun(createRunDescriptor({ runId: id, seed: 0 }));
+      const state = createRun(createRunDescriptor({ runId: id, seed: options.seed ?? 0 }));
       current = { id, state, checkpointSequence: -1, writerGeneration: 1, writerToken: `writer-${id}`, status: 'active', credited: { FEATHER: 0, GAME_STAR: 0 } };
       return reply(route, 201, snapshot(current));
     }
@@ -125,11 +125,11 @@ export async function installAccountBackend(target: RouteTarget, options: Fixtur
 
 /** Open the server-backed run, leaving the familiar ready screen available for input tests. */
 export async function prepareAccountFlight(page: Page) {
-  await expect(page.locator('.account-id')).toHaveText('100000001');
+  await expect(page.locator('.account-shop-trigger')).toBeVisible();
   await page.locator('.account-panel .primary-button').click();
   await expect(page.locator('.account-panel')).toBeVisible();
-  await expect(page.getByRole('heading', { name: /Привет/ })).toBeVisible();
-  await expect(page.getByRole('button', { name: /Начать полёт/ })).toBeVisible();
+  await expect(page.locator('.account-panel .primary-button')).toContainText('→');
+  await expect(page.locator('.account-panel .primary-button')).toBeEnabled();
 }
 
 function snapshot(run: FixtureRun) {

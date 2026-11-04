@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, 
 import { GameButton } from './GameButton';
 import { formatNumber, type Locale } from './locale';
 import type { MessageCatalog } from './messages.ru';
+import { useDialogKeyboard } from './useDialogKeyboard';
 
 type Props = {
   locale: Locale;
@@ -159,43 +160,7 @@ export function GameSettings({ locale, setLocale, messages, preferences, toggle,
     triggerRef.current?.focus();
   };
 
-  useEffect(() => {
-    if (!open) return;
-    const dialog = dialogRef.current;
-    const initialControl = dialog?.querySelector<HTMLElement>('[data-dialog-initial-focus]');
-    (initialControl ?? dialog)?.focus();
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented) return;
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        close();
-        return;
-      }
-      if (event.key !== 'Tab' || !dialog) return;
-
-      const controls = [...dialog.querySelectorAll<HTMLElement>(
-        'button:not(:disabled), select:not(:disabled), input:not(:disabled):not([type="radio"]), input[type="radio"]:checked:not(:disabled), [tabindex]:not([tabindex="-1"])',
-      )];
-      if (controls.length === 0) {
-        event.preventDefault();
-        dialog.focus();
-        return;
-      }
-
-      const first = controls[0]!;
-      const last = controls[controls.length - 1]!;
-      if (event.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement))) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && (document.activeElement === last || !dialog.contains(document.activeElement))) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [open]);
+  useDialogKeyboard(open, dialogRef, close);
 
   const openMenu = () => setOpen(true);
 

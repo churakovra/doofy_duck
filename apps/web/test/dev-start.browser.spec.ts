@@ -12,7 +12,7 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
     await expect(page.locator('.running-score')).toBeVisible();
     await page.reload();
     await expect(page.locator('canvas')).toHaveCount(1);
-    await expect(page.getByRole('heading', { name: /Привет/ })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Утёнок Дуби|На паузе/ })).toBeVisible();
     await page.locator('.screen-panel .primary-button').click();
     await expect(page.locator('.running-score')).toBeVisible();
   });

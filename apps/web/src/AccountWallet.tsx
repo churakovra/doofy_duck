@@ -148,7 +148,7 @@ export function AccountWallet({ api, accountId, sessionEpoch, locale, messages, 
     <button ref={triggerRef} type="button" className="wallet-summary-button" aria-label={accessibleSummary} aria-haspopup="dialog" aria-expanded={open} aria-controls="account-wallet-popup" onClick={toggleFromTrigger}>
       <span className="wallet-total"><svg className="wallet-token coin-token" aria-hidden="true" viewBox="0 0 20 20"><circle cx="10" cy="10" r="8.2" fill="#f0bd45" stroke="#a96f16" strokeWidth="1.2" /><circle cx="10" cy="10" r="6.1" fill="none" stroke="#ffedaa" strokeWidth="0.8" /><path d="m10 6.1 2.2 3.9-2.2 3.9-2.2-3.9z" fill="#fff2bd" stroke="#b47b20" strokeWidth="0.7" /></svg><strong title={featherValue}>{featherValue}</strong></span>
       <span className="wallet-total"><span className="wallet-token star-token" aria-hidden="true">★</span><strong title={starValue}>{starValue}</strong></span>
-      {(walletError || settlementIssue || settlement === 'pending') && <span className="wallet-sync-indicator" aria-hidden="true" />}
+      {(walletError || settlementIssue) && <span className="wallet-sync-indicator" aria-hidden="true" />}
     </button>
     {open && <div ref={popupRef} id="account-wallet-popup" className="wallet-popup" role="dialog" aria-label={messages.walletPopupHeading}>
       <strong>{messages.walletPopupHeading}</strong>

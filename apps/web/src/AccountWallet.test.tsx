@@ -74,6 +74,16 @@ describe('AccountWallet', () => {
     expect(popup.querySelector('[role="status"]')).toBeNull();
   });
 
+  it('keeps pending settlement silent while retaining the complete balances', async () => {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    const api = { walletBalances: vi.fn().mockResolvedValue({ balances: [{ currency: 'FEATHER', balance: '1234567' }, { currency: 'GAME_STAR', balance: '300' }] }) };
+    host = document.createElement('div'); document.body.append(host); root = createRoot(host);
+    await act(async () => { root.render(<AccountWallet api={api as never} accountId="pending" sessionEpoch={1} locale="en" messages={messagesRu} refreshKey={0} suspended={false} settlement="pending" />); });
+    expect(host.querySelector('.wallet-summary-button')?.textContent).toContain('1,234,567');
+    expect(host.querySelector('.wallet-summary-button')?.textContent).toContain('300');
+    expect(host.querySelector('.wallet-sync-indicator, [role="alert"], [role="dialog"]')).toBeNull();
+  });
+
   it('clears old-account totals and ignores a late read from the previous account', async () => {
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
     let finishOld!: (value: unknown) => void;

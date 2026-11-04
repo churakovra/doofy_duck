@@ -49,6 +49,7 @@ entitlement and purchase result share one transaction. See the versioned
 | `services/core/typescript` | TypeScript Core HTTP authorization, replay, run ownership, checkpoints, migrations and outbox |
 | `deploy` | Compose, gateway routing, isolated development credentials and cross-service smoke |
 | [Game.tsx](../apps/web/src/Game.tsx), [GameButton.tsx](../apps/web/src/GameButton.tsx), [GameSettings.tsx](../apps/web/src/GameSettings.tsx) | Single account entry point, shared button variants/input isolation, and the settings menu |
+| [AccountHud.tsx](../apps/web/src/AccountHud.tsx), [useDialogKeyboard.ts](../apps/web/src/useDialogKeyboard.ts) | Shared account HUD layout and keyboard handling for the settings and account shop dialogs |
 | [useGameRun.ts](../apps/web/src/useGameRun.ts) | Run descriptors, lifecycle, queued input, fixed-step advancement |
 | [clock.ts](../apps/web/src/clock.ts), [input.ts](../apps/web/src/input.ts) | Tick scheduling and accepted pointer/keyboard actions |
 | [GameCanvas.tsx](../apps/web/src/GameCanvas.tsx) | Serialized Pixi lifecycle and frame presentation |

@@ -18,6 +18,7 @@ const harness = vi.hoisted(() => ({
   shopEquipment: vi.fn(), walletBalances: vi.fn(), completion: vi.fn(),
   clearAccount: vi.fn(),
   gameAppearance: null as unknown,
+  canvasReady: null as null | ((error?: 'graphicsStartupError' | 'flightStoppedGraphicsError') => void),
   runCanPlay: null as null | (() => boolean), runRuntimeError: '', runScore: 0,
   traceRecords: new Map<string, unknown>(), save: vi.fn(), runPhase: 'READY', runOptions: null as null | { initialState?: { descriptor?: { simulationVersion: string; generatorVersion: string; configId: string }; config?: { wetland?: { catalogVersion?: number } } }; onTick(state: unknown, inputs: readonly unknown[]): void },
 }));
@@ -67,7 +68,7 @@ vi.mock('./account-trace', async () => {
   };
 });
 
-vi.mock('./GameCanvas', () => ({ GameCanvas: (props: { appearance: unknown }) => { harness.gameAppearance = props.appearance; return <canvas />; } }));
+vi.mock('./GameCanvas', () => ({ GameCanvas: (props: { appearance: unknown; onReady(error?: 'graphicsStartupError' | 'flightStoppedGraphicsError'): void }) => { harness.gameAppearance = props.appearance; harness.canvasReady = props.onReady; return <canvas />; } }));
 vi.mock('./GameSettings', () => ({ GameSettings: (props: { open?: boolean; onOpenChange?(open: boolean): void; setLocale(locale: 'ru' | 'en'): void }) => <>
   <button aria-label="Меню" onClick={() => props.onOpenChange?.(!props.open)}>Menu</button>
   {props.open && <div role="dialog"><button data-testid="switch-locale" onClick={() => props.setLocale('en')}>English</button></div>}
@@ -106,7 +107,7 @@ beforeEach(async () => {
   vi.stubEnv('VITE_DD_DEV_AUTH_ENABLED', 'true');
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   localStorage.clear();
-  harness.traceRecords.clear(); harness.runPhase = 'READY'; harness.runOptions = null; harness.runCanPlay = null; harness.runScore = 0; harness.runRuntimeError = '';
+  harness.traceRecords.clear(); harness.runPhase = 'READY'; harness.runOptions = null; harness.runCanPlay = null; harness.runScore = 0; harness.runRuntimeError = ''; harness.canvasReady = null;
   harness.restore.mockResolvedValue(account);
   harness.restore.mockClear(); harness.login.mockClear(); harness.loginDev.mockClear(); harness.logout.mockClear(); harness.loadTelegramWebApp.mockClear();
   harness.loginDev.mockResolvedValue(account);
@@ -138,6 +139,13 @@ afterEach(() => {
 });
 
 describe('account run transport', () => {
+  it('shows a recovery action when lobby graphics cannot start', () => {
+    act(() => harness.canvasReady?.('graphicsStartupError'));
+    expect(host.querySelector('[role="alert"]')?.textContent).toBe(messagesRu.graphicsStartupError);
+    expect(host.querySelector('.account-panel .primary-button')?.textContent).toContain(messagesRu.reloadPageButton);
+    expect(harness.createRun).not.toHaveBeenCalled();
+  });
+
   it('starts and checkpoints the varied-base descriptor supplied by Core', async () => {
     await act(async () => { host.querySelector<HTMLButtonElement>('.account-panel .primary-button')?.click(); });
     await vi.waitFor(() => expect(harness.createRun).toHaveBeenCalled());
@@ -355,7 +363,8 @@ describe('account run transport', () => {
       root.render(<LocaleProvider><AccountGame key="verified-delivery-pending" /></LocaleProvider>);
     });
 
-    expect(host.textContent).toContain(messagesRu.accountPendingVerification);
+    expect(host.textContent).not.toContain(messagesRu.accountPendingVerification);
+    expect(harness.completion).not.toHaveBeenCalled();
     harness.createRun.mockResolvedValueOnce(runSnapshot({ runId: 'next-flight', writerToken: 'next-writer' }));
     await act(async () => { host.querySelector<HTMLButtonElement>('.account-panel .primary-button')?.click(); });
 
@@ -371,7 +380,7 @@ describe('account run transport', () => {
     await act(async () => {
       root.render(<LocaleProvider><AccountGame key="delivery-poll-delivered" /></LocaleProvider>);
     });
-    expect(host.textContent).toContain(messagesRu.accountPendingVerification);
+    expect(host.textContent).not.toContain(messagesRu.accountPendingVerification);
 
     await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
 
@@ -576,7 +585,7 @@ describe('account run transport', () => {
       : { status: 'pending', reason: 'awaiting_delivery', credited: { FEATHER: '0', GAME_STAR: '0' } });
     harness.getRun.mockResolvedValue(runSnapshot({ status: 'completed', verificationStatus: 'verified', deliveryStatus: 'delivered' }));
     await act(async () => { root.render(<LocaleProvider><AccountGame key="settlement-after-delivery" /></LocaleProvider>); });
-    await vi.waitFor(() => expect(harness.completion).toHaveBeenCalledTimes(1));
+    expect(harness.completion).not.toHaveBeenCalled();
     const readsBeforeCommit = harness.walletBalances.mock.calls.length;
     harness.walletBalances.mockResolvedValue({ balances: [{ currency: 'FEATHER', balance: '40' }, { currency: 'GAME_STAR', balance: '5' }] });
     delivered = true;
@@ -584,7 +593,25 @@ describe('account run transport', () => {
     await vi.waitFor(() => expect(host.querySelector('.wallet-summary-button')?.textContent).toContain('40'));
     expect(host.querySelector('.wallet-summary-button')?.textContent).toContain('5');
     expect(harness.walletBalances.mock.calls.length).toBeGreaterThan(readsBeforeCommit);
-    expect(harness.completion.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(harness.completion.mock.calls.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('checks a pending settlement quickly and refreshes only after it commits', async () => {
+    vi.useFakeTimers();
+    harness.currentRun.mockResolvedValue(undefined);
+    harness.latestRun.mockResolvedValue(runSnapshot({ status: 'completed', verificationStatus: 'verified', deliveryStatus: 'delivered' }));
+    harness.completion
+      .mockResolvedValueOnce({ status: 'pending', reason: 'awaiting_settlement', credited: { FEATHER: '0', GAME_STAR: '0' } })
+      .mockResolvedValueOnce({ status: 'committed', reason: 'credited', credited: { FEATHER: '4', GAME_STAR: '1' } });
+    await act(async () => { root.render(<LocaleProvider><AccountGame key="quick-settlement" /></LocaleProvider>); });
+    expect(harness.completion).toHaveBeenCalledTimes(1);
+    const initialReads = harness.walletBalances.mock.calls.length;
+    await act(async () => { await vi.advanceTimersByTimeAsync(499); });
+    expect(harness.completion).toHaveBeenCalledTimes(1);
+    expect(harness.walletBalances).toHaveBeenCalledTimes(initialReads);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(harness.completion).toHaveBeenCalledTimes(2);
+    expect(harness.walletBalances.mock.calls.length).toBeGreaterThan(initialReads);
   });
 
   it('never renders account logout or identity selection controls', async () => {

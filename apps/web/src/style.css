@@ -313,9 +313,10 @@ button { font: inherit; }
 .account-shop-dialog .wardrobe-preview-art { height: 140px; }
 .account-shop-selected { display: flex; justify-content: space-between; gap: 8px; margin: -5px 0 0; }
 .account-shop-selected span { color: #667267; font-size: 12px; }
-.account-shop-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.account-shop-tabs { display: flex; min-width: 0; flex: 0 0 auto; gap: 6px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; }
 .account-shop-tabs button { min-height: 42px; border: 1px solid var(--line); border-radius: 10px; color: var(--ink); background: var(--paper); font: inherit; font-weight: 650; cursor: pointer; }
-.account-shop-tabs button[aria-selected="true"] { border-color: var(--green); color: var(--green-dark); background: var(--green-pale); }
+.account-shop-tabs button { flex: 0 0 auto; padding: 0 18px; white-space: nowrap; }
+.account-shop-tabs button[aria-pressed="true"] { border-color: var(--green); color: var(--green-dark); background: var(--green-pale); }
 .account-shop-items { display: flex; min-width: 0; gap: 8px; padding: 2px 2px 8px; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scrollbar-color: #829582 #e7e8db; scrollbar-width: thin; scroll-snap-type: x proximity; }
 .account-shop-items::-webkit-scrollbar { height: 7px; }
 .account-shop-items::-webkit-scrollbar-track { border-radius: 8px; background: #e7e8db; }
@@ -324,7 +325,7 @@ button { font: inherit; }
 .account-shop-item.selected { border-color: var(--green); background: var(--green-pale); box-shadow: inset 0 0 0 1px var(--green); }
 .account-shop-item-title { font-size: 13px; font-weight: 700; }
 .account-shop-item-price { color: #59695f; font-size: 11px; }
-.account-shop-actions { display: flex; }
+.account-shop-actions { display: flex; min-height: 48px; flex: 0 0 auto; }
 .account-shop-actions .game-button { width: 100%; min-height: 48px; }
 .account-shop-confirmation, .account-shop-pending { display: grid; gap: 7px; padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: #f5f3eb; }
 .account-shop-confirmation p, .account-shop-pending p { margin: 0; font-size: 13px; line-height: 1.4; }
@@ -486,10 +487,51 @@ button { font: inherit; }
 .account-shop-item, .account-shop-tabs button { min-height: 48px; border-radius: 13px; }
 .account-shop-item.selected, .wardrobe-option.selected { border-color: var(--green); background: #e4efe2; }
 .account-shop-selected { margin: 0; }
-.account-shop-selected span { display: none; }
+.account-shop-selected span { display: block; font-weight: 700; text-align: right; }
 .account-shop-wallet { border-color: var(--line); }
 .settings-dialog-header .settings-close { min-width: 44px; min-height: 44px; }
 .account-shop-dialog > .control-button { min-height: 44px; }
 @media (max-height: 620px) { .game-frame:not(.running) .screen-panel { padding: 9px 12px; } .game-frame:not(.running) .screen-panel h1 { margin-bottom: 5px; font-size: 24px; } .game-frame:not(.running) .primary-button { min-height: 46px; } }
 @media (max-width: 390px) { .game-frame:not(.running) .screen-card { inset-inline: 7px; } .game-frame:not(.running) .screen-panel { padding-inline: 13px; } }
 @media (prefers-reduced-motion: reduce) { .game-frame:not(.running) .primary-button:active:not(:disabled) { transform: none; } }
+
+/* A compact field guide gives the first flight a little character. */
+.flight-kicker { margin: 0 0 6px; color: #806019; font-size: 11px; font-weight: 800; letter-spacing: .12em; }
+.flight-instruction { max-width: 24ch; margin: 0 auto 8px; color: var(--muted); font-size: 14px; line-height: 1.4; }
+.result-screen .result-score { color: var(--green-dark); }
+.account-hud .score-card span { font-size: 10px; letter-spacing: 0; overflow-wrap: normal; }
+.account-shop-selected { align-items: baseline; gap: 8px; }
+.account-shop-selected strong, .account-shop-selected span { overflow-wrap: anywhere; }
+
+/* Let balances determine their own width, including large values. */
+.account-hud .account-wallet { flex: 1 1 auto; }
+.account-hud .score-group { flex: 0 0 auto; }
+.wallet-summary-button { width: auto; max-width: 100%; flex-wrap: wrap; justify-content: flex-start; gap: 3px 8px; padding: 5px 8px; }
+.account-wallet .wallet-total { flex: 0 1 auto; min-width: 0; overflow: visible; white-space: normal; }
+.account-wallet .wallet-total strong { max-width: none; overflow: visible; overflow-wrap: anywhere; text-overflow: clip; white-space: normal; }
+
+/* Center the record without changing the top row's controls. */
+.game-frame:not(.running) .account-hud { flex-wrap: nowrap; justify-content: space-between; }
+.game-frame:not(.running) .account-hud .account-wallet { flex: 0 1 auto; max-width: calc(50% - 30px); }
+.game-frame:not(.running) .account-hud .record-group { position: absolute; top: 0; left: 50%; width: 52px; min-height: 44px; transform: translateX(-50%); justify-content: center; }
+.game-frame:not(.running) .account-hud .record-group .score-card { flex: 1 1 auto; min-width: 0; padding-inline: 0; }
+.game-frame:not(.running) .account-hud .record-group strong { overflow: visible; overflow-wrap: anywhere; text-overflow: clip; white-space: normal; }
+@container game-frame (max-width: 360px) { .account-hud .account-shop-trigger { padding-inline: 6px; font-size: 12px; } }
+
+/* Keep the language choices in the dialog's scroll flow. */
+.language-select-listbox { position: static; max-height: none; margin-top: 6px; box-shadow: none; }
+
+/* Browse the catalog as a collection, with the selected look up front. */
+.account-shop-dialog { gap: 12px; padding: 16px; }
+.account-shop-wallet { gap: 6px; padding: 0; border: 0; }
+.account-shop-wallet p { flex-direction: row; align-items: baseline; justify-content: space-between; gap: 5px; padding: 7px 9px; }
+.account-shop-wallet small { font-size: 11px; }
+.account-shop-dialog .wardrobe-preview-art { height: clamp(110px, 24cqh, 180px); border-radius: 16px; }
+.account-shop-selected { align-items: center; padding: 3px 2px; }
+.account-shop-selected strong { font-size: 17px; }
+.account-shop-selected span { color: var(--green-dark); font-size: 13px; }
+.account-shop-items { display: flex; gap: 8px; padding: 3px 3px 8px; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; }
+.account-shop-item { flex: 0 0 clamp(136px, 45cqw, 176px); min-width: 0; min-height: 72px; display: grid; grid-template-columns: 32px minmax(0, 1fr); align-content: center; column-gap: 8px; scroll-snap-align: start; }
+.account-shop-swatch { grid-row: span 2; align-self: center; width: 32px; height: 32px; border: 1px solid rgb(38 59 50 / 20%); border-radius: 11px; }
+.account-shop-item-title, .account-shop-item-price { min-width: 0; overflow-wrap: anywhere; }
+.account-shop-actions .primary-button { margin: 0; }

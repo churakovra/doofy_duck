@@ -6,13 +6,13 @@ test('Telegram account restores across tabs and starts a server-backed run', asy
   await installAccountBackend(context, { balances: { FEATHER: 5, GAME_STAR: 2 } });
   const first = await context.newPage();
   await first.goto('/');
-  await expect(first.locator('.account-id')).toHaveText('100000001');
+  await expect(first.locator('.account-wallet')).toBeVisible();
 
   const second = await context.newPage();
   await second.goto('/');
-  await expect(second.locator('.account-id')).toHaveText('100000001');
+  await expect(second.locator('.account-wallet')).toBeVisible();
   await first.reload();
-  await expect(first.locator('.account-id')).toHaveText('100000001');
+  await expect(first.locator('.account-wallet')).toBeVisible();
   await prepareAccountFlight(first);
   await expect(first.locator('canvas')).toHaveCount(1);
   const balanceImport = await first.evaluate(() => Object.keys(localStorage).filter((key) => /wallet|balance|coin/i.test(key)));

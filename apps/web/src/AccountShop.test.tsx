@@ -60,10 +60,13 @@ describe('account cosmetic shop', () => {
     expect(host.textContent).toContain('900,719,925,474,099,312,345');
     expect(host.textContent).toContain('In-game Stars are separate from Telegram Stars (XTR).');
     click('.account-shop-item:nth-child(2)');
+    expect(host.querySelector('.account-shop-actions button')?.textContent).toContain('Buy · 20 Coins');
     await act(async () => { host.querySelector<HTMLButtonElement>('.account-shop-actions button')!.click(); await Promise.resolve(); });
 
     expect(host.textContent).toContain('20 Coins');
     expect(host.querySelector('.account-shop-confirmation')?.textContent).toContain('Mint');
+    expect(host.querySelector('.account-shop-confirmation .primary-button')?.textContent).toContain('Buy · 20 Coins');
+    expect(host.querySelector('.account-shop-actions button')).toBeNull();
     expect(api.shopPurchase).not.toHaveBeenCalled();
     await act(async () => { host.querySelector<HTMLButtonElement>('.account-shop-confirmation .primary-button')!.click(); await Promise.resolve(); await Promise.resolve(); });
 
@@ -71,29 +74,56 @@ describe('account cosmetic shop', () => {
     expect(host.textContent).toContain('Purchase confirmed. The item is now owned.');
   });
 
-  it('hides equip when the selected skin is already equipped', async () => {
+  it('keeps keyboard focus in the shop and returns it to the opener on close', async () => {
     await act(async () => { render(); await Promise.resolve(); await Promise.resolve(); });
-    expect(host.querySelector('.account-shop-item.selected')?.textContent).toContain('Classic');
-    expect(host.querySelector('.account-shop-actions')).toBeNull();
+    const dialog = host.querySelector<HTMLElement>('.account-shop-dialog')!;
+    const trigger = host.querySelector<HTMLButtonElement>('.account-shop-trigger')!;
+    const first = dialog.querySelector<HTMLButtonElement>('button:not(:disabled)')!;
+    const controls = [...dialog.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')];
+    controls.at(-1)!.focus();
+    act(() => controls.at(-1)!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true })));
+    expect(document.activeElement).toBe(first);
+    act(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+    expect(onOpenChange).toHaveBeenLastCalledWith(false);
+    expect(document.activeElement).toBe(trigger);
   });
 
-  it('hides equip when the selected world is already equipped', async () => {
+  it('shows a disabled equipped button for the equipped skin', async () => {
+    await act(async () => { render(); await Promise.resolve(); await Promise.resolve(); });
+    expect(host.querySelector('.account-shop-item.selected')?.textContent).toContain('Classic');
+    expect(host.querySelector('.account-shop-actions button')?.textContent).toBe('Equipped');
+    expect(host.querySelector<HTMLButtonElement>('.account-shop-actions button')?.disabled).toBe(true);
+  });
+
+  it('asks the player to confirm the actual server price when it differs from the catalog', async () => {
+    api = buildApi({ shopQuote: vi.fn().mockResolvedValue({ quote_id: 'changed-price', catalog_version: 'v2', eligibility_version: 'v1', item_type: 'skin', item_id: 'mint', currency: 'FEATHER', amount: '25', created_at: '2026-10-17T12:00:00Z', expires_at: '2026-10-17T12:05:00Z' }) });
+    await act(async () => { render(); await Promise.resolve(); await Promise.resolve(); });
+    click('.account-shop-item:nth-child(2)');
+    expect(host.querySelector('.account-shop-actions button')?.textContent).toContain('20 Coins');
+    await act(async () => { host.querySelector<HTMLButtonElement>('.account-shop-actions button')!.click(); await Promise.resolve(); });
+    expect(host.querySelector('.account-shop-confirmation .primary-button')?.textContent).toContain('Buy · 25 Coins');
+    expect(api.shopPurchase).not.toHaveBeenCalled();
+  });
+
+  it('shows a disabled equipped button for the equipped world', async () => {
     await act(async () => { render(true, 'account-a', 0, { ...equipment, backgroundId: 'nebula' }); await Promise.resolve(); await Promise.resolve(); });
     click('.account-shop-tabs button:nth-child(2)');
     expect(host.querySelector('.account-shop-item.selected')?.textContent).toContain('Nebula');
-    expect(host.querySelector('.account-shop-actions')).toBeNull();
+    expect(host.querySelector('.account-shop-actions button')?.textContent).toBe('Equipped');
+    expect(host.querySelector<HTMLButtonElement>('.account-shop-actions button')?.disabled).toBe(true);
   });
 
-  it('brings the first selected item into view when switching shop categories', async () => {
+  it('shows duck items by default and switches the item list with the category', async () => {
     await act(async () => { render(); await Promise.resolve(); await Promise.resolve(); });
     const skinItems = host.querySelector<HTMLElement>('.account-shop-items')!;
     skinItems.scrollLeft = 180;
 
+    expect(host.querySelector('.account-shop-tabs button:first-child')?.getAttribute('aria-pressed')).toBe('true');
     click('.account-shop-tabs button:nth-child(2)');
-
-    const worldItems = host.querySelector<HTMLElement>('.account-shop-items')!;
-    expect(worldItems.scrollLeft).toBe(0);
+    expect(host.querySelector<HTMLElement>('.account-shop-items')?.scrollLeft).toBe(0);
     expect(host.querySelector('.account-shop-item.selected')?.textContent).toContain('Nebula');
+    expect(host.querySelector('.account-shop-tabs button:nth-child(2)')?.getAttribute('aria-pressed')).toBe('true');
+    expect(host.querySelector('.account-shop-items')?.textContent).not.toContain('Classic');
   });
 
   it('keeps equip visible for an owned item that is not equipped', async () => {
@@ -102,6 +132,15 @@ describe('account cosmetic shop', () => {
     click('.account-shop-item:nth-child(2)');
     expect(host.querySelector('.account-shop-actions button')?.textContent).toContain('Equip');
     expect(host.querySelector<HTMLButtonElement>('.account-shop-actions button')?.disabled).toBe(false);
+  });
+
+  it('shows buy as disabled for an unavailable item', async () => {
+    api = buildApi({ shopCatalog: vi.fn().mockResolvedValue({ ...catalog, items: catalog.items.map((item) => item.item_id === 'mint' ? { ...item, available: false } : item) }) });
+    await act(async () => { render(); await Promise.resolve(); await Promise.resolve(); });
+    click('.account-shop-item:nth-child(2)');
+    expect(host.querySelector('.account-shop-actions button')?.textContent).toContain('Buy');
+    expect(host.querySelector<HTMLButtonElement>('.account-shop-actions button')?.disabled).toBe(true);
+    expect(api.shopQuote).not.toHaveBeenCalled();
   });
 
   it('does not present a malformed server quote as a purchase price', async () => {
@@ -221,7 +260,7 @@ describe('account cosmetic shop', () => {
     click('button.account-shop-item');
 
     expect(host.textContent).toContain('Purchases and equipment changes are temporarily disabled.');
-    expect(host.querySelector('.account-shop-actions')).toBeNull();
+    expect(host.querySelector<HTMLButtonElement>('.account-shop-actions button')?.disabled).toBe(true);
   });
 
   it('shows a missing balance as unavailable and never formats it as zero', async () => {
@@ -229,6 +268,19 @@ describe('account cosmetic shop', () => {
     await act(async () => { render(); await Promise.resolve(); await Promise.resolve(); });
 
     expect(host.textContent).toContain('The account shop is unavailable. Balances are not shown as zero.');
-    expect(host.textContent).not.toContain('0');
+    expect([...host.querySelectorAll('.account-shop-wallet strong')].map((value) => value.textContent)).toEqual(['—', '—']);
+    expect(host.textContent).toContain('Try again');
+  });
+
+  it('only offers retry when loading fails and recovers the shop', async () => {
+    const walletBalances = vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValue({ balances: [{ currency: 'FEATHER', balance: '20' }, { currency: 'GAME_STAR', balance: '0' }] });
+    api = buildApi({ walletBalances });
+    await act(async () => { render(); await Promise.resolve(); await Promise.resolve(); });
+    const retry = [...host.querySelectorAll('button')].find((button) => button.textContent === 'Try again');
+    expect(retry).toBeDefined();
+    await act(async () => { retry?.click(); await Promise.resolve(); await Promise.resolve(); });
+    expect(host.querySelector('.wallet-access-error')).toBeNull();
+    expect([...host.querySelectorAll('button')].some((button) => button.textContent === 'Try again' || button.textContent === 'Refresh')).toBe(false);
+    expect(host.querySelector('.account-shop-item')).not.toBeNull();
   });
 });

@@ -1,5 +1,5 @@
 import { createPortal } from 'react-dom';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { AccountApi, AccountApiError } from './account-api';
 import { accountShopAppearance } from './account-shop-assets';
 import { createPurchaseRecovery, formatDecimalBalance, isValidShopQuote, parseWalletBalances, type PurchaseIntent, type ShopCatalog, type ShopCatalogItem, type ShopCurrency, type ShopItemType, type ShopQuote, type WalletBalances } from './account-shop';
@@ -8,6 +8,7 @@ import { GameWardrobePreview } from './GameWardrobePreview';
 import type { Locale } from './locale';
 import type { MessageCatalog } from './messages.ru';
 import type { Equipment } from './wardrobe';
+import { useDialogKeyboard } from './useDialogKeyboard';
 
 type Props = {
   api: AccountApi; accountId: string; sessionEpoch: number; locale: Locale; messages: MessageCatalog;
@@ -16,6 +17,7 @@ type Props = {
 };
 type InventoryPage = { items: readonly { item_type: ShopItemType; item_id: string }[]; next_cursor: string | null };
 type EquipmentRow = { item_type: ShopItemType; item_id: string; revision: number };
+type ShopCategory = ShopItemType;
 
 function validDecimal(value: unknown): value is string { return typeof value === 'string' && /^(0|[1-9]\d{0,39})$/.test(value); }
 function validType(value: unknown): value is ShopItemType { return value === 'skin' || value === 'background'; }
@@ -65,7 +67,8 @@ export function AccountShop({ api, accountId, sessionEpoch, locale, messages, po
   const [wallet, setWallet] = useState<WalletBalances | null>(null);
   const [owned, setOwned] = useState<ReadonlySet<string>>(new Set());
   const [revisions, setRevisions] = useState<Partial<Record<ShopItemType, number>>>({});
-  const [tab, setTab] = useState<ShopItemType>('skin');
+  const [category, setCategory] = useState<ShopCategory>('skin');
+  const categoryRef = useRef<ShopCategory>('skin');
   const [selected, setSelected] = useState<ShopCatalogItem | null>(null);
   const [quote, setQuote] = useState<ShopQuote | null>(null);
   const [pending, setPending] = useState<PurchaseIntent | null>(null);
@@ -73,6 +76,7 @@ export function AccountShop({ api, accountId, sessionEpoch, locale, messages, po
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const dialogRef = useRef<HTMLElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const scopeRef = useRef({ accountId, sessionEpoch, epoch: 0, mounted: true });
   const quoteRequestRef = useRef(0);
   const equipmentRef = useRef(equipment);
@@ -133,7 +137,7 @@ export function AccountShop({ api, accountId, sessionEpoch, locale, messages, po
         ...(equippedRows.background ? { background: equippedRows.background.revision } : {}),
       });
       onEquipment(nextEquipment);
-      setSelected((current) => current && parsedCatalog.items.find((item) => item.item_type === current.item_type && item.item_id === current.item_id) || parsedCatalog.items[0] || null);
+      setSelected((current) => (current?.item_type === categoryRef.current && parsedCatalog.items.find((item) => item.item_type === current.item_type && item.item_id === current.item_id)) || parsedCatalog.items.find((item) => item.item_type === categoryRef.current) || null);
       setPending(recovery.pending(requestedAccount) ?? null);
     } catch (reason) {
       if (isCurrentScope(requestedAccount, requestEpoch)) setError(errorCopy(reason, messages));
@@ -141,26 +145,20 @@ export function AccountShop({ api, accountId, sessionEpoch, locale, messages, po
   }, [accountId, api, isCurrentScope, messages, onEquipment, recovery]);
 
   useEffect(() => {
-    setLoadedAccount(null); setCatalog(null); setWallet(null); setOwned(new Set()); setPending(recovery.pending(accountId) ?? null); setQuote(null); setError(''); setNotice(''); lookupStartedRef.current = null;
+    setLoadedAccount(null); setCatalog(null); setWallet(null); setOwned(new Set()); setSelected(null); setPending(recovery.pending(accountId) ?? null); setQuote(null); setError(''); setNotice(''); lookupStartedRef.current = null;
   }, [accountId, recovery, sessionEpoch]);
-  useEffect(() => { if (open) void refresh(); }, [open, refresh, sessionEpoch]);
   useEffect(() => {
     if (!open) return;
-    const initial = dialogRef.current?.querySelector<HTMLElement>('[data-dialog-initial-focus]');
-    initial?.focus();
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); onOpenChange(false); }
-      if (event.key === 'Tab' && dialogRef.current) {
-        const controls = [...dialogRef.current.querySelectorAll<HTMLElement>('button:not(:disabled)')];
-        if (event.shiftKey && (document.activeElement === controls[0] || !dialogRef.current.contains(document.activeElement))) { event.preventDefault(); controls.at(-1)?.focus(); }
-        else if (!event.shiftKey && (document.activeElement === controls.at(-1) || !dialogRef.current.contains(document.activeElement))) { event.preventDefault(); controls[0]?.focus(); }
-      }
-    };
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [open, onOpenChange]);
+    categoryRef.current = 'skin';
+    setCategory('skin');
+    setSelected((current) => current?.item_type === 'skin' ? current : null);
+    setQuote(null);
+    quoteRequestRef.current += 1;
+  }, [open]);
+  useEffect(() => { if (open) void refresh(); }, [open, refresh, sessionEpoch]);
+  const close = () => { onOpenChange(false); triggerRef.current?.focus(); };
+  useDialogKeyboard(open, dialogRef, close);
 
-  const items = useMemo(() => catalog?.items.filter((item) => item.item_type === tab) ?? [], [catalog, tab]);
   const skinItem = catalog?.items.find((item) => item.item_type === 'skin' && item.item_id === equipment.skinId);
   const backgroundItem = catalog?.items.find((item) => item.item_type === 'background' && item.item_id === equipment.backgroundId);
   const previewAppearance = selected
@@ -188,7 +186,7 @@ export function AccountShop({ api, accountId, sessionEpoch, locale, messages, po
       const row = await api.setShopEquipment(item.item_type, item.item_id, revision);
       if (!isCurrentScope(requestedAccount, requestEpoch)) return;
       const next = { ...equipmentRef.current, [item.item_type === 'skin' ? 'skinId' : 'backgroundId']: row.item_id };
-      setRevisions((current) => ({ ...current, [item.item_type]: row.revision })); onEquipment(next); setNotice(messages.accountShopEquipped);
+      setRevisions((current) => ({ ...current, [item.item_type]: row.revision })); onEquipment(next);
     } catch (reason) {
       if (!isCurrentScope(requestedAccount, requestEpoch)) return;
       if (reason instanceof AccountApiError && reason.code === 'stale_equipment' && reason.current && typeof reason.current === 'object') {
@@ -276,16 +274,16 @@ export function AccountShop({ api, accountId, sessionEpoch, locale, messages, po
   const currencyName = (currency: ShopCurrency) => currency === 'FEATHER' ? messages.accountShopCurrencyFeather : messages.accountShopCurrencyStar;
   const balance = (currency: ShopCurrency) => wallet ? formatDecimalBalance(wallet[currency], locale) : '—';
   const quotedItem = quote && catalog?.items.find((item) => item.item_type === quote.item_type && item.item_id === quote.item_id);
+  const categoryLabel = (itemType: ShopCategory) => itemType === 'skin' ? messages.accountShopDuckCategory : messages.accountShopWorldCategory;
 
   return <>
-    <GameButton variant="control" className="account-shop-trigger" aria-haspopup="dialog" aria-expanded={open} onClick={() => onOpenChange(!open)}>{messages.accountShopLabel}</GameButton>
+    <GameButton ref={triggerRef} variant="control" className="account-shop-trigger" aria-haspopup="dialog" aria-expanded={open} onClick={() => open ? close() : onOpenChange(true)}>{messages.accountShopLabel}</GameButton>
     {open && portalContainer.current && createPortal(<div className="settings-backdrop account-shop-backdrop" onPointerDown={(event) => event.stopPropagation()}>
       <section ref={dialogRef} className="settings-dialog account-shop-dialog" role="dialog" aria-modal="true" aria-labelledby="account-shop-heading" tabIndex={-1}>
-        <header className="settings-dialog-header"><h2 id="account-shop-heading">{messages.accountShopHeading}</h2><GameButton variant="control" className="settings-close" aria-label={messages.wardrobeCloseLabel} onClick={() => onOpenChange(false)}>×</GameButton></header>
+        <header className="settings-dialog-header"><h2 id="account-shop-heading">{messages.accountShopHeading}</h2><GameButton variant="control" className="settings-close" data-dialog-initial-focus aria-label={messages.wardrobeCloseLabel} onClick={close}>×</GameButton></header>
         <div className="account-shop-wallet" aria-label={messages.accountShopWallet}>
-          <h3>{messages.accountShopWallet}</h3>
           <p><span>{messages.accountShopCurrencyFeather}</span><strong>{wallet ? balance('FEATHER') : '—'}</strong></p>
-          <p><span>{messages.accountShopCurrencyStar}</span><strong>{wallet ? balance('GAME_STAR') : '—'}</strong></p>
+          <p><span>{messages.accountShopStarField}</span><strong>{wallet ? balance('GAME_STAR') : '—'}</strong></p>
           <small>{messages.accountShopStarNote}</small>
         </div>
         {!recovery.canRetain && <p className="wallet-access-error" role="alert">{messages.accountShopStorageWarning}</p>}
@@ -295,39 +293,48 @@ export function AccountShop({ api, accountId, sessionEpoch, locale, messages, po
           <GameWardrobePreview appearance={previewAppearance} label={messages.accountShopHeading} />
           <p className="account-shop-selected"><strong>{selected.display_name[locale]}</strong></p>
         </>}
-        <div className="account-shop-tabs" role="tablist" aria-label={messages.accountShopHeading}>
-          <button type="button" role="tab" aria-selected={tab === 'skin'} data-dialog-initial-focus onClick={() => { quoteRequestRef.current += 1; setQuote(null); setTab('skin'); setSelected(catalog?.items.find((item) => item.item_type === 'skin') ?? null); }}>{messages.accountShopSkins}</button>
-          <button type="button" role="tab" aria-selected={tab === 'background'} onClick={() => { quoteRequestRef.current += 1; setQuote(null); setTab('background'); setSelected(catalog?.items.find((item) => item.item_type === 'background') ?? null); }}>{messages.accountShopWorlds}</button>
+        <div className="account-shop-tabs" role="group" aria-label={messages.accountShopHeading}>
+          {(['skin', 'background'] as ShopCategory[]).map((itemType) => <button key={itemType} type="button" aria-pressed={category === itemType} onClick={() => {
+            if (itemType === categoryRef.current) return;
+            categoryRef.current = itemType;
+            setCategory(itemType);
+            quoteRequestRef.current += 1;
+            setQuote(null);
+            setSelected(catalog?.items.find((item) => item.item_type === itemType) ?? null);
+          }}>{categoryLabel(itemType)}</button>)}
         </div>
-        <div key={tab} className="account-shop-items" role="tabpanel" aria-label={tab === 'skin' ? messages.accountShopSkins : messages.accountShopWorlds}>
-          {loadedAccount === accountId && items.map((item) => {
+        <div key={category} className="account-shop-items" role="group" aria-label={category === 'skin' ? messages.accountShopSkins : messages.accountShopWorlds}>
+          {loadedAccount === accountId && catalog?.items.filter((item) => item.item_type === category).map((item) => {
             const isOwned = owned.has(keyFor(item));
             const isEquipped = item.item_type === 'skin' ? equipment.skinId === item.item_id : equipment.backgroundId === item.item_id;
             const isSelected = selected?.item_id === item.item_id && selected.item_type === item.item_type;
             const price = item.price ? `${formatDecimalBalance(item.price.amount, locale)} ${currencyName(item.price.currency)}` : messages.accountShopOwned;
+            const appearance = accountShopAppearance(item);
+            const swatchColor = item.item_type === 'skin' ? appearance.duck.body : appearance.world.sky;
             return <button key={`${item.item_type}:${item.item_id}`} type="button" className={`account-shop-item${isSelected ? ' selected' : ''}`} aria-pressed={isSelected} onClick={() => { quoteRequestRef.current += 1; setSelected(item); setQuote(null); }}>
+              <span className="account-shop-swatch" aria-hidden="true" style={{ backgroundColor: `#${swatchColor.toString(16).padStart(6, '0')}` }} />
               <span className="account-shop-item-title">{item.display_name[locale]}</span>
               <span className="account-shop-item-price">{isEquipped ? messages.accountShopEquipped : isOwned ? messages.accountShopOwned : price}</span>
             </button>;
           })}
-          {!items.length && catalog && <p>{messages.accountShopUnavailable}</p>}
+          {catalog && !catalog.items.some((item) => item.item_type === category) && <p>{messages.accountShopUnavailable}</p>}
         </div>
-        {loadedAccount === accountId && selected && (canEquipSelected || canBuySelected) && <div className="account-shop-actions">
-          {canEquipSelected
-            ? <GameButton variant="primary" onClick={() => void equip(selected)} disabled={busy}>{messages.accountShopEquip}</GameButton>
-            : <GameButton variant="primary" onClick={() => void requestQuote(selected)} disabled={busy}>{messages.accountShopBuy}</GameButton>}
+        {!quote && <div className="account-shop-actions">
+          {loadedAccount === accountId && selected && (isSelectedEquipped
+            ? <GameButton variant="primary" disabled>{messages.accountShopEquipped}</GameButton>
+            : isSelectedOwned
+              ? <GameButton variant="primary" onClick={() => void equip(selected)} disabled={busy || !canEquipSelected}>{messages.accountShopEquip}</GameButton>
+              : <GameButton variant="primary" onClick={() => void requestQuote(selected)} disabled={busy || !canBuySelected}>{messages.accountShopBuy}{selected.price && ` · ${formatDecimalBalance(selected.price.amount, locale)} ${currencyName(selected.price.currency)}`}</GameButton>)}
         </div>}
-        {quote && <section className="account-shop-confirmation" aria-label={messages.accountShopQuote}>
-          <p><strong>{quotedItem?.display_name[locale] ?? quote.item_id}</strong></p>
-          <p><strong>{messages.accountShopQuote}:</strong> {formatDecimalBalance(quote.amount, locale)} {currencyName(quote.currency)}</p>
-          <p>{messages.accountShopExpires}: <time dateTime={quote.expires_at}>{new Intl.DateTimeFormat(locale === 'ru' ? 'ru-RU' : 'en-US', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(quote.expires_at))}</time></p>
-          <GameButton variant="primary" onClick={confirmPurchase} disabled={busy || !recovery.canRetain}>{messages.accountShopConfirm}</GameButton>
+        {quote && <section className="account-shop-confirmation" aria-label={messages.accountShopConfirm}>
+          <p><strong>{messages.accountShopConfirm}</strong></p>
+          <p>{quotedItem?.display_name[locale] ?? quote.item_id}</p>
+          <GameButton variant="primary" onClick={confirmPurchase} disabled={busy || !recovery.canRetain}>{messages.accountShopBuy} · {formatDecimalBalance(quote.amount, locale)} {currencyName(quote.currency)}</GameButton>
           <GameButton variant="control" onClick={() => setQuote(null)} disabled={busy}>{messages.accountShopCancel}</GameButton>
         </section>}
         {loadedAccount === accountId && pending?.accountId === accountId && <section className="account-shop-pending" role="status"><p>{messages.accountShopPending}</p><GameButton variant="control" onClick={() => void resolvePending(pending)} disabled={busy}>{messages.accountShopResolve}</GameButton><GameButton variant="control" onClick={() => void submitPurchase(pending)} disabled={busy}>{messages.accountShopRetry}</GameButton></section>}
-        {error && <p className="wallet-access-error" role="alert">{error}</p>}
+        {error && <><p className="wallet-access-error" role="alert">{error}</p>{!pending && <GameButton variant="control" onClick={() => void refresh()} disabled={busy}>{messages.accountShopTryAgain}</GameButton>}</>}
         {notice && <p role="status">{notice}</p>}
-        <GameButton variant="control" onClick={() => void refresh()} disabled={busy}>{messages.accountShopRefresh}</GameButton>
       </section>
     </div>, portalContainer.current)}
   </>;
