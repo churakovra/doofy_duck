@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { FixedStepClock } from '../src/clock';
 import { createInputController } from '../src/input';
-import { readBest, writeBest } from '../src/storage';
 
 describe('fixed-step clock', () => {
   it('pauses before executing an overloaded frame after sustained slow frames', () => {
@@ -78,18 +77,5 @@ describe('input controller', () => {
     controller.onPointerDown({ button: 0, targetIsButton: true, preventDefault: vi.fn() });
     controller.onPointerDown({ button: 0, targetIsButton: false, preventDefault: vi.fn() });
     expect(flap).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe('personal best storage', () => {
-  it('accepts only valid values and survives unavailable or malformed storage', () => {
-    const storage = { value: '', getItem: vi.fn(() => storage.value), setItem: vi.fn((_k: string, v: string) => { storage.value = v; }) };
-    expect(readBest(storage)).toBe(0);
-    writeBest(storage, 12);
-    expect(readBest(storage)).toBe(12);
-    storage.value = '{bad';
-    expect(readBest(storage)).toBe(0);
-    expect(readBest({ getItem: () => { throw Error('blocked'); }, setItem: () => { throw Error('blocked'); } })).toBe(0);
-    expect(writeBest({ getItem: () => null, setItem: () => { throw Error('quota'); } }, 99)).toBe(false);
   });
 });

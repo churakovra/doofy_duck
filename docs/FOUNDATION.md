@@ -68,8 +68,7 @@ delivery needs a separate bounded transport and retry policy.
 
 The account flow records input for Core verification. Verified completion facts
 are delivered to Economy for settlement. Account balances and equipment are
-server-owned. Legacy local progress helpers do not authorize account rewards or
-purchases. See the [wallet contract](../contracts/http/economy-wallet-v1.md) and
+server-owned. Browser data does not authorize account rewards or purchases. See the [wallet contract](../contracts/http/economy-wallet-v1.md) and
 [shop contract](../contracts/http/economy-shop-v1.md).
 
 ## Verification
