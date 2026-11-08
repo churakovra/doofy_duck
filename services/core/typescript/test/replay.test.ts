@@ -8,7 +8,7 @@ function initial(): RunState {
 }
 
 describe('server checkpoint replay', () => {
-  it.each(['curved-pipes', 'varied-base', 'base-bonus', 'dense-pipes', 'pressure-pipes'])('replays persisted %s fixture', (name) => {
+  it.each(['random-pipes', 'curved-pipes', 'varied-base', 'base-bonus', 'dense-pipes', 'pressure-pipes'])('replays persisted %s fixture', (name) => {
     const fixture = JSON.parse(readFileSync(`contracts/simulation/${name}-replay-v1.json`, 'utf8')) as {
       cases: { initialState: RunState; operations: { frames: InputFrame[]; expectedState: RunState }[] }[];
     };

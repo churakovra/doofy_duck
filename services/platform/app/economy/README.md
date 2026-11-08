@@ -7,8 +7,10 @@ transactional idempotent posting, linked adjustments, and read-only paginated
 reconciliation. It has no routes or issuance callers. Currency issuance,
 settlement, purchases, and account inventory remain disabled.
 
-Run-completion verification maps simulation identity `3.2.0` / `3.2.0` /
-`dd-v3-curved-pipes-v1` (catalog 13) to policy
+Run-completion verification maps simulation identity `3.3.0` / `3.3.0` /
+`dd-v3-random-pipes-v1` (catalog 14) to policy
+`verified-pickups-v16-random-pipes`. Issued catalog-13 runs retain
+`3.2.0` / `dd-v3-curved-pipes-v1` and policy
 `verified-pickups-v15-curved-pipes`. Issued catalog-12 runs retain simulation
 identity `3.1.0` / `3.1.0` / `dd-v3-varied-base-v1` and policy
 `verified-pickups-v14-varied-base`. Issued catalog-11 runs retain the

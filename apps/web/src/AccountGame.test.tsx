@@ -19,6 +19,7 @@ const harness = vi.hoisted(() => ({
   clearAccount: vi.fn(),
   gameAppearance: null as unknown,
   canvasReady: null as null | ((error?: 'graphicsStartupError' | 'flightStoppedGraphicsError') => void),
+  onRunEnded: null as null | (() => void),
   runCanPlay: null as null | (() => boolean), runRuntimeError: '', runScore: 0,
   traceRecords: new Map<string, unknown>(), save: vi.fn(), runPhase: 'READY', runOptions: null as null | { initialState?: { descriptor?: { simulationVersion: string; generatorVersion: string; configId: string }; config?: { wetland?: { catalogVersion?: number } } }; onTick(state: unknown, inputs: readonly unknown[]): void },
 }));
@@ -79,7 +80,8 @@ vi.mock('./useGameAudio', () => ({ useGameAudio: () => ({
   unlockFromGesture: vi.fn(), flap: vi.fn(), pickup: vi.fn(), setPhase: vi.fn(),
   preferences: { sound: true, music: true }, toggle: vi.fn(),
 }) }));
-vi.mock('./useGameRun', () => ({ useGameRun: (canPlay: () => boolean, _callbacks: unknown, options: typeof harness.runOptions) => {
+vi.mock('./useGameRun', () => ({ useGameRun: (canPlay: () => boolean, callbacks: { onRunEnded(): void }, options: typeof harness.runOptions) => {
+  harness.onRunEnded = callbacks.onRunEnded;
   harness.runCanPlay = canPlay;
   harness.runOptions = options;
   return {
@@ -146,14 +148,55 @@ describe('account run transport', () => {
     expect(harness.createRun).not.toHaveBeenCalled();
   });
 
-  it('starts and checkpoints the varied-base descriptor supplied by Core', async () => {
+  it('starts and checkpoints the current descriptor supplied by Core', async () => {
     await act(async () => { host.querySelector<HTMLButtonElement>('.account-panel .primary-button')?.click(); });
     await vi.waitFor(() => expect(harness.createRun).toHaveBeenCalled());
 
     expect(harness.runOptions?.initialState).toMatchObject({
-      descriptor: { simulationVersion: '3.2.0', generatorVersion: '3.2.0', configId: 'dd-v3-curved-pipes-v1' },
-      config: { wetland: { catalogVersion: 13 } },
+      descriptor: { simulationVersion: '3.3.0', generatorVersion: '3.3.0', configId: 'dd-v3-random-pipes-v1' },
+      config: { wetland: { catalogVersion: 14 } },
     });
+  });
+
+  it('returns to the main screen on death while preserving the final checkpoint until acknowledgement', async () => {
+    let acknowledge!: (snapshot: ReturnType<typeof runSnapshot>) => void;
+    harness.submitCheckpoint.mockImplementationOnce(() => new Promise(resolve => { acknowledge = resolve; }));
+    await act(async () => { host.querySelector<HTMLButtonElement>('.account-panel .primary-button')?.click(); });
+    await vi.waitFor(() => expect(harness.runOptions).not.toBeNull());
+    await act(async () => {
+      harness.runOptions!.onTick({ phase: 'DEAD', tick: 1 } as never, []);
+      harness.onRunEnded!();
+    });
+    expect(host.querySelector('.account-panel h1')?.textContent).toBe(messagesRu.lobbyHeading);
+    await vi.waitFor(() => expect(harness.submitCheckpoint).toHaveBeenCalledTimes(1));
+    const saved = harness.traceRecords.get(`${account.account_id}:${initialState.descriptor.runId}`) as { pending: unknown[] };
+    expect(saved.pending).toHaveLength(1);
+    await act(async () => { acknowledge(runSnapshot({ status: 'completed', verificationStatus: 'verified', deliveryStatus: 'delivered', checkpointSequence: 0, activeTicks: 1 })); });
+    await vi.waitFor(() => expect(host.querySelector('.account-panel .primary-button')?.textContent).toBe(messagesRu.accountPlayAgain));
+  });
+
+  it.each([new AccountApiError(401, 'unauthorized'), new AccountApiError(409, 'account_session_identity_mismatch')])('offers authentication recovery after a delayed terminal checkpoint failure: %s', async (reason) => {
+    let rejectCheckpoint!: (reason: unknown) => void;
+    harness.submitCheckpoint.mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectCheckpoint = reject; }));
+    await act(async () => { host.querySelector<HTMLButtonElement>('.account-panel .primary-button')?.click(); });
+    await act(async () => {
+      harness.runOptions!.onTick({ phase: 'DEAD', tick: 1 } as never, []);
+      harness.onRunEnded!();
+    });
+    await vi.waitFor(() => expect(harness.submitCheckpoint).toHaveBeenCalledTimes(1));
+    await act(async () => { rejectCheckpoint(reason); });
+    const reconnect = () => [...host.querySelectorAll<HTMLButtonElement>('.account-panel button')]
+      .find(button => button.textContent === messagesRu.accountRetry);
+    await vi.waitFor(() => expect(reconnect()).toBeDefined());
+    const saved = harness.traceRecords.get(`${account.account_id}:${initialState.descriptor.runId}`) as { pending: unknown[] };
+    expect(saved.pending).toHaveLength(1);
+    harness.currentRun.mockResolvedValueOnce(runSnapshot());
+    const previousLogins = harness.loginDev.mock.calls.length;
+    await act(async () => { reconnect()!.click(); });
+    await vi.waitFor(() => expect(harness.loginDev).toHaveBeenCalledTimes(previousLogins + 1));
+    // Without browser writer locks, existing recovery requires explicit takeover.
+    await vi.waitFor(() => expect(host.querySelector('.account-panel .primary-button')?.textContent).toBe(messagesRu.accountTakeover));
+    expect((harness.traceRecords.get(`${account.account_id}:${initialState.descriptor.runId}`) as { pending: unknown[] }).pending).toHaveLength(1);
   });
 
   it('orders the compact top row as wallet, record, shop, then menu', () => {
@@ -692,8 +735,8 @@ describe('account run transport', () => {
     for (let tick = 121; tick <= 127; tick++) act(() => onTick({ phase: 'RUNNING', tick } as never, []));
     await act(async () => { finishRequest(runSnapshot({ checkpointSequence: 0, activeTicks: 120 })); });
     expect(harness.runOptions?.initialState).toMatchObject({
-      descriptor: { simulationVersion: '3.2.0', generatorVersion: '3.2.0', configId: 'dd-v3-curved-pipes-v1' },
-      config: { wetland: { catalogVersion: 13 } },
+      descriptor: { simulationVersion: '3.3.0', generatorVersion: '3.3.0', configId: 'dd-v3-random-pipes-v1' },
+      config: { wetland: { catalogVersion: 14 } },
     });
     await vi.waitFor(() => {
       const trace = harness.traceRecords.get(`${account.account_id}:${initialState.descriptor.runId}`) as { activeTicks: number; unsentTicks: unknown[]; pending: unknown[] };
