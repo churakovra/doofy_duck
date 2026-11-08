@@ -282,6 +282,7 @@ export function AccountGame() {
   }, [messages.accountFlightCap, persistTrace, pumpCheckpoints]);
 
   const finishTrace = useCallback(() => {
+    setScreen('idle');
     const current = traceRef.current;
     if (!current) return;
     const next = checkpointPendingTicks(current);
@@ -783,6 +784,7 @@ export function AccountGame() {
           <GameButton variant="primary" onClick={() => void takeover()} disabled={busy}>{messages.accountTakeover}</GameButton>
         </>}
         {screen === 'locked' && <p role="alert">{error || messages.accountWriterBusy}</p>}
+        {screen === 'idle' && reauthRequired && <GameButton variant="control" onClick={() => void reauthenticate()} disabled={busy}>{messages.accountRetry}</GameButton>}
         {error && screen !== 'takeover' && <p className="wallet-access-error" role="alert">{error}</p>}
         {notice && <p role="status">{notice}</p>}
       </div></section>
@@ -838,7 +840,7 @@ function AccountFlight(props: FlightProps) {
         {run.runtimeError ? <><p role="alert" className="error-copy">{messages[run.runtimeError]}</p><GameButton variant="primary" onClick={() => window.location.reload()}>{messages.reloadPageButton}</GameButton></> : <>
           {run.phase === 'READY' && <><p className="flight-kicker">{messages.smallFlightEyebrow}</p><h1>{messages.lobbyHeading}</h1><p className="flight-instruction">{messages.readyInstructionFirstLine} {messages.readyInstructionSecondLine}</p><GameButton variant="primary" onClick={start} disabled={!run.rendererReady || props.busy}>{messages.startFlightButton} <span>{messages.forwardGlyph}</span></GameButton></>}
           {run.phase === 'PAUSED' && <><p className="eyebrow">{messages.pauseEyebrow}</p><h1>{run.flightCapReached ? messages.accountPendingVerification : messages.pausedHeading}</h1><GameButton variant="primary" onClick={run.flightCapReached ? props.onFinish : start} disabled={!run.rendererReady || props.busy}>{run.flightCapReached ? messages.accountStatusRetry : messages.accountResume}</GameButton><GameButton variant="control" className="account-mode-button" onClick={props.onAbandon} disabled={props.busy}>{messages.accountAbandon}</GameButton></>}
-          {run.phase === 'DEAD' && <><p className="eyebrow">{messages.completedFlightEyebrow}</p><h1>{messages.completedHeading}</h1><p className="result-score">{formatNumber(locale, run.score)} <span>{formatCountUnit(locale, 'score', run.score)}</span></p><p className="earnings-summary"><span>{messages.accountVerifiedPickupsLabel}</span><strong>{formatNumber(locale, feathers)} {messages.feathersShortLabel}</strong><strong>{formatNumber(locale, stars)} {messages.gameStarsShortLabel}</strong></p><GameButton variant="primary" onClick={props.onFinish} disabled={props.busy}>{messages.accountStatusRetry}</GameButton></>}
+          {run.phase === 'DEAD' && <><p className="eyebrow">{messages.completedFlightEyebrow}</p><h1>{messages.completedHeading}</h1><p className="result-score">{formatNumber(locale, run.score)} <span>{formatCountUnit(locale, 'score', run.score)}</span></p><p className="earnings-summary"><span>{messages.accountVerifiedPickupsLabel}</span><strong>{formatNumber(locale, feathers)} {messages.feathersShortLabel}</strong><strong>{formatNumber(locale, stars)} {messages.gameStarsShortLabel}</strong></p><GameButton variant="primary" onClick={props.onFinish} disabled={props.busy}>{messages.menuLabel}</GameButton></>}
         </>}
       </div></section>}
     </div></div>

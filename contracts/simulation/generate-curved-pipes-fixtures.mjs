@@ -1,6 +1,6 @@
 // Generate catalog-13 geometry vectors and full-state replay after build:sim.
 import { writeFileSync } from 'node:fs';
-import { canonicalState, createRun, createRunDescriptor, generateNext, makeInput, step, SIMULATION_VERSION, GENERATOR_VERSION, DEFAULT_CONFIG_ID, DEFAULT_CONFIG } from '../../packages/game-sim/dist/index.js';
+import { canonicalState, createRun, createRunDescriptor, generateNext, makeInput, step, CURVED_PIPES_SIMULATION_VERSION as SIMULATION_VERSION, CURVED_PIPES_GENERATOR_VERSION as GENERATOR_VERSION, CURVED_PIPES_CONFIG_ID as DEFAULT_CONFIG_ID, CURVED_PIPES_DEFAULT_CONFIG as DEFAULT_CONFIG } from '../../packages/game-sim/dist/index.js';
 import { isScheduledBonusBlock } from '../../packages/game-sim/dist/generation.js';
 const cases = [];
 for (const seed of [0, 1, 42, 4294967295]) for (const block of [0, 1, 6, 7, 8, 13, 14, 15]) {

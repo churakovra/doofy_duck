@@ -4,6 +4,7 @@ import {
   COIN_COURSE_DEFAULT_CONFIG,
   CURRENCY_FORMATIONS_DEFAULT_CONFIG,
   DEFAULT_CONFIG,
+  CURVED_PIPES_DEFAULT_CONFIG,
   DEFAULT_CONFIG_ID,
   BONUS_SEGMENTS_CONFIG_ID,
   BONUS_SEGMENTS_GENERATOR_VERSION,
@@ -63,6 +64,41 @@ function expectedBaseSpacing(config: GameConfig, pipe: Pipe, block: number): num
     : family.stationSpacing[pipe.stationStep!]!;
 }
 
+// Keep every distinct physical state: greedy beam ranking can discard the
+// momentum needed for a rapid reversal and report a reachable route as blocked.
+function exactPairedPipeWitness(pipes: readonly Pipe[], config: GameConfig, entryY: number, entryVy: number): boolean {
+  const f = config.flight;
+  const p = config.pipes;
+  const encode = (y: number, vy: number) => y * 32768 + vy + 16384;
+  let states = new Set([encode(entryY, entryVy)]);
+  let traveled = 0;
+  for (let tick = 1; tick < 300; tick++) {
+    traveled += p.maxSpeed;
+    let low = p.ceilingY + f.duckHalfHeight;
+    let high = p.floorY - f.duckHalfHeight;
+    for (const pipe of pipes) {
+      const x = pipe.x - traveled;
+      if (x + p.width / 2 < f.duckX - f.duckHalfWidth || x - p.width / 2 > f.duckX + f.duckHalfWidth) continue;
+      low = Math.max(low, pipe.gapCenter - Math.floor(p.gapHeight / 2) + f.duckHalfHeight);
+      high = Math.min(high, pipe.gapCenter + Math.floor(p.gapHeight / 2) - f.duckHalfHeight);
+    }
+    const next = new Set<number>();
+    for (const encoded of states) {
+      const y = Math.floor(encoded / 32768);
+      const vy = encoded % 32768 - 16384;
+      for (const flap of [false, true]) {
+        const nextVy = Math.min(f.maxFallSpeed, (flap ? f.flapVelocity : vy) + f.gravity);
+        const nextY = y + nextVy;
+        if (nextY > low && nextY < high) next.add(encode(nextY, nextVy));
+      }
+    }
+    if (!next.size) return false;
+    if (pipes.every(pipe => pipe.x + p.width / 2 - traveled < f.duckX - f.duckHalfWidth)) return true;
+    states = next;
+  }
+  return false;
+}
+
 function witnessAtMaxSpeed(seed: number, block: number, entryY: number, entryVy: number,
   config: GameConfig = BONUS_SEGMENTS_DEFAULT_CONFIG, includeApproach = false): boolean {
   const state = preparedBlock(seed, block, config, includeApproach ? entryY : undefined);
@@ -86,6 +122,7 @@ function witnessAtMaxSpeed(seed: number, block: number, entryY: number, entryVy:
     ],
   };
   const pipes = includeApproach ? [approach, ...coursePipes] : coursePipes;
+  if (config.wetland?.catalogVersion === 14) return exactPairedPipeWitness(pipes, runConfig, entryY, entryVy);
   let beam = [{ y: entryY, vy: entryVy }];
   let traveled = 0;
   for (let tick = 1; tick < 300; tick++) {
@@ -128,15 +165,15 @@ describe("catalog-6 bonus segments", () => {
     expect(BONUS_SEGMENTS_DEFAULT_CONFIG.wetland?.catalogVersion).toBe(6);
     expect(BONUS_SEGMENTS_DEFAULT_CONFIG.wetland?.starFormations).toBe(false);
     const descriptor = createRunDescriptor({ runId: "bonus-default", seed: 17 });
-    expect([SIMULATION_VERSION, GENERATOR_VERSION, DEFAULT_CONFIG_ID]).toEqual(["3.2.0", "3.2.0", "dd-v3-curved-pipes-v1"]);
+    expect([SIMULATION_VERSION, GENERATOR_VERSION, DEFAULT_CONFIG_ID]).toEqual(["3.3.0", "3.3.0", "dd-v3-random-pipes-v1"]);
     expect(BONUS_SEGMENTS_V2_DEFAULT_CONFIG.wetland?.catalogVersion).toBe(7);
     expect(createRunDescriptor({ runId: "bonus-v2-frozen", seed: 17 }, BONUS_SEGMENTS_V2_DEFAULT_CONFIG)).toMatchObject({
       simulationVersion: BONUS_SEGMENTS_V2_SIMULATION_VERSION, generatorVersion: BONUS_SEGMENTS_V2_GENERATOR_VERSION,
       configId: BONUS_SEGMENTS_V2_CONFIG_ID,
     });
-    expect(DEFAULT_CONFIG.wetland?.catalogVersion).toBe(13);
-    expect(descriptor).toMatchObject({ simulationVersion: "3.2.0", generatorVersion: "3.2.0", configId: DEFAULT_CONFIG_ID });
-    expect(createRun(descriptor).config.wetland?.catalogVersion).toBe(13);
+    expect(DEFAULT_CONFIG.wetland?.catalogVersion).toBe(14);
+    expect(descriptor).toMatchObject({ simulationVersion: "3.3.0", generatorVersion: "3.3.0", configId: DEFAULT_CONFIG_ID });
+    expect(createRun(descriptor).config.wetland?.catalogVersion).toBe(14);
     const oldBonusDescriptor = createRunDescriptor({ runId: "bonus-v1-frozen", seed: 17 }, BONUS_SEGMENTS_DEFAULT_CONFIG);
     expect(oldBonusDescriptor).toMatchObject({ simulationVersion: BONUS_SEGMENTS_SIMULATION_VERSION,
       generatorVersion: BONUS_SEGMENTS_GENERATOR_VERSION, configId: BONUS_SEGMENTS_CONFIG_ID });
@@ -290,18 +327,18 @@ describe("catalog-6 bonus segments", () => {
 describe("catalog-7 bonus segments v2", () => {
   it("issues the 2.6 default and preserves the catalog-6 config identity", () => {
     expect([SIMULATION_VERSION, GENERATOR_VERSION, DEFAULT_CONFIG_ID]).toEqual([
-      "3.2.0",
-      "3.2.0",
-      "dd-v3-curved-pipes-v1",
+      "3.3.0",
+      "3.3.0",
+      "dd-v3-random-pipes-v1",
     ]);
-    expect(DEFAULT_CONFIG.wetland?.catalogVersion).toBe(13);
+    expect(DEFAULT_CONFIG.wetland?.catalogVersion).toBe(14);
     const descriptor = createRunDescriptor({ runId: "bonus-v2-default", seed: 29 });
     expect(descriptor).toMatchObject({
-      simulationVersion: "3.2.0",
-      generatorVersion: "3.2.0",
-      configId: "dd-v3-curved-pipes-v1",
+      simulationVersion: "3.3.0",
+      generatorVersion: "3.3.0",
+      configId: "dd-v3-random-pipes-v1",
     });
-    expect(createRun(descriptor).config.wetland?.catalogVersion).toBe(13);
+    expect(createRun(descriptor).config.wetland?.catalogVersion).toBe(14);
     const oldDescriptor = createRunDescriptor({ runId: "bonus-v1-still-supported", seed: 29 }, BONUS_SEGMENTS_DEFAULT_CONFIG);
     expect(oldDescriptor).toMatchObject({ simulationVersion: "2.5.0", generatorVersion: "2.5.0", configId: BONUS_SEGMENTS_CONFIG_ID });
     expect(createRun(oldDescriptor).config.wetland?.catalogVersion).toBe(6);
@@ -753,20 +790,20 @@ describe("curved pipe paths", () => {
     const { readFileSync } = await import("node:fs");
     const fixture = JSON.parse(readFileSync("contracts/simulation/curved-pipes-v1.json", "utf8")) as { cases: { seed: number; block: number; centers: number[]; spacings: number[] }[] };
     for (const example of fixture.cases) {
-      const pipes = preparedBlock(example.seed, example.block, DEFAULT_CONFIG).pipes.slice(0, 4);
+      const pipes = preparedBlock(example.seed, example.block, CURVED_PIPES_DEFAULT_CONFIG).pipes.slice(0, 4);
       expect(pipes.map(pipe => pipe.gapCenter)).toEqual(example.centers);
       expect(pipes.map(pipe => pipe.stationSpacing)).toEqual(example.spacings);
     }
   });
-  it("uses seeded curved paths for new runs", () => {
-    expect(DEFAULT_CONFIG.wetland?.catalogVersion).toBe(13);
+  it("retains seeded curved paths for issued runs", () => {
+    expect(CURVED_PIPES_DEFAULT_CONFIG.wetland?.catalogVersion).toBe(13);
     const routes = new Set<string>();
     const directions = new Set<string>();
     let curves = 0;
     for (let seed = 0; seed < 32; seed++) {
-      const pipes = preparedBlock(seed, 2, DEFAULT_CONFIG, 280_000).pipes.slice(0, 4);
+      const pipes = preparedBlock(seed, 2, CURVED_PIPES_DEFAULT_CONFIG, 280_000).pipes.slice(0, 4);
       const deltas = pipes.map((pipe, index) => pipe.gapCenter - (index ? pipes[index - 1]!.gapCenter : 280_000));
-      expect(deltas.every(delta => Math.abs(delta) <= DEFAULT_CONFIG.pipes.maxGapDelta)).toBe(true);
+      expect(deltas.every(delta => Math.abs(delta) <= CURVED_PIPES_DEFAULT_CONFIG.pipes.maxGapDelta)).toBe(true);
       if (deltas.some((delta, index) => index > 0 && delta * deltas[index - 1]! > 0)) curves++;
       directions.add(deltas.map(delta => Math.sign(delta)).join(","));
       routes.add(pipes.map(pipe => pipe.gapCenter).join(","));
@@ -777,16 +814,16 @@ describe("curved pipe paths", () => {
   });
   it("has max-speed controller witnesses for representative curves", () => {
     for (const seed of [0, 1, 42, 99]) {
-      expect(witnessAtMaxSpeed(seed, 2, 280_000, 0, DEFAULT_CONFIG), `seed ${seed}`).toBe(true);
+      expect(witnessAtMaxSpeed(seed, 2, 280_000, 0, CURVED_PIPES_DEFAULT_CONFIG), `seed ${seed}`).toBe(true);
     }
   }, 30_000);
   it("has controller witnesses across ordinary and bonus block boundaries", () => {
     for (const seed of [0, 1, 42, 99]) {
-      const bonus = [6, 7, 8].find(block => isScheduledBonusBlock(DEFAULT_CONFIG, seed, block))!;
+      const bonus = [6, 7, 8].find(block => isScheduledBonusBlock(CURVED_PIPES_DEFAULT_CONFIG, seed, block))!;
       for (const block of [2, bonus, bonus + 1]) {
-        const previous = preparedBlock(seed, block - 1, DEFAULT_CONFIG, 280_000).pipes[3]!.gapCenter;
+        const previous = preparedBlock(seed, block - 1, CURVED_PIPES_DEFAULT_CONFIG, 280_000).pipes[3]!.gapCenter;
         for (const velocity of [-500, 500]) {
-          expect(witnessAtMaxSpeed(seed, block, previous, velocity, DEFAULT_CONFIG, true),
+          expect(witnessAtMaxSpeed(seed, block, previous, velocity, CURVED_PIPES_DEFAULT_CONFIG, true),
             `seed ${seed}, block ${block}, entry ${previous}, velocity ${velocity}`).toBe(true);
         }
       }
@@ -881,5 +918,90 @@ describe("challenging ordinary paths", () => {
       }
     }
     expect(largeMoves).toBeGreaterThan(30);
+  });
+});
+
+describe("random ordinary pipe paths", () => {
+  it("has max-speed controller witnesses for representative curves", () => {
+    for (const seed of [0, 1, 42, 99]) {
+      expect(witnessAtMaxSpeed(seed, 2, 280_000, 0, DEFAULT_CONFIG), `seed ${seed}`).toBe(true);
+    }
+  }, 30_000);
+  it.each([0, 1, 42, 99])("has exact max-speed witnesses across ordinary and bonus boundaries for seed %s", (seed) => {
+      const bonus = [6, 7, 8].find(block => isScheduledBonusBlock(DEFAULT_CONFIG, seed, block))!;
+      for (const block of [2, bonus, bonus + 1]) {
+        const previous = preparedBlock(seed, block - 1, DEFAULT_CONFIG, 280_000).pipes[3]!.gapCenter;
+        for (const velocity of [-500, 500]) {
+          expect(witnessAtMaxSpeed(seed, block, previous, velocity, DEFAULT_CONFIG, true),
+            `seed ${seed}, block ${block}, entry ${previous}, velocity ${velocity}`).toBe(true);
+        }
+      }
+  }, 60_000);
+
+  it.each([110_000, 450_000])("has max-speed witnesses from the vertical extreme %s", (entry) => {
+    const seed = 42;
+    const bonus = [6, 7, 8].find(block => isScheduledBonusBlock(DEFAULT_CONFIG, seed, block))!;
+    for (const block of [2, bonus, bonus + 1]) {
+      expect(witnessAtMaxSpeed(seed, block, entry, 0, DEFAULT_CONFIG, true), `block ${block}`).toBe(true);
+    }
+  }, 60_000);
+
+  it("matches catalog-14 vectors and preserves the catalog-13 identity", async () => {
+    const { readFileSync } = await import("node:fs");
+    const fixture = JSON.parse(readFileSync("contracts/simulation/random-pipes-v1.json", "utf8")) as { cases: { seed: number; block: number; centers: number[]; spacings: number[] }[] };
+    for (const example of fixture.cases) {
+      const pipes = preparedBlock(example.seed, example.block, DEFAULT_CONFIG).pipes.slice(0, 4);
+      expect(pipes.map(pipe => pipe.gapCenter)).toEqual(example.centers);
+      expect(pipes.map(pipe => pipe.stationSpacing)).toEqual(example.spacings);
+    }
+    const old = createRunDescriptor({ runId: "issued-curved", seed: 42 }, CURVED_PIPES_DEFAULT_CONFIG);
+    expect(old).toMatchObject({ simulationVersion: "3.2.0", generatorVersion: "3.2.0", configId: "dd-v3-curved-pipes-v1" });
+    expect(createRun(old).config).toEqual(CURVED_PIPES_DEFAULT_CONFIG);
+    expect(() => createRun({ ...old, simulationVersion: SIMULATION_VERSION, generatorVersion: GENERATOR_VERSION })).toThrow();
+  });
+
+  it("varies individual moves and directions across seeds and stays within reach at the edges", () => {
+    let sharpMoves = 0;
+
+    let turns = 0;
+    const routes = new Set<string>();
+    for (let seed = 0; seed < 128; seed++) {
+      for (const entry of [DEFAULT_CONFIG.pipes.gapMinCenter, 280_000, DEFAULT_CONFIG.pipes.gapMaxCenter]) {
+        const pipes = preparedBlock(seed, 2, DEFAULT_CONFIG, entry).pipes.slice(0, 4);
+        let previous = entry;
+        let direction = 0;
+        for (const pipe of pipes) {
+          const delta = pipe.gapCenter - previous;
+          expect(Math.abs(delta)).toBeGreaterThanOrEqual(30_000);
+          expect(Math.abs(delta)).toBeLessThanOrEqual(DEFAULT_CONFIG.pipes.maxGapDelta);
+          expect(pipe.gapCenter).toBeGreaterThanOrEqual(DEFAULT_CONFIG.pipes.gapMinCenter);
+          expect(pipe.gapCenter).toBeLessThanOrEqual(DEFAULT_CONFIG.pipes.gapMaxCenter);
+          expect(pipe.stationSpacing).toBe(126_400);
+          if (Math.abs(delta) > 100_000) sharpMoves++;
+          if (direction && direction !== Math.sign(delta)) turns++;
+          direction = Math.sign(delta);
+          previous = pipe.gapCenter;
+        }
+        routes.add(pipes.map(pipe => pipe.gapCenter).join(","));
+      }
+    }
+    expect(sharpMoves).toBeGreaterThan(150);
+    expect(turns).toBeGreaterThan(400);
+    expect(routes.size).toBeGreaterThan(200);
+  });
+
+  it("generates the same path when the horizon refills one pipe at a time", () => {
+    for (const seed of [0, 1, 42, 4294967295]) {
+      const initial = createRun(createRunDescriptor({ runId: "refill-path", seed }));
+      let refill = { ...initial, pipes: [] as readonly Pipe[], nextPipeIndex: 0, nextPipeX: initial.config.pipes.safeLeadIn,
+        lastGapCenter: Math.floor((initial.config.pipes.gapMinCenter + initial.config.pipes.gapMaxCenter) / 2) };
+      for (const expected of initial.pipes) {
+        const generated = generateNext(refill).state;
+        const actual = generated.pipes[0]!;
+        expect(actual).toEqual(expected);
+        refill = { ...generated, pipes: [], nextPipeIndex: actual.index + 1,
+          nextPipeX: actual.x + actual.stationSpacing!, lastGapCenter: actual.gapCenter };
+      }
+    }
   });
 });

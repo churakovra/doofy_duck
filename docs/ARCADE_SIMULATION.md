@@ -4,9 +4,21 @@ The deterministic game runs from the shared TypeScript simulation. The modules e
 
 ## Wetland rules
 
-The current curved-pipes default is simulation/generator `3.2.0`, configuration
-`dd-v3-curved-pipes-v1`, encounter catalog 13. Core issues this identity for
-new runs. Ordinary pipe spacing remains 126,400 units. Each four-pipe block
+The current random-pipes default is simulation/generator `3.3.0`, configuration
+`dd-v3-random-pipes-v1`, encounter catalog 14. Core issues this identity for
+new runs. Each ordinary gap center is sampled uniformly from the intersection of
+its legal vertical bounds and the previous center ± the configured maximum gap
+delta (140,000 units by default, about 25% of the field height). Ordinary gap
+centers range from 110,000 to 450,000 units, allowing visibly higher and lower routes. Moves smaller than 30,000 units are excluded to avoid nearly level corridors.
+There is no forced alternation, reflected step, or four-pipe recipe. The first pipe keeps its safe lead-in;
+Ordinary center spacing is fixed at 126,400 units. Bonus recipes, authored spacing and schedule, rewards and flight physics retain catalog-13
+behavior; bonus anchors use the expanded legal height bounds.
+Geometry and replay fixtures cover the new identity. Maximum-speed controller
+witnesses cover representative ordinary and bonus transitions; they do not prove
+all courses playable. Human playtest acceptance remains open.
+
+Catalog 13 remains frozen at `3.2.0` / `dd-v3-curved-pipes-v1`. Ordinary pipe
+spacing remains 126,400 units. Each four-pipe block
 uses a seeded direction and a seeded height offset. A seed selects one of three
 move-size and turning patterns. Each move adds a seeded offset of 0–15,000 units
 to its pattern size and respects the configured maximum gap delta. Moves reverse

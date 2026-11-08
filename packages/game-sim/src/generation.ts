@@ -120,6 +120,23 @@ function irregularBaseCenter(seed: number, index: number, previous: number, conf
   return target;
 }
 
+// Each ordinary gate gets its own seeded move, independent of four-gate families.
+function randomBaseCenter(seed: number, index: number, previous: number, config: GameConfig): number {
+  const p = config.pipes;
+  const sample = mix32((seed ^ Math.imul(index + 1, 0x7f4a7c15)) >>> 0);
+  const low = Math.max(p.gapMinCenter, previous - p.maxGapDelta);
+  const high = Math.min(p.gapMaxCenter, previous + p.maxGapDelta);
+  // Sample the two legal height intervals directly, without reflecting or
+  // clamping a chosen step into repeated heights at the vertical boundaries.
+  const upperEnd = Math.min(high, previous - 30_000);
+  const lowerStart = Math.max(low, previous + 30_000);
+  const upperCount = Math.max(0, upperEnd - low + 1);
+  const lowerCount = Math.max(0, high - lowerStart + 1);
+  if (!upperCount && !lowerCount) return low + sample % (high - low + 1);
+  const offset = sample % (upperCount + lowerCount);
+  return offset < upperCount ? low + offset : lowerStart + offset - upperCount;
+}
+
 function curvedBaseCenter(seed: number, index: number, previous: number, config: GameConfig): number {
   const p = config.pipes;
   const block = Math.floor(index / 4);
@@ -293,12 +310,15 @@ export function generateNext(s: RunState): StepResult {
             ? scaledClearanceSpacing(originalStationSpacing, p.width, 50)
               : originalStationSpacing;
     const stationSpacing = (wetland?.catalogVersion ?? 0) >= 11
-      ? bonusSegmentV2 && stationStep < 2 ? 66_880 : bonusSegmentV2 && stationStep === 2 ? 268_000 : 126_400
+      ? bonusSegmentV2 && stationStep < 2 ? 66_880 : bonusSegmentV2 && stationStep === 2 ? 268_000
+        : 126_400
       : baseStationSpacing !== undefined && wetland?.catalogVersion === 10
         ? scaledClearanceSpacing(baseStationSpacing, p.width, 60) : baseStationSpacing;
     let raw = p.gapMinCenter + sample % (p.gapMaxCenter - p.gapMinCenter + 1);
     if (familySpec) raw = familySpec.gapCenters[stationStep]!;
-    if ((wetland?.catalogVersion ?? 0) >= 11) raw = wetland!.catalogVersion === 13 && index > 0
+    if ((wetland?.catalogVersion ?? 0) >= 11) raw = wetland!.catalogVersion === 14 && index > 0
+      ? randomBaseCenter(s.descriptor.seed, index, previousGap, s.config)
+      : wetland!.catalogVersion === 13 && index > 0
       ? curvedBaseCenter(s.descriptor.seed, index, previousGap, s.config)
       : wetland!.catalogVersion === 12 && index > 0
       ? irregularBaseCenter(s.descriptor.seed, index, previousGap, s.config)

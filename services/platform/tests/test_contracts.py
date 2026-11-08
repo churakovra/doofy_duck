@@ -147,6 +147,9 @@ def test_settlement_policies_keep_legacy_stars_out_and_credit_new_stars_without_
     bonus_segments_v2_identity = ("2.6.0", "2.6.0", "dd-v2-bonus-segments-v2")
 
     assert settlement_rewards(
+        ("3.3.0", "3.3.0", "dd-v3-random-pipes-v1"), feathers=40, game_stars=900, feathers_remaining=30
+    ) == (30, 900)
+    assert settlement_rewards(
         ("3.2.0", "3.2.0", "dd-v3-curved-pipes-v1"), feathers=40, game_stars=900, feathers_remaining=30
     ) == (30, 900)
     assert settlement_rewards(
@@ -330,6 +333,41 @@ def test_bonus_segments_v2_contract_identity_has_live_settlement_policy():
     ) == BONUS_SEGMENTS_V2_SIMULATION_IDENTITY
     assert SUPPORTED_SIMULATION_IDENTITIES[BONUS_SEGMENTS_V2_SIMULATION_IDENTITY] == BONUS_SEGMENTS_V2_POLICY_VERSION
     assert SUPPORTED_SIMULATION_IDENTITIES[BONUS_SEGMENTS_SIMULATION_IDENTITY] == BONUS_SEGMENTS_POLICY_VERSION
+
+
+def test_random_pipes_contract_identity_has_live_settlement_policy():
+    import json
+    from pathlib import Path
+
+    from jsonschema import Draft202012Validator
+
+    from app.economy.settlement import (
+        CURVED_PIPES_POLICY_VERSION,
+        CURVED_PIPES_SIMULATION_IDENTITY,
+        RANDOM_PIPES_POLICY_VERSION,
+        RANDOM_PIPES_SIMULATION_IDENTITY,
+        SUPPORTED_SIMULATION_IDENTITIES,
+    )
+
+    repository_root = Path(__file__).resolve().parents[3]
+    fixture = json.loads((repository_root / "contracts/simulation/random-pipes-replay-v1.json").read_text())
+    descriptor = {
+        "runId": "random-pipes-contract-test",
+        "seed": 45,
+        "simulationVersion": fixture["simulationVersion"],
+        "generatorVersion": fixture["generatorVersion"],
+        "configId": fixture["configId"],
+    }
+    schema = json.loads((repository_root / "contracts/simulation/run-descriptor.schema.json").read_text())
+    Draft202012Validator(schema).validate(descriptor)
+
+    assert (
+        fixture["simulationVersion"],
+        fixture["generatorVersion"],
+        fixture["configId"],
+    ) == RANDOM_PIPES_SIMULATION_IDENTITY
+    assert SUPPORTED_SIMULATION_IDENTITIES[RANDOM_PIPES_SIMULATION_IDENTITY] == RANDOM_PIPES_POLICY_VERSION
+    assert SUPPORTED_SIMULATION_IDENTITIES[CURVED_PIPES_SIMULATION_IDENTITY] == CURVED_PIPES_POLICY_VERSION
 
 
 def test_wallet_audit_cli_parser_supports_bounded_read_only_pages():
