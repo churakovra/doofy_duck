@@ -1,6 +1,6 @@
 # Telegram launch identity and first bot setup
 
-October 18, 2026. Players open the game from Telegram and use that launch account
+Players open the game from Telegram and use that launch account
 automatically. The app has no sign-in, test-account, logout or account-switching
 controls. Local development automatically uses the configured development
 identity. Each fresh Telegram launch uses the account that opened it; a saved
@@ -23,8 +23,8 @@ started automatically.
 ## Prepare the local real-Telegram configuration
 
 Start with the normal local stack (`make run`) once so `.env.dev` and the
-settlement cutoff exist. Stop its frontend with Ctrl-C when switching to the
-static Telegram test build. Preserve existing database volumes.
+settlement cutoff exist. Stop Vite with Ctrl-C before switching to the static
+Telegram test build. Both configurations reuse the database volume.
 
 Create a separate private environment file once:
 
@@ -43,10 +43,11 @@ Start the real-Telegram test configuration:
 ```sh
 docker compose --env-file .env.telegram-test \
   -f deploy/compose.yaml -f deploy/compose.telegram-test.yaml \
-  --profile local up --build -d
+  up --build -d
 ```
 
-This configuration serves the static game and API at `http://127.0.0.1:8080/`.
+The Compose override builds the static game into the Caddy gateway. The game
+and API share `http://127.0.0.1:8080/`.
 It disables both frontend development sign-in and the backend development-auth
 endpoint. It retains the local database and economy worker. The real bot token
 is required; the generated placeholder is not a substitute. This is a local
