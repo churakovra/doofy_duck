@@ -2,17 +2,14 @@
 
 from __future__ import annotations
 
-import base64
-import binascii
-import json
 from dataclasses import dataclass
-from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select, tuple_
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
+from app.cursors import decode_cursor, encode_cursor
 from app.economy.shop.models import CosmeticEntitlement, CosmeticEquipment
 
 DEFAULT_ITEMS = (("skin", "classic"), ("background", "meadow"))
@@ -55,8 +52,7 @@ def ensure_starter_state(session: Session, account_id: UUID) -> None:
     )
 
 
-def list_inventory(session: Session, *, account_id: UUID, limit: int, cursor: str | None) -> InventoryPage:
-    after = decode_inventory_cursor(cursor) if cursor is not None else None
+def list_inventory(session: Session, *, account_id: UUID, limit: int, after: tuple[str, str] | None) -> InventoryPage:
     statement = select(CosmeticEntitlement).where(CosmeticEntitlement.account_id == account_id)
     if after is not None:
         statement = statement.where(tuple_(CosmeticEntitlement.item_type, CosmeticEntitlement.item_id) > after)
@@ -64,27 +60,19 @@ def list_inventory(session: Session, *, account_id: UUID, limit: int, cursor: st
         statement.order_by(CosmeticEntitlement.item_type, CosmeticEntitlement.item_id).limit(limit + 1)
     ).all()
     visible = rows[:limit]
-    next_cursor = encode_inventory_cursor(visible[-1].item_type, visible[-1].item_id) if len(rows) > limit else None
+    next_cursor = (
+        encode_cursor(item_type=visible[-1].item_type, item_id=visible[-1].item_id) if len(rows) > limit else None
+    )
     return InventoryPage(tuple(visible), next_cursor)
 
 
 def decode_inventory_cursor(value: str) -> tuple[str, str]:
-    if not value or len(value) > 256:
+    payload = decode_cursor(value, max_length=256)
+    if set(payload) != {"item_type", "item_id"}:
         raise ValueError("invalid cursor")
-    try:
-        payload: Any = json.loads(base64.b64decode(value + "=" * (-len(value) % 4), altchars=b"-_", validate=True))
-        if not isinstance(payload, dict) or set(payload) != {"item_type", "item_id"}:
-            raise ValueError("invalid cursor")
-        item_type, item_id = payload["item_type"], payload["item_id"]
-        if not isinstance(item_type, str) or not isinstance(item_id, str) or not (1 <= len(item_type) <= 16):
-            raise ValueError("invalid cursor")
-        if not 1 <= len(item_id) <= 64:
-            raise ValueError("invalid cursor")
-        return item_type, item_id
-    except (TypeError, ValueError, UnicodeDecodeError, binascii.Error) as error:
-        raise ValueError("invalid cursor") from error
-
-
-def encode_inventory_cursor(item_type: str, item_id: str) -> str:
-    payload = json.dumps({"item_type": item_type, "item_id": item_id}, sort_keys=True, separators=(",", ":"))
-    return base64.urlsafe_b64encode(payload.encode()).rstrip(b"=").decode("ascii")
+    item_type, item_id = payload["item_type"], payload["item_id"]
+    if not isinstance(item_type, str) or not 1 <= len(item_type) <= 16:
+        raise ValueError("invalid cursor")
+    if not isinstance(item_id, str) or not 1 <= len(item_id) <= 64:
+        raise ValueError("invalid cursor")
+    return item_type, item_id
