@@ -455,21 +455,18 @@ describe('account API authentication', () => {
     expect(fetcher.mock.calls.filter(([path]) => String(path).endsWith('/auth/refresh'))).toHaveLength(0);
   });
 
-  it('keeps explicit login and logout usable without Web Locks', async () => {
+  it('keeps explicit login usable without Web Locks', async () => {
     restoreLocks();
     const fetcher = vi.fn<FetchLike>()
       .mockResolvedValueOnce(response({ access_token: 'fresh', token_type: 'Bearer', expires_in: 600 }))
-      .mockResolvedValueOnce(response({ account_id: 'a', telegram_user_id: 7, created_at: 'now' }))
-      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+      .mockResolvedValueOnce(response({ account_id: 'a', telegram_user_id: 7, created_at: 'now' }));
     const api = new AccountApi({ fetcher });
 
     await expect(api.login('init')).resolves.toMatchObject({ account_id: 'a' });
     expect(api.signedIn).toBe(true);
-    await api.logout();
 
-    expect(api.signedIn).toBe(false);
     expect(fetcher.mock.calls.map(([path]) => String(path))).toEqual([
-      '/api/v1/auth/telegram', '/api/v1/account', '/api/v1/auth/logout',
+      '/api/v1/auth/telegram', '/api/v1/account',
     ]);
   });
 
@@ -507,44 +504,6 @@ describe('account API authentication', () => {
     await expect(freshLogin.login('new-init-data')).resolves.toMatchObject({ account_id: 'a' });
     expect(freshLogin.signedIn).toBe(true);
     setItem.mockRestore();
-  });
-
-  it('waits for refresh rotation before logout reads the updated CSRF cookie', async () => {
-    installSerializedWebLocks();
-    let csrf = 'before-refresh';
-    Object.defineProperty(document, 'cookie', { configurable: true, get: () => `dd_csrf=${csrf}` });
-    let finishRefresh!: (value: Response) => void;
-    let markRefreshStarted!: () => void;
-    const refreshStarted = new Promise<void>((resolve) => { markRefreshStarted = resolve; });
-    let accountRequests = 0;
-    const fetcher = vi.fn<FetchLike>((input) => {
-      const path = String(input);
-      if (path.endsWith('/auth/telegram')) return Promise.resolve(response({ access_token: 'old', token_type: 'Bearer', expires_in: 600 }));
-      if (path.endsWith('/auth/refresh')) {
-        markRefreshStarted();
-        return new Promise((resolve) => { finishRefresh = resolve; });
-      }
-      if (path.endsWith('/auth/logout')) return Promise.resolve(new Response(null, { status: 204 }));
-      accountRequests += 1;
-      return Promise.resolve(accountRequests === 1
-        ? response({ account_id: 'a', telegram_user_id: 7, created_at: 'now' })
-        : response({}, 401));
-    });
-    const api = new AccountApi({ fetcher });
-    await api.login('init');
-    const staleAccount = api.account();
-    const staleFailure = expect(staleAccount).rejects.toMatchObject({ code: 'account_session_superseded' });
-    await refreshStarted;
-    const logout = api.logout();
-    csrf = 'after-refresh';
-    finishRefresh(response({ access_token: 'rotated', token_type: 'Bearer', expires_in: 600 }));
-
-    await staleFailure;
-    await logout;
-
-    const logoutCall = fetcher.mock.calls.find(([path]) => String(path).endsWith('/auth/logout'));
-    expect(new Headers(logoutCall?.[1]?.headers).get('X-CSRF-Token')).toBe('after-refresh');
-    expect(api.signedIn).toBe(false);
   });
 
   it('prevents an older refresh from replacing a newer explicit login token', async () => {

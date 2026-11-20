@@ -1,7 +1,8 @@
 import { DEFAULT_APPEARANCE, type GameAppearance } from './appearance';
 import type { ShopCatalogItem } from './account-shop';
-import type { WardrobeItem } from './wardrobe';
-import type { Equipment } from './wardrobe';
+export type Equipment = Readonly<{ skinId: string; backgroundId: string }>;
+
+export const DEFAULT_EQUIPMENT: Equipment = Object.freeze({ skinId: 'classic', backgroundId: 'meadow' });
 
 const makeAppearance = (duck: GameAppearance['duck'], world: GameAppearance['world']): GameAppearance => Object.freeze({
   duck: Object.freeze(duck), world: Object.freeze(world),
@@ -39,9 +40,4 @@ export function accountEquipmentAppearance(equipment: Equipment): GameAppearance
   const skin = skinAssets[equipment.skinId] ?? skinAssets.classic!;
   const background = backgroundAssets[equipment.backgroundId] ?? backgroundAssets.meadow!;
   return Object.freeze({ ...skin, world: background.world });
-}
-
-export function accountShopPreviewItem(item: ShopCatalogItem): WardrobeItem {
-  const appearance = accountShopAppearance(item);
-  return { id: item.item_id, names: item.display_name, appearance };
 }

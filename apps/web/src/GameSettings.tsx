@@ -1,7 +1,7 @@
 import { createPortal } from 'react-dom';
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from 'react';
 import { GameButton } from './GameButton';
-import { formatNumber, type Locale } from './locale';
+import { type Locale } from './locale';
 import type { MessageCatalog } from './messages.ru';
 import { useDialogKeyboard } from './useDialogKeyboard';
 
@@ -10,18 +10,10 @@ type Props = {
   setLocale(locale: Locale): void;
   messages: MessageCatalog;
   preferences: { sound: boolean; music: boolean };
-  wallet: { FEATHER: number; GAME_STAR: number };
-  walletPersistent: boolean;
-  walletStatus: string;
-  walletBlocked: boolean;
   toggle(kind: 'sound' | 'music'): void;
   portalContainer: RefObject<HTMLElement | null>;
-  open?: boolean;
-  onOpenChange?(open: boolean): void;
-  disabled?: boolean;
-  hideWallet?: boolean;
-  walletSlot?: ReactNode;
-  walletHeading?: string;
+  open: boolean;
+  onOpenChange(open: boolean): void;
 };
 
 type LanguageDropdownProps = {
@@ -148,21 +140,18 @@ function LanguageDropdown({ locale, setLocale, messages, dialogRef }: LanguageDr
   </div>;
 }
 
-export function GameSettings({ locale, setLocale, messages, preferences, toggle, wallet, walletPersistent, walletStatus, walletBlocked, portalContainer, open: controlledOpen, onOpenChange, disabled = false, hideWallet = false, walletSlot, walletHeading }: Props) {
-  const [internalOpen, setInternalOpen] = useState(false);
-  const open = controlledOpen ?? internalOpen;
-  const setOpen = (next: boolean) => { setInternalOpen(next); onOpenChange?.(next); };
+export function GameSettings({ locale, setLocale, messages, preferences, toggle, portalContainer, open, onOpenChange }: Props) {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLElement>(null);
 
   const close = () => {
-    setOpen(false);
+    onOpenChange(false);
     triggerRef.current?.focus();
   };
 
   useDialogKeyboard(open, dialogRef, close);
 
-  const openMenu = () => setOpen(true);
+  const openMenu = () => onOpenChange(true);
 
   return <>
     <GameButton
@@ -172,7 +161,6 @@ export function GameSettings({ locale, setLocale, messages, preferences, toggle,
       aria-label={messages.menuLabel}
       aria-haspopup="dialog"
       aria-expanded={open}
-      disabled={disabled}
       onClick={() => open ? close() : openMenu()}
     >
       <span aria-hidden="true">☰</span>
@@ -205,17 +193,6 @@ export function GameSettings({ locale, setLocale, messages, preferences, toggle,
             onClick={() => toggle('music')}
           >{messages.musicLabel}</GameButton>
         </div>
-        {!hideWallet && <section className="settings-wallet" aria-labelledby="settings-wallet-heading">
-          <h3 id="settings-wallet-heading">{walletHeading ?? messages.walletLabel}</h3>
-          {walletSlot ?? <>
-          <div className="settings-wallet-values">
-            <p>{messages.feathersTotalLabel}<strong>{formatNumber(locale, wallet.FEATHER)}</strong></p>
-            <p>{messages.gameStarsTotalLabel}<strong>{formatNumber(locale, wallet.GAME_STAR)}</strong></p>
-          </div>
-          <p className={`settings-wallet-status ${walletPersistent ? '' : 'not-saved'}`} role={walletBlocked ? 'status' : undefined}>{walletStatus}</p>
-          <p className="settings-wallet-note">{messages.walletLocalUnitsNote}</p>
-          </>}
-        </section>}
       </section>
     </div>, portalContainer.current)}
   </>;

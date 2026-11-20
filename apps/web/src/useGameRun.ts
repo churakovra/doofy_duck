@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type React from 'react';
 import {
-  createRun, createRunDescriptor, DEFAULT_CONFIG, makeInput, pauseRun, restartRun, resumeRun, step,
-  type GameConfig, type GameEvent, type InputFrame, type RunDescriptorIdentity, type RunState,
+  makeInput, pauseRun, resumeRun, step,
+  type GameEvent, type InputFrame, type RunState,
 } from '@doofy-duck/game-sim';
 import { FixedStepClock } from './clock';
 import { createInputController } from './input';
@@ -17,19 +17,10 @@ type RunCallbacks = {
   onRunEnded(event: Extract<GameEvent, { type: 'RunEnded' }>): void;
 };
 type GameRunOptions = {
-  config?: GameConfig;
-  createIdentity?: () => RunDescriptorIdentity;
-  onEvents?: (events: readonly GameEvent[]) => void;
-  initialState?: RunState;
-  activeTickLimit?: number;
-  onTick?: (state: RunState, inputs: readonly InputFrame[]) => void;
+  initialState: RunState;
+  activeTickLimit: number;
+  onTick(state: RunState, inputs: readonly InputFrame[]): void;
 };
-
-function createIdentity(): RunDescriptorIdentity {
-  const seed = new Uint32Array(1);
-  crypto.getRandomValues(seed);
-  return { runId: crypto.randomUUID(), seed: seed[0]! };
-}
 
 function isInteractiveTarget(target: EventTarget | null): boolean {
   return target instanceof Element && Boolean(target.closest(
@@ -37,14 +28,10 @@ function isInteractiveTarget(target: EventTarget | null): boolean {
   ));
 }
 
-function freshRun(config?: GameConfig, identity = createIdentity()) {
-  return createRun(createRunDescriptor(identity, config), config);
-}
-
-export function useGameRun(canPlay: () => boolean, callbacks: RunCallbacks, options: GameRunOptions = {}) {
+export function useGameRun(canPlay: () => boolean, callbacks: RunCallbacks, options: GameRunOptions) {
   const optionsRef = useRef(options);
   optionsRef.current = options;
-  const [initial] = useState(() => options.initialState ?? freshRun(options.config, options.createIdentity?.() ?? createIdentity()));
+  const initial = options.initialState;
   const runRef = useRef(initial);
   const queuedRef = useRef<ReturnType<typeof makeInput>[]>([]);
   const sequenceRef = useRef(initial.nextInputSequence);
@@ -83,14 +70,6 @@ export function useGameRun(canPlay: () => boolean, callbacks: RunCallbacks, opti
       } else if (event.type === 'RunEnded' && previous.phase !== 'DEAD') {
         feedbackRef.current.deathSerial = (feedbackRef.current.deathSerial + 1) % 1_000_000;
         callbacksRef.current.onRunEnded(event);
-      }
-    }
-    if (events.length > 0) {
-      try {
-        optionsRef.current.onEvents?.(events);
-      } catch (error) {
-        // Optional telemetry must not rewind a tick or block run settlement.
-        console.error('Game event observer failed', error);
       }
     }
   }, []);
@@ -142,10 +121,10 @@ export function useGameRun(canPlay: () => boolean, callbacks: RunCallbacks, opti
       const batch = queuedRef.current.splice(0, 1);
       try {
         const result = step(current, batch);
-        optionsRef.current.onTick?.(result.state, batch);
+        optionsRef.current.onTick(result.state, batch);
         const limit = optionsRef.current.activeTickLimit;
         const reachedLimit = result.state.phase === 'RUNNING'
-          && limit !== undefined && result.state.tick >= limit;
+          && result.state.tick >= limit;
         updateFromResult(reachedLimit ? pauseRun(result.state) : result.state, result.events);
         if (reachedLimit) {
           setFlightCapReached(true);
@@ -227,38 +206,15 @@ export function useGameRun(canPlay: () => boolean, callbacks: RunCallbacks, opti
     } else if (runRef.current.phase === 'READY') flap();
   }, [canPlay, clearQueuedInputs, flap, runtimeError, updateFromResult]);
 
-  const pause = useCallback(() => {
-    if (runRef.current.phase !== 'RUNNING') return;
-    clockRef.current?.resume();
-    updateFromResult(pauseRun(runRef.current), []);
-    clearQueuedInputs();
-    inputRef.current.reset();
-  }, [clearQueuedInputs, updateFromResult]);
-
-  const restart = useCallback(() => {
-    if (!canPlay()) return;
-    const latestOptions = optionsRef.current;
-    const identity = latestOptions.createIdentity?.() ?? createIdentity();
-    const config = latestOptions.config ?? DEFAULT_CONFIG;
-    const next = restartRun(runRef.current, createRunDescriptor(identity, config), config);
-    runRef.current = next;
-    clearQueuedInputs();
-    setPhase(next.phase);
-    setScore(0);
-    setFlightCapReached(false);
-    callbacksRef.current.onPhaseChange(next.phase);
-  }, [canPlay, clearQueuedInputs]);
-
   const onFieldPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     callbacksRef.current.onFlapUnlock();
     inputRef.current.onPointerDown({ button: event.button, targetIsButton: isInteractiveTarget(event.target), preventDefault: () => event.preventDefault() });
   }, []);
   const onFieldPointerUp = useCallback(() => callbacksRef.current.onFlapUnlock(), []);
-  const unlockForStart = useCallback(() => callbacksRef.current.onFlapUnlock(), []);
 
   return {
     phase, score, runtimeError, rendererReady, flightCapReached,
-    getState, getFeedback, acceptRenderer, flap, start, pause, restart,
-    onFieldPointerDown, onFieldPointerUp, unlockForStart,
+    getState, getFeedback, acceptRenderer, start,
+    onFieldPointerDown, onFieldPointerUp,
   };
 }
