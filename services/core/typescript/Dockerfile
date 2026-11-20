@@ -13,7 +13,7 @@ RUN npm prune --omit=dev
 FROM node:26.11.1-alpine
 WORKDIR /src
 ENV NODE_ENV=production
-COPY --from=build /src/package.json /src/package-lock.json ./
+COPY --from=build /src/package.json ./
 COPY --from=build /src/node_modules ./node_modules
 COPY --from=build /src/packages/game-sim/package.json ./packages/game-sim/package.json
 COPY --from=build /src/packages/game-sim/dist ./packages/game-sim/dist

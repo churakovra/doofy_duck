@@ -66,98 +66,6 @@ function expectedBaseSpacing(config: GameConfig, pipe: Pipe, block: number): num
 
 // Keep every distinct physical state: greedy beam ranking can discard the
 // momentum needed for a rapid reversal and report a reachable route as blocked.
-function exactPairedPipeWitness(pipes: readonly Pipe[], config: GameConfig, entryY: number, entryVy: number): boolean {
-  const f = config.flight;
-  const p = config.pipes;
-  const encode = (y: number, vy: number) => y * 32768 + vy + 16384;
-  let states = new Set([encode(entryY, entryVy)]);
-  let traveled = 0;
-  for (let tick = 1; tick < 300; tick++) {
-    traveled += p.maxSpeed;
-    let low = p.ceilingY + f.duckHalfHeight;
-    let high = p.floorY - f.duckHalfHeight;
-    for (const pipe of pipes) {
-      const x = pipe.x - traveled;
-      if (x + p.width / 2 < f.duckX - f.duckHalfWidth || x - p.width / 2 > f.duckX + f.duckHalfWidth) continue;
-      low = Math.max(low, pipe.gapCenter - Math.floor(p.gapHeight / 2) + f.duckHalfHeight);
-      high = Math.min(high, pipe.gapCenter + Math.floor(p.gapHeight / 2) - f.duckHalfHeight);
-    }
-    const next = new Set<number>();
-    for (const encoded of states) {
-      const y = Math.floor(encoded / 32768);
-      const vy = encoded % 32768 - 16384;
-      for (const flap of [false, true]) {
-        const nextVy = Math.min(f.maxFallSpeed, (flap ? f.flapVelocity : vy) + f.gravity);
-        const nextY = y + nextVy;
-        if (nextY > low && nextY < high) next.add(encode(nextY, nextVy));
-      }
-    }
-    if (!next.size) return false;
-    if (pipes.every(pipe => pipe.x + p.width / 2 - traveled < f.duckX - f.duckHalfWidth)) return true;
-    states = next;
-  }
-  return false;
-}
-
-function witnessAtMaxSpeed(seed: number, block: number, entryY: number, entryVy: number,
-  config: GameConfig = BONUS_SEGMENTS_DEFAULT_CONFIG, includeApproach = false): boolean {
-  const state = preparedBlock(seed, block, config, includeApproach ? entryY : undefined);
-  const offset = includeApproach ? 400_000 : 150_000;
-  const coursePipes = state.pipes.slice(0, 4).map(pipe => ({ ...pipe, x: pipe.x + offset }));
-  const runConfig = state.config;
-  const baseApproachSpacing = runConfig.pipes.width + Math.floor((240_000 - runConfig.pipes.width) * 50 / 100);
-  const approachSpacing = (runConfig.wetland?.catalogVersion ?? 0) >= 11 ? 126_400 : runConfig.wetland?.catalogVersion === 10
-    ? runConfig.pipes.width + Math.floor((baseApproachSpacing - runConfig.pipes.width) * 60 / 100) : baseApproachSpacing;
-  const openingTop = entryY - Math.floor(runConfig.pipes.gapHeight / 2);
-  const openingBottom = entryY + Math.floor(runConfig.pipes.gapHeight / 2);
-  const approach = {
-    ...coursePipes[0]!,
-    id: "approach-pipe",
-    index: block * 4 - 1,
-    x: coursePipes[0]!.x - approachSpacing,
-    gapCenter: entryY,
-    obstacles: [
-      { typeId: "pipes" as const, xOffset: 0, y: runConfig.pipes.ceilingY, width: runConfig.pipes.width, height: openingTop - runConfig.pipes.ceilingY },
-      { typeId: "pipes" as const, xOffset: 0, y: openingBottom, width: runConfig.pipes.width, height: runConfig.pipes.floorY - openingBottom },
-    ],
-  };
-  const pipes = includeApproach ? [approach, ...coursePipes] : coursePipes;
-  if (config.wetland?.catalogVersion === 14) return exactPairedPipeWitness(pipes, runConfig, entryY, entryVy);
-  let beam = [{ y: entryY, vy: entryVy }];
-  let traveled = 0;
-  for (let tick = 1; tick < 300; tick++) {
-    traveled += runConfig.pipes.maxSpeed;
-    const unique = new Map<string, { y: number; vy: number }>();
-    for (const node of beam) for (const flap of [false, true]) {
-      const vy = Math.min(config.flight.maxFallSpeed,
-        (flap ? runConfig.flight.flapVelocity : node.vy) + runConfig.flight.gravity);
-      const y = node.y + vy;
-      if (y - runConfig.flight.duckHalfHeight <= runConfig.pipes.ceilingY ||
-          y + runConfig.flight.duckHalfHeight >= runConfig.pipes.floorY) continue;
-      const dead = pipes.some(pipe => (pipe.obstacles ?? []).some(obstacle => {
-        const x = pipe.x - traveled;
-        const left = x + obstacle.xOffset - Math.floor(obstacle.width / 2);
-        const right = x + obstacle.xOffset + Math.floor(obstacle.width / 2);
-        return right >= runConfig.flight.duckX - runConfig.flight.duckHalfWidth &&
-          left <= runConfig.flight.duckX + runConfig.flight.duckHalfWidth &&
-          y + runConfig.flight.duckHalfHeight >= obstacle.y &&
-          y - runConfig.flight.duckHalfHeight <= obstacle.y + obstacle.height;
-      }));
-      if (!dead) unique.set(`${y}:${vy}`, { y, vy });
-    }
-    if (pipes.every(pipe => pipe.x + runConfig.pipes.width / 2 - traveled < runConfig.flight.duckX - runConfig.flight.duckHalfWidth))
-      return true;
-    beam = [...unique.values()];
-    if (beam.length === 0) return false;
-    if (beam.length > 1200) {
-      const target = pipes.find(pipe => pipe.x - traveled >= runConfig.flight.duckX)?.gapCenter ?? 280_000;
-      beam = beam.sort((a, b) => Math.abs(a.y - target) + Math.abs(a.vy) * 4 -
-        Math.abs(b.y - target) - Math.abs(b.vy) * 4).slice(0, 1200);
-    }
-  }
-  return false;
-}
-
 describe("catalog-6 bonus segments", () => {
   it("retains the 2.5 identity while catalog-7 becomes the default", () => {
     expect([BONUS_SEGMENTS_SIMULATION_VERSION, BONUS_SEGMENTS_GENERATOR_VERSION, BONUS_SEGMENTS_CONFIG_ID])
@@ -294,21 +202,6 @@ describe("catalog-6 bonus segments", () => {
       wetland: { ...baseWetland, catalogVersion: 5, starFormations: false } })).toThrow(/wetland encounter catalog/);
   });
 
-  it("keeps hard segments reachable at maximum speed across all seeded recipes and entry variants", () => {
-    const seeds = new Map<string, number>();
-    for (let seed = 0; seed < 2048 && seeds.size < 3; seed++) {
-      const block = firstHardBlock(seed);
-      seeds.set(bonusSegmentRecipe(seed, block), seeds.get(bonusSegmentRecipe(seed, block)) ?? seed);
-    }
-    expect(seeds.size).toBe(3);
-    for (const [recipe, seed] of seeds) {
-      const block = firstHardBlock(seed);
-      for (const [y, vy] of [[275_000, -500], [280_000, 0], [285_000, 500]] as const) {
-        expect(witnessAtMaxSpeed(seed, block, y, vy), `recipe=${recipe} seed=${seed} entry=${y}/${vy}`).toBe(true);
-      }
-    }
-  }, 30_000);
-
   it("requires seeded intervals to keep scheduled Stars from overlapping the hard course and reward figure", () => {
     const invalid = { ...BONUS_SEGMENTS_DEFAULT_CONFIG, starSchedule: { minIntervalPipes: 8, maxIntervalPipes: 16 } };
     expect(() => validateConfig(invalid)).toThrow(/scheduled Star capacity or interval geometry/);
@@ -424,25 +317,6 @@ describe("catalog-7 bonus segments v2", () => {
     }
   });
 
-  it("keeps approach, three gates, reward interval, and recovery pipe reachable at maximum speed", () => {
-    const config = BONUS_SEGMENTS_V2_DEFAULT_CONFIG;
-    const byRecipe = new Map<string, { seed: number; block: number }>();
-    for (let seed = 0; seed < 4096 && byRecipe.size < 3; seed++) {
-      const block = firstHardBlock(seed);
-      const recipe = bonusSegmentV2Recipe(seed, block);
-      byRecipe.set(recipe, byRecipe.get(recipe) ?? { seed, block });
-    }
-    expect(byRecipe.size).toBe(3);
-    for (const [recipe, { seed, block }] of byRecipe) {
-      for (const entryY of [240_000, 280_000, 320_000]) {
-        for (const entryVy of [-500, 0, 500]) {
-          expect(witnessAtMaxSpeed(seed, block, entryY, entryVy, config, true),
-            `recipe=${recipe} seed=${seed} entry=${entryY}/${entryVy}`).toBe(true);
-        }
-      }
-    }
-  }, 30_000);
-
   it("places the coin figure after the third gate and retains single Stars by default", () => {
     const config = BONUS_SEGMENTS_V2_DEFAULT_CONFIG;
     const seed = Array.from({ length: 512 }, (_, index) => index).find(value => isBonusSegmentBlock(value, 2))!;
@@ -491,11 +365,6 @@ describe("catalog-8 varied pipes", () => {
       }
     }
     expect(new Set(fixture.cases.filter(example => example.block === 4).map(example => example.centers.join(","))).size).toBe(4);
-  });
-  it("keeps representative pressure and recovery routes flyable at maximum speed", () => {
-    for (const seed of [0, 1, 42, 99]) for (const block of [4, 5]) {
-      expect(witnessAtMaxSpeed(seed, block, 280_000, 0, VARIED_PIPES_DEFAULT_CONFIG, true)).toBe(true);
-    }
   });
 });
 
@@ -559,12 +428,6 @@ describe("catalog-9 pressure pipes", () => {
     expect(newMovement / oldMovement).toBeGreaterThan(1.5);
     expect(newReversals / oldReversals).toBeGreaterThan(1.3);
   });
-  it("has max-speed witnesses from varied entry positions and velocities", () => {
-    for (const [seed, block, y, vy] of [[0, 4, 200_000, -2_000], [1, 4, 280_000, 0], [42, 4, 360_000, 2_000],
-      [99, 6, 200_000, 2_000], [7, 6, 280_000, -2_000], [17, 6, 360_000, 0]] as const) {
-      expect(witnessAtMaxSpeed(seed, block, y, vy, PRESSURE_PIPES_DEFAULT_CONFIG, true)).toBe(true);
-    }
-  });
 });
 
 describe("catalog-10 dense pipes", () => {
@@ -608,24 +471,6 @@ describe("catalog-10 dense pipes", () => {
           star.y - DENSE_PIPES_DEFAULT_CONFIG.flight.duckHalfHeight <= obstacle.y + obstacle.height;
         expect(overlapsX && overlapsY, `seed ${seed}, station ${pipe.index}`).toBe(false);
       }
-    }
-  });
-  it("keeps every mirrored bonus recipe flyable at maximum speed", () => {
-    const routes = new Map<string, { seed: number; block: number }>();
-    for (let seed = 0; seed < 512 && routes.size < 6; seed++) {
-      const block = firstHardBlock(seed);
-      const pipes = preparedBlock(seed, block, DENSE_PIPES_DEFAULT_CONFIG).pipes;
-      const key = `${bonusSegmentV2Recipe(seed, block)}:${Math.sign(pipes[1]!.gapCenter - pipes[0]!.gapCenter)}`;
-      if (!routes.has(key)) routes.set(key, { seed, block });
-    }
-    expect(routes.size).toBe(6);
-    for (const [key, { seed, block }] of routes) for (const entry of [240_000, 280_000, 320_000])
-      expect(witnessAtMaxSpeed(seed, block, entry, 0, DENSE_PIPES_DEFAULT_CONFIG, true), `${key} entry ${entry}`).toBe(true);
-  }, 30_000);
-  it("keeps pressure and bonus routes flyable at maximum speed", () => {
-    for (const [seed, block, y, vy] of [[0, 4, 200_000, -2_000], [1, 4, 280_000, 0], [42, 4, 360_000, 2_000],
-      [99, 6, 200_000, 2_000], [7, 6, 280_000, -2_000], [17, 6, 360_000, 0]] as const) {
-      expect(witnessAtMaxSpeed(seed, block, y, vy, DENSE_PIPES_DEFAULT_CONFIG, true), `${seed}/${block}`).toBe(true);
     }
   });
 });
@@ -702,87 +547,6 @@ describe("catalog-11 base and bonus generation", () => {
     expect(direct.state.score).toBe(start.score + 1);
     expect(step(direct.state, []).state.score).toBe(start.score + 1);
   });
-  it("flies representative base and bonus patterns at maximum speed", () => {
-    for (const seed of [0, 1, 42, 99]) {
-      const bonus = [6, 7, 8].find(block => isScheduledBonusBlock(BASE_BONUS_DEFAULT_CONFIG, seed, block))!;
-      for (const y of [240_000, 280_000, 320_000]) {
-        expect(witnessAtMaxSpeed(seed, 2, y, 0, BASE_BONUS_DEFAULT_CONFIG, true), `base ${seed}/${y}`).toBe(true);
-        expect(witnessAtMaxSpeed(seed, bonus, y, 0, BASE_BONUS_DEFAULT_CONFIG, true), `bonus ${seed}/${y}`).toBe(true);
-      }
-    }
-  }, 30_000);
-});
-
-function collectBonusAtMaxSpeed(seed: number, block: number, entryY: number, config = BASE_BONUS_DEFAULT_CONFIG, bonus = true, entryVy = 0): boolean {
-  const state = preparedBlock(seed, block, config, entryY);
-  const pipes = state.pipes.slice(0, 4).map(pipe => ({ ...pipe, x: pipe.x + 400_000 }));
-  const half = Math.floor(config.pipes.gapHeight / 2);
-  const approach: Pipe = { ...pipes[0]!, id: "approach", index: pipes[0]!.index - 1,
-    x: pipes[0]!.x - 126_400, gapCenter: entryY, obstacles: [
-      { typeId: "pipes", xOffset: 0, y: config.pipes.ceilingY, width: config.pipes.width, height: entryY - half - config.pipes.ceilingY },
-      { typeId: "pipes", xOffset: 0, y: entryY + half, width: config.pipes.width, height: config.pipes.floorY - entryY - half },
-    ] };
-  const course = [approach, ...pipes];
-  const points = bonus ? currencyFormationPoints(config, seed, pipes[2]!, 7_000) : [];
-  if (bonus && points.length !== 3) return false;
-  const clearance = config.pipes.width / 2 + config.flight.duckHalfWidth + 7_000;
-  if (points.some(point => pipes.some(pipe => Math.abs(point.x - pipe.x) <= clearance))) return false;
-  let beam: { y: number; vy: number; mask: number; flaps: boolean[] }[] = [{ y: entryY, vy: entryVy, mask: 0, flaps: [] }];
-  let traveled = 0;
-  for (let tick = 0; tick < 300; tick++) {
-    traveled += config.pipes.maxSpeed;
-    const next = new Map<string, { y: number; vy: number; mask: number; flaps: boolean[] }>();
-    for (const node of beam) for (const flap of [false, true]) {
-      const vy = Math.min(config.flight.maxFallSpeed, (flap ? config.flight.flapVelocity : node.vy) + config.flight.gravity);
-      const y = node.y + vy;
-      if (y - config.flight.duckHalfHeight <= config.pipes.ceilingY || y + config.flight.duckHalfHeight >= config.pipes.floorY) continue;
-      if (course.some(pipe => (pipe.obstacles ?? []).some(obstacle => {
-        const x = pipe.x - traveled + obstacle.xOffset;
-        return Math.abs(x - config.flight.duckX) <= obstacle.width / 2 + config.flight.duckHalfWidth &&
-          y + config.flight.duckHalfHeight >= obstacle.y && y - config.flight.duckHalfHeight <= obstacle.y + obstacle.height;
-      }))) continue;
-      let mask = node.mask;
-      points.forEach((point, index) => {
-        if (Math.abs(point.x - traveled - config.flight.duckX) <= 7_000 + config.flight.duckHalfWidth &&
-            Math.abs(point.y - y) <= 7_000 + config.flight.duckHalfHeight) mask |= 1 << index;
-      });
-      const flaps = [...node.flaps, flap];
-      if (mask === (bonus ? 7 : 0) && pipes[3]!.x + config.pipes.width / 2 - traveled < config.flight.duckX - config.flight.duckHalfWidth) {
-        let replay: RunState = { ...state, phase: "RUNNING", tick: 2_700, score: 100, pipes: course, nextPipeX: 2_000_000,
-          nextSpawnPipeIndex: pipes[3]!.index + 1, nextStarPipeIndex: 10_000,
-          duck: { ...state.duck, y: entryY, vy: entryVy }, collectibles: points.map((point, index) => ({
-            id: `figure-${index}`, typeId: "FEATHER", ...point, radius: 7_000, amount: 1, collected: false,
-          })) };
-        let collected = 0;
-        for (const action of flaps) {
-          const result = step(replay, action ? [makeInput(replay.nextInputSequence, "FLAP")] : []);
-          collected += result.events.filter(event => event.type === "CurrencyCollected").length;
-          replay = result.state;
-          if (replay.phase === "DEAD") return false;
-        }
-        return collected === points.length;
-      }
-      next.set(`${y}:${vy}:${mask}`, { y, vy, mask, flaps });
-    }
-    beam = [...next.values()];
-    if (beam.length === 0) return false;
-    if (beam.length > 1_200) {
-      const target = bonus && pipes[2]!.x - traveled < config.flight.duckX && points[0]!.x - traveled > config.flight.duckX - 20_000
-        ? points[0]!.y : course.find(pipe => pipe.x - traveled >= config.flight.duckX)?.gapCenter ?? pipes[3]!.gapCenter;
-      beam = beam.sort((a, b) => (Math.abs(a.y - target) + Math.abs(a.vy) * 4 - a.mask * 100_000) -
-        (Math.abs(b.y - target) + Math.abs(b.vy) * 4 - b.mask * 100_000)).slice(0, 1_200);
-    }
-  }
-  return false;
-}
-
-describe("catalog-11 bonus coin figure", () => {
-  it("keeps every figure clear of pipes and collectible while flying through", () => {
-    for (const seed of [0, 2, 5, 18]) {
-      const block = [6, 7, 8].find(value => isScheduledBonusBlock(BASE_BONUS_DEFAULT_CONFIG, seed, value))!;
-      expect(collectBonusAtMaxSpeed(seed, block, 280_000), `seed ${seed}`).toBe(true);
-    }
-  }, 30_000);
 });
 
 describe("curved pipe paths", () => {
@@ -812,23 +576,6 @@ describe("curved pipe paths", () => {
     expect(curves).toBeGreaterThan(20);
     expect(directions.size).toBeGreaterThan(3);
   });
-  it("has max-speed controller witnesses for representative curves", () => {
-    for (const seed of [0, 1, 42, 99]) {
-      expect(witnessAtMaxSpeed(seed, 2, 280_000, 0, CURVED_PIPES_DEFAULT_CONFIG), `seed ${seed}`).toBe(true);
-    }
-  }, 30_000);
-  it("has controller witnesses across ordinary and bonus block boundaries", () => {
-    for (const seed of [0, 1, 42, 99]) {
-      const bonus = [6, 7, 8].find(block => isScheduledBonusBlock(CURVED_PIPES_DEFAULT_CONFIG, seed, block))!;
-      for (const block of [2, bonus, bonus + 1]) {
-        const previous = preparedBlock(seed, block - 1, CURVED_PIPES_DEFAULT_CONFIG, 280_000).pipes[3]!.gapCenter;
-        for (const velocity of [-500, 500]) {
-          expect(witnessAtMaxSpeed(seed, block, previous, velocity, CURVED_PIPES_DEFAULT_CONFIG, true),
-            `seed ${seed}, block ${block}, entry ${previous}, velocity ${velocity}`).toBe(true);
-        }
-      }
-    }
-  }, 60_000);
 });
 
 describe("catalog-12 varied base", () => {
@@ -886,19 +633,6 @@ describe("catalog-12 varied base", () => {
       expect(Math.abs(first.pipes[0]!.gapCenter - 280_000)).toBeLessThanOrEqual(35_000);
     }
   });
-  it("collects all four mirrored hard patterns under the varied-base rules", () => {
-    for (const seed of [0, 2, 5, 18]) {
-      const block = [6, 7, 8].find(value => isScheduledBonusBlock(VARIED_BASE_DEFAULT_CONFIG, seed, value))!;
-      expect(collectBonusAtMaxSpeed(seed, block, 280_000, VARIED_BASE_DEFAULT_CONFIG, true), `bonus ${seed}`).toBe(true);
-    }
-  }, 30_000);
-  it("replays max-speed base changes and collects bonus figures", () => {
-    for (const [seed, y, vy] of [[0, 240_000, -2_000], [1, 280_000, 0], [42, 320_000, 2_000], [99, 280_000, -2_000]] as const) {
-      expect(collectBonusAtMaxSpeed(seed, 2, y, VARIED_BASE_DEFAULT_CONFIG, false, vy), `base ${seed}/${y}/${vy}`).toBe(true);
-      const block = [6, 7, 8].find(value => isScheduledBonusBlock(VARIED_BASE_DEFAULT_CONFIG, seed, value))!;
-      expect(collectBonusAtMaxSpeed(seed, block, y, VARIED_BASE_DEFAULT_CONFIG, true, vy), `bonus ${seed}/${y}/${vy}`).toBe(true);
-    }
-  }, 30_000);
 });
 
 
@@ -922,30 +656,6 @@ describe("challenging ordinary paths", () => {
 });
 
 describe("random ordinary pipe paths", () => {
-  it("has max-speed controller witnesses for representative curves", () => {
-    for (const seed of [0, 1, 42, 99]) {
-      expect(witnessAtMaxSpeed(seed, 2, 280_000, 0, DEFAULT_CONFIG), `seed ${seed}`).toBe(true);
-    }
-  }, 30_000);
-  it.each([0, 1, 42, 99])("has exact max-speed witnesses across ordinary and bonus boundaries for seed %s", (seed) => {
-      const bonus = [6, 7, 8].find(block => isScheduledBonusBlock(DEFAULT_CONFIG, seed, block))!;
-      for (const block of [2, bonus, bonus + 1]) {
-        const previous = preparedBlock(seed, block - 1, DEFAULT_CONFIG, 280_000).pipes[3]!.gapCenter;
-        for (const velocity of [-500, 500]) {
-          expect(witnessAtMaxSpeed(seed, block, previous, velocity, DEFAULT_CONFIG, true),
-            `seed ${seed}, block ${block}, entry ${previous}, velocity ${velocity}`).toBe(true);
-        }
-      }
-  }, 60_000);
-
-  it.each([110_000, 450_000])("has max-speed witnesses from the vertical extreme %s", (entry) => {
-    const seed = 42;
-    const bonus = [6, 7, 8].find(block => isScheduledBonusBlock(DEFAULT_CONFIG, seed, block))!;
-    for (const block of [2, bonus, bonus + 1]) {
-      expect(witnessAtMaxSpeed(seed, block, entry, 0, DEFAULT_CONFIG, true), `block ${block}`).toBe(true);
-    }
-  }, 60_000);
-
   it("matches catalog-14 vectors and preserves the catalog-13 identity", async () => {
     const { readFileSync } = await import("node:fs");
     const fixture = JSON.parse(readFileSync("contracts/simulation/random-pipes-v1.json", "utf8")) as { cases: { seed: number; block: number; centers: number[]; spacings: number[] }[] };

@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useGameRun } from './useGameRun';
 import { LocaleProvider, useLocale } from './locale';
-import { DEFAULT_CONFIG, BONUS_SEGMENTS_DEFAULT_CONFIG, COIN_COURSE_DEFAULT_CONFIG, PRIOR_DEFAULT_CONFIG, VARIED_OBSTACLE_DEFAULT_CONFIG, WETLAND_DEFAULT_CONFIG, createRun, createRunDescriptor, type GameConfig, type GameEvent, type RunDescriptorIdentity, type RunState } from '@doofy-duck/game-sim';
+import { DEFAULT_CONFIG, BONUS_SEGMENTS_DEFAULT_CONFIG, COIN_COURSE_DEFAULT_CONFIG, PRIOR_DEFAULT_CONFIG, VARIED_OBSTACLE_DEFAULT_CONFIG, WETLAND_DEFAULT_CONFIG, createRun, createRunDescriptor, type GameConfig } from '@doofy-duck/game-sim';
 
 let run: ReturnType<typeof useGameRun>;
 let frameId: number;
@@ -12,7 +12,24 @@ let now: number;
 let frames: Map<number, FrameRequestCallback>;
 let root: ReturnType<typeof createRoot>;
 let host: HTMLDivElement;
-let options: { config?: GameConfig; createIdentity?: () => RunDescriptorIdentity; initialState?: RunState; onEvents?: (events: readonly GameEvent[]) => void; onTick?: (state: unknown, ticks: readonly { sequence: number; action: 'FLAP' }[]) => void; activeTickLimit?: number } = {};
+let options: Parameters<typeof useGameRun>[2];
+function issuedRun(runId: string, config = DEFAULT_CONFIG, seed = 1) {
+  return createRun(createRunDescriptor({ runId, seed }, config), config);
+}
+function pressFlap() {
+  window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space' }));
+  window.dispatchEvent(new KeyboardEvent('keyup', { code: 'Space' }));
+}
+function setHidden(hidden: boolean) {
+  Object.defineProperty(document, 'hidden', { configurable: true, value: hidden });
+  document.dispatchEvent(new Event('visibilitychange'));
+}
+function mountIssuedRun(runId: string) {
+  options.initialState = issuedRun(runId);
+  act(() => root.render(<LocaleProvider><Harness key={runId} /></LocaleProvider>));
+  act(() => run.acceptRenderer());
+  frame(0);
+}
 const callbacks = {
   onFlapUnlock: vi.fn(), onFlap: vi.fn(), onPickup: vi.fn(),
   onPhaseChange: vi.fn(), onRunEnded: vi.fn(),
@@ -40,7 +57,7 @@ beforeEach(() => {
   frameId = 0;
   now = 0;
   frames = new Map();
-  options = {};
+  options = { initialState: issuedRun('initial'), activeTickLimit: 216_000, onTick: () => undefined };
   modalOpen = false;
   vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
     frames.set(++frameId, callback);
@@ -63,8 +80,8 @@ afterEach(() => {
 });
 
 describe('run clock integration', () => {
-  it('restarts a fresh default run with the varied-base identity', () => {
-    act(() => run.restart());
+  it('mounts a new server-issued run with the random-pipes identity', () => {
+    mountIssuedRun('new-flight');
     expect(run.getState().config.wetland?.catalogVersion).toBe(14);
     expect(run.getState().descriptor).toMatchObject({
       simulationVersion: '3.3.0', generatorVersion: '3.3.0', configId: 'dd-v3-random-pipes-v1',
@@ -75,7 +92,7 @@ describe('run clock integration', () => {
   it('resumes a frozen 2.5 bonus-segments run without changing its identity', () => {
     const config = BONUS_SEGMENTS_DEFAULT_CONFIG;
     const state = createRun(createRunDescriptor({ runId: 'retained-bonus-segments-v2.5', seed: 44 }, config), config);
-    options = { config, initialState: state };
+    options.initialState = state;
     act(() => root.render(<LocaleProvider><Harness key="retained-bonus-segments-v2.5" /></LocaleProvider>));
     expect(run.getState().config.wetland?.catalogVersion).toBe(6);
     expect(run.getState().descriptor).toMatchObject({
@@ -86,7 +103,7 @@ describe('run clock integration', () => {
   it('resumes a frozen 2.4 coin-course run without changing its identity', () => {
     const config = COIN_COURSE_DEFAULT_CONFIG;
     const state = createRun(createRunDescriptor({ runId: 'retained-coin-course-v2.4', seed: 44 }, config), config);
-    options = { config, initialState: state };
+    options.initialState = state;
     act(() => root.render(<LocaleProvider><Harness key="retained-coin-course-v2.4" /></LocaleProvider>));
     expect(run.getState().config.wetland?.catalogVersion).toBe(5);
     expect(run.getState().descriptor).toMatchObject({
@@ -96,7 +113,7 @@ describe('run clock integration', () => {
 
   it('recovers an existing catalog-2 varied-obstacle run without changing its identity', () => {
     const state = createRun(createRunDescriptor({ runId: 'retained-varied-obstacles-v2', seed: 3 }, VARIED_OBSTACLE_DEFAULT_CONFIG), VARIED_OBSTACLE_DEFAULT_CONFIG);
-    options = { config: VARIED_OBSTACLE_DEFAULT_CONFIG, initialState: state };
+    options.initialState = state;
     act(() => root.render(<LocaleProvider><Harness key="retained-varied-obstacles-v2" /></LocaleProvider>));
     expect(run.getState().config.wetland?.catalogVersion).toBe(2);
     expect(run.getState().descriptor).toMatchObject({
@@ -106,7 +123,7 @@ describe('run clock integration', () => {
 
   it('recovers an existing catalog-1 run without changing its identity', () => {
     const state = createRun(createRunDescriptor({ runId: 'retained-wetland-v2', seed: 3 }, WETLAND_DEFAULT_CONFIG), WETLAND_DEFAULT_CONFIG);
-    options = { config: WETLAND_DEFAULT_CONFIG, initialState: state };
+    options.initialState = state;
     act(() => root.render(<LocaleProvider><Harness key="retained-wetland-v2" /></LocaleProvider>));
     expect(run.getState().config.wetland?.catalogVersion).toBe(1);
     expect(run.getState().descriptor).toMatchObject({
@@ -129,7 +146,7 @@ describe('run clock integration', () => {
 
   it('records each applied simulation tick with its actual input batch, including empty ticks', () => {
     const onTick = vi.fn();
-    options = { onTick };
+    options = { ...options, onTick };
     act(() => root.render(<LocaleProvider><Harness /></LocaleProvider>));
     act(() => run.start());
     frame(17);
@@ -140,7 +157,7 @@ describe('run clock integration', () => {
   });
 
   it('stops the account simulation when its authoritative recorder fails', () => {
-    options = { onTick: () => { throw new Error('trace write failed'); } };
+    options = { ...options, onTick: () => { throw new Error('trace write failed'); } };
     act(() => root.render(<LocaleProvider><Harness /></LocaleProvider>));
     act(() => run.start());
     frame(17);
@@ -152,7 +169,7 @@ describe('run clock integration', () => {
 
   it('freezes account flight advancement at its active tick limit', () => {
     const onTick = vi.fn();
-    options = { onTick, activeTickLimit: 2 };
+    options = { ...options, onTick, activeTickLimit: 2 };
     act(() => root.render(<LocaleProvider><Harness /></LocaleProvider>));
     act(() => run.start());
     frame(17);
@@ -167,9 +184,9 @@ describe('run clock integration', () => {
 
   it('discards flaps queued behind the tick that reaches the account cap', () => {
     const onTick = vi.fn();
-    options = { onTick, activeTickLimit: 2 };
+    options = { ...options, onTick, activeTickLimit: 2 };
     act(() => root.render(<LocaleProvider><Harness /></LocaleProvider>));
-    act(() => { run.start(); run.flap(); run.flap(); });
+    act(() => { run.start(); pressFlap(); pressFlap(); });
     frame(17);
     frame(50);
 
@@ -224,7 +241,7 @@ describe('run clock integration', () => {
     expect(run.phase).toBe('RUNNING');
     frame(200);
     expect(run.phase).toBe('DEAD');
-    act(() => run.restart());
+    mountIssuedRun('new-flight');
     act(() => run.start());
     frame(17);
     expect(run.phase).toBe('RUNNING');
@@ -236,7 +253,8 @@ describe('run clock integration', () => {
     frame(1_000);
     expect(run.phase).toBe('RUNNING');
     expect(run.getState().tick).toBe(1);
-    act(() => run.pause());
+    act(() => { setHidden(true); setHidden(false); });
+    frame(0);
     act(() => run.start());
     frame(1_000);
     expect(run.phase).toBe('RUNNING');
@@ -251,7 +269,7 @@ describe('run clock integration', () => {
     for (let i = 0; i < 200 && run.phase !== 'DEAD'; i++) frame(17);
     expect(run.phase).toBe('DEAD');
     frame(1_000);
-    act(() => { run.restart(); });
+    mountIssuedRun('new-flight');
     act(() => run.start());
     frame(17);
     expect(run.phase).toBe('RUNNING');
@@ -263,7 +281,7 @@ describe('run clock integration', () => {
     frame(17);
     frame(200);
     const before = run.getState();
-    act(() => { run.flap(); run.flap(); });
+    act(() => { pressFlap(); pressFlap(); });
     frame(150);
     expect(run.phase).toBe('PAUSED');
     expect(run.getState().tick).toBe(before.tick);
@@ -274,7 +292,7 @@ describe('run clock integration', () => {
     frame(17);
     expect(run.phase).toBe('RUNNING');
     expect(run.getState().nextInputSequence).toBe(before.nextInputSequence);
-    act(() => run.flap());
+    act(() => pressFlap());
     frame(17);
     expect(run.getState().nextInputSequence).toBe(before.nextInputSequence + 1);
   });
@@ -298,49 +316,13 @@ describe('run clock integration', () => {
 
   it('does not accept inputs while hidden, including a new start', () => {
     Object.defineProperty(document, 'hidden', { configurable: true, value: true });
-    act(() => { run.start(); run.flap(); });
+    act(() => { run.start(); pressFlap(); });
     frame(17);
     expect(run.phase).toBe('READY');
     expect(run.getState().nextInputSequence).toBe(0);
   });
 
-  it('freezes each run config and uses the latest config and injected identity on restart', () => {
-    const firstConfig = { ...PRIOR_DEFAULT_CONFIG, flight: { ...PRIOR_DEFAULT_CONFIG.flight, gravity: 321 } };
-    const nextConfig = { ...PRIOR_DEFAULT_CONFIG, flight: { ...PRIOR_DEFAULT_CONFIG.flight, gravity: 654 } };
-    const createIdentity = vi.fn()
-      .mockReturnValueOnce({ runId: 'initial-injected', seed: 41 })
-      .mockReturnValueOnce({ runId: 'injected-run', seed: 42 });
-    options = { config: firstConfig, createIdentity };
-    act(() => root.render(<Harness key="configured-run" />));
-    const firstRun = run.getState();
-    expect(firstRun.config.flight.gravity).toBe(321);
-    expect(firstRun.descriptor.runId).toBe('initial-injected');
-    options = { config: nextConfig, createIdentity };
-    act(() => root.render(<Harness key="configured-run" />));
-    expect(run.getState()).toBe(firstRun);
-    expect(run.getState().config.flight.gravity).toBe(321);
-    act(() => run.restart());
-    expect(run.getState().config.flight.gravity).toBe(654);
-    expect(run.getState().descriptor.runId).toBe('injected-run');
-    expect(createIdentity).toHaveBeenCalledTimes(2);
-    expect(Object.isFrozen(run.getState().config)).toBe(true);
-  });
-
-  it('delivers complete simulation event batches once in their simulation order', () => {
-    const onEvents = vi.fn();
-    options = { onEvents };
-    act(() => root.render(<LocaleProvider><Harness /></LocaleProvider>));
-    act(() => run.start());
-    frame(17);
-    const batches = onEvents.mock.calls.map(([events]) => events as readonly GameEvent[]);
-    const delivered = batches.flat();
-    expect(delivered.map((event) => event.type)).toEqual(['RunStarted']);
-    expect(delivered[0]).toMatchObject({ type: 'RunStarted', runId: run.getState().descriptor.runId, tick: 1 });
-    expect(new Set(delivered).size).toBe(delivered.length);
-  });
-
-  it('delivers scoring and collection in tick order and completion only once', () => {
-    const onEvents = vi.fn();
+  it('reports collection and completion once through the flight callbacks', () => {
     const config: GameConfig = {
       ...PRIOR_DEFAULT_CONFIG,
       starSchedule: null,
@@ -355,50 +337,25 @@ describe('run clock integration', () => {
         minSpacingPipes: 0, weight: 1, radius: 60_000, amount: 3,
       }],
     };
-    options = { config, onEvents, createIdentity: () => ({ runId: 'event-run', seed: 1 }) };
+    options.initialState = issuedRun('event-run', config);
     act(() => root.render(<Harness key="event-run" />));
     act(() => run.acceptRenderer());
     frame(0);
     act(() => run.start());
     frame(17);
-    const first = onEvents.mock.calls[0]![0] as readonly GameEvent[];
-    expect(first).toEqual([
-      { type: 'RunStarted', runId: 'event-run', tick: 1 },
-      { type: 'PipePassed', runId: 'event-run', pipeId: 'pipe-0', score: 1, tick: 1 },
-      { type: 'CurrencyCollected', runId: 'event-run', collectibleId: 'collectible-0', typeId: 'FEATHER', amount: 3, tick: 1 },
-    ]);
-    expect(Object.isFrozen(first)).toBe(true);
+    expect(run.getState().score).toBe(1);
+    expect(run.getState().totals).toEqual({ FEATHER: 3 });
+    expect(callbacks.onPickup.mock.calls).toEqual([['FEATHER']]);
     for (let i = 0; i < 200 && run.phase !== 'DEAD'; i++) frame(17);
     expect(run.phase).toBe('DEAD');
-    const ended = onEvents.mock.calls.flatMap(([events]) => events as readonly GameEvent[])
-      .filter(event => event.type === 'RunEnded');
-    expect(ended).toEqual([{
+    expect(callbacks.onRunEnded.mock.calls).toEqual([[{
       type: 'RunEnded', runId: 'event-run', score: run.getState().score,
       totals: { FEATHER: 3 }, tick: run.getState().tick,
-    }]);
-    const calls = onEvents.mock.calls.length;
+    }]]);
     frame(17);
-    act(() => run.flap());
+    act(pressFlap);
     frame(17);
-    expect(onEvents).toHaveBeenCalledTimes(calls);
     expect(callbacks.onRunEnded).toHaveBeenCalledTimes(1);
-  });
-
-  it('keeps gameplay running when an optional event observer fails', () => {
-    const report = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    options = { onEvents: () => { throw Error('telemetry unavailable'); } };
-    try {
-      act(() => root.render(<LocaleProvider><Harness /></LocaleProvider>));
-      act(() => run.start());
-      frame(17);
-      expect(run.runtimeError).toBe('');
-      expect(run.rendererReady).toBe(true);
-      expect(run.phase).toBe('RUNNING');
-      frame(17);
-      expect(run.getState().tick).toBe(2);
-      expect(report).toHaveBeenCalledTimes(1);
-    } finally {
-      report.mockRestore();
-    }
+    expect(callbacks.onPickup).toHaveBeenCalledTimes(1);
   });
 });

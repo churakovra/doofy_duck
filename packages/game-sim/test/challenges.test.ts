@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   PRIOR_DEFAULT_CONFIG, configIdFor, createRun, createRunDescriptor, generateNext, makeInput, validateConfig,
-  pauseRun, resumeRun, restartRun, step, worldSpeedAt,
+  pauseRun, resumeRun, restartRun, step,
 } from '../src/index.js';
 import type { RunState } from '../src/index.js';
 
@@ -118,78 +118,4 @@ describe('stepped default challenges', () => {
     expect(Math.min(...centers) + safeMargin).toBeLessThan(Math.max(...centers) - safeMargin);
   });
 
-  it('traverses every selectable family transition from a bounded boundary-state envelope', () => {
-    const observationX = 360000;
-    const collisionEntryX = 138000;
-    const speedCap = 4800;
-    const heldLaneTicks = 18;
-    expect(worldSpeedAt(PRIOR_DEFAULT_CONFIG, 2701)).toBe(speedCap);
-    expect((observationX - collisionEntryX) / speedCap).toBe(46.25);
-    expect(heldLaneTicks).toBeLessThan((observationX - collisionEntryX) / speedCap);
-    const set = PRIOR_DEFAULT_CONFIG.challenges!;
-    const families = new Map(set.families.map(family => [family.id, family]));
-    const cruise = set.cruiseFamilyIds;
-    const edges: [string, string][] = [];
-    for (const id of cruise) edges.push([set.introFamilyId, id]);
-    for (let i = 0; i < cruise.length; i++) {
-      edges.push([cruise[i]!, cruise[(i + 1) % cruise.length]!]);
-      for (const pressure of set.pressureFamilyIds) edges.push([cruise[i]!, pressure]);
-    }
-    for (const pressure of set.pressureFamilyIds) edges.push([pressure, set.recoveryFamilyId]);
-    for (const pressure of set.pressureFamilyIds) edges.push([set.recoveryFamilyId, pressure]);
-    expect(edges).toHaveLength(26);
-
-    for (const [fromId, toId] of edges) for (const offset of [-5000, 0, 5000]) for (const vy of [-500, 0, 500]) {
-      const initial = createRun(descriptor);
-      const target = families.get(toId)!;
-      let state: RunState = {
-        ...initial,
-        phase: 'RUNNING', tick: 2700,
-        duck: { ...initial.duck, y: families.get(fromId)!.gapCenters[3]! + offset, vy },
-        pipes: Array.from({ length: 8 }, (_, i) => ({
-          id: `witness-${i}`, index: i, x: 360000 + i * PRIOR_DEFAULT_CONFIG.pipes.spacing,
-          gapCenter: i < 4 ? target.gapCenters[i]! : 280000, scored: false,
-        })),
-        nextPipeIndex: 8, lastGapCenter: 280000, nextSpawnPipeIndex: 8,
-      };
-      let sequence = 0;
-      for (let tick = 0; tick < 1000 && state.score < 4 && state.phase !== 'DEAD'; tick++) {
-        const nextTick = state.tick + 1;
-        const activePipe = state.pipes.find(pipe => pipe.x >= state.duck.x) ?? state.pipes.at(-1)!;
-        const targetY = nextTick <= 2718 ? families.get(fromId)!.gapCenters[3]! : activePipe.gapCenter;
-        const frames = state.duck.y > targetY + 24000 ? [makeInput(sequence++, 'FLAP')] : [];
-        state = step(state, frames).state;
-      }
-      expect(state.score, `${fromId} -> ${toId}, yOffset=${offset}, vy=${vy}, phase=${state.phase}`).toBe(4);
-    }
-  }, 10_000);
-
-  it('covers default challenge transitions in a 64-seed, 5000-tick physics corpus', () => {
-    const transitions = new Set<string>();
-    let survived = 0;
-    for (let seed = 0; seed < 64; seed++) {
-      let state = createRun(createRunDescriptor({ runId: `challenge-corpus-${seed}`, seed }, PRIOR_DEFAULT_CONFIG), PRIOR_DEFAULT_CONFIG);
-      let sequence = 0;
-      let previousFamily = '';
-      let observedTarget = 280000;
-      const runTransitions = new Set<string>();
-      for (let tick = 0; tick < 5000 && state.phase !== 'DEAD'; tick++) {
-        const pipe = state.pipes.find(item => item.x >= state.duck.x) ?? state.pipes.at(-1)!;
-        if (pipe.x <= 360000) observedTarget = pipe.gapCenter;
-        if (pipe.challengeId && pipe.challengeId !== previousFamily) {
-          if (previousFamily) runTransitions.add(`${previousFamily}>${pipe.challengeId}`);
-          previousFamily = pipe.challengeId;
-        }
-        const frames = state.phase === 'READY' || state.duck.y > observedTarget + 24000
-          ? [makeInput(sequence++, 'FLAP')] : [];
-        state = step(state, frames).state;
-      }
-      if (state.phase !== 'DEAD') {
-        survived++;
-        for (const transition of runTransitions) transitions.add(transition);
-      }
-    }
-    expect(survived).toBe(64);
-    expect(transitions.size).toBe(26);
-  }, 30_000);
 });

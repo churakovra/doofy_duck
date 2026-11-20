@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-import base64
-import binascii
-import json
 import logging
 import uuid
 from datetime import datetime
@@ -13,6 +10,7 @@ from sqlalchemy import literal, select, tuple_
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from app.cursors import decode_timestamp_cursor, encode_cursor
 from app.dependencies import current_claims, get_economy_db, get_platform_db
 from app.economy.models import CompletionEvidence, CompletionSettlement
 from app.economy.wallet.models import Wallet, WalletCurrency, WalletLedgerEntry
@@ -31,33 +29,16 @@ from app.tokens import TokenClaims
 logger = logging.getLogger("doofy.platform")
 
 
-def _encode_wallet_cursor(created_at: datetime, entry_id: uuid.UUID) -> str:
-    payload = json.dumps(
-        {"created_at": created_at.isoformat(), "entry_id": str(entry_id)}, sort_keys=True, separators=(",", ":")
-    ).encode()
-    return base64.urlsafe_b64encode(payload).rstrip(b"=").decode("ascii")
-
-
-def _decode_wallet_cursor(value: str) -> tuple[datetime, uuid.UUID]:
-    if not value or len(value) > 512:
-        raise ValueError("invalid cursor")
-    try:
-        payload = json.loads(base64.b64decode(value + "=" * (-len(value) % 4), altchars=b"-_", validate=True))
-        if not isinstance(payload, dict):
-            raise ValueError("invalid cursor")
-        if not isinstance(payload.get("created_at"), str) or not isinstance(payload.get("entry_id"), str):
-            raise ValueError("invalid cursor")
-        created_at = datetime.fromisoformat(payload["created_at"])
-        entry_id = uuid.UUID(payload["entry_id"])
-    except (KeyError, TypeError, ValueError, UnicodeDecodeError, binascii.Error) as error:
-        raise ValueError("invalid cursor") from error
-    if created_at.tzinfo is None or created_at.utcoffset() is None:
-        raise ValueError("invalid cursor")
-    return created_at, entry_id
-
-
 def create_router(config: Settings) -> APIRouter:
     router = APIRouter()
+
+    def pending_reason(completed_at: datetime, default: str) -> str:
+        if not config.economy_settlement_enabled:
+            return "settlement_disabled"
+        cutoff = config.economy_settlement_activated_at
+        if cutoff is not None and completed_at < cutoff:
+            return "historical_backfill_required"
+        return default
 
     @router.get("/api/v1/account", response_model=AccountResponse)
     def own_account(
@@ -106,7 +87,7 @@ def create_router(config: Settings) -> APIRouter:
         )
         if cursor is not None:
             try:
-                created_at, entry_id = _decode_wallet_cursor(cursor)
+                created_at, entry_id = decode_timestamp_cursor(cursor, "entry_id", strict_fields=False)
             except ValueError:
                 raise HTTPException(
                     status_code=400, detail={"code": "invalid_cursor", "message": "cursor is invalid"}
@@ -126,7 +107,6 @@ def create_router(config: Settings) -> APIRouter:
             raise HTTPException(
                 status_code=503, detail={"code": "wallet_unavailable", "message": "wallet is unavailable"}
             ) from None
-        has_more = len(rows) > limit
         visible = rows[:limit]
         entries = [
             WalletEntryResponse(
@@ -142,7 +122,11 @@ def create_router(config: Settings) -> APIRouter:
             )
             for row in visible
         ]
-        next_cursor = _encode_wallet_cursor(visible[-1].created_at, visible[-1].id) if has_more and visible else None
+        next_cursor = (
+            encode_cursor(created_at=visible[-1].created_at.isoformat(), entry_id=str(visible[-1].id))
+            if len(rows) > limit
+            else None
+        )
         return WalletHistoryResponse(entries=entries, next_cursor=next_cursor)
 
     @router.get(
@@ -180,35 +164,25 @@ def create_router(config: Settings) -> APIRouter:
         evidence, settlement = result
         if settlement is None:
             completed_at = datetime.fromisoformat(str(evidence.payload["completed_at"]).replace("Z", "+00:00"))
-            reason = "settlement_not_queued"
-            cutoff = config.economy_settlement_activated_at
-            if not config.economy_settlement_enabled:
-                reason = "settlement_disabled"
-            elif cutoff is not None and completed_at < cutoff:
-                reason = "historical_backfill_required"
             return CompletionSettlementResponse(
                 event_id=evidence.event_id,
                 run_id=evidence.run_id,
                 life_index=evidence.life_index,
                 status="pending",
-                reason=reason,
+                reason=pending_reason(completed_at, "settlement_not_queued"),
                 policy_version=None,
                 credited={"FEATHER": "0", "GAME_STAR": "0"},
                 completed_at=completed_at,
             )
-        effective_reason = settlement.reason
+        reason = settlement.reason
         if settlement.status == "pending":
-            cutoff = config.economy_settlement_activated_at
-            if not config.economy_settlement_enabled:
-                effective_reason = "settlement_disabled"
-            elif cutoff is not None and settlement.completed_at < cutoff:
-                effective_reason = "historical_backfill_required"
+            reason = pending_reason(settlement.completed_at, reason)
         return CompletionSettlementResponse(
             event_id=evidence.event_id,
             run_id=evidence.run_id,
             life_index=evidence.life_index,
             status=settlement.status,
-            reason=effective_reason,
+            reason=reason,
             policy_version=settlement.policy_version,
             credited={
                 "FEATHER": str(settlement.feathers_credited),

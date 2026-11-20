@@ -17,7 +17,8 @@ make run
 ```
 
 Open http://127.0.0.1:4173/. Local startup creates or preserves `.env.dev`, starts
-PostgreSQL and the backend, and connects a development Telegram identity. Ctrl-C
+PostgreSQL and the backend, and connects a development Telegram identity. Vite
+serves the game and proxies API requests through the local gateway. Ctrl-C
 stops Vite; `make stop` stops the containers without deleting database data.
 `make status` and `make logs SERVICE=platform` inspect the stack. Use
 `make run DEV_USER_ID=123456` for another local identity.
@@ -30,18 +31,20 @@ activation is separate. Internal coins and game Stars are not Telegram Stars.
 ## Checks
 
 ```sh
+npm test                         # fast unit and replay tests
 npm run check                    # types, lint, tests and build
 npm run check:backend            # Python and TypeScript backend checks
 npm run check:backend:smoke      # cross-service smoke, after local startup
 npm run check:backend:integration # requires dedicated PostgreSQL test databases
 ```
 
+The smoke check verifies one completed flight against the running local stack
+with settlement enabled.
+
 Integration checks require `PLATFORM_TEST_DATABASE_URL`, `ECONOMY_TEST_DATABASE_URL`
 and `CORE_TEST_DATABASE_URL` pointing to dedicated test databases. Unit checks
-skip database-dependent tests when their URLs are absent. Browser checks are
-optional: install Chromium with `npx playwright install chromium`, then run
-`npm run check:browser`. See [backend operations](docs/BACKEND_OPERATIONS.md)
-for configuration and recovery.
+skip database-dependent tests when their URLs are absent. See
+[backend operations](docs/BACKEND_OPERATIONS.md) for configuration and recovery.
 
 ## Repository
 

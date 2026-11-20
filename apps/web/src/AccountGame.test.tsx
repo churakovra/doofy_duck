@@ -14,9 +14,9 @@ import { messages as messagesRu } from './messages.ru';
 
 const harness = vi.hoisted(() => ({
   restore: vi.fn(), loadTelegramWebApp: vi.fn(), currentRun: vi.fn(), latestRun: vi.fn(), createRun: vi.fn(), getRun: vi.fn(), submitCheckpoint: vi.fn(),
-  takeover: vi.fn(), abandon: vi.fn(), login: vi.fn(), loginDev: vi.fn(), logout: vi.fn(), progress: vi.fn(),
+  takeover: vi.fn(), abandon: vi.fn(), login: vi.fn(), loginDev: vi.fn(), progress: vi.fn(),
   shopEquipment: vi.fn(), walletBalances: vi.fn(), completion: vi.fn(),
-  clearAccount: vi.fn(),
+  unlockAudio: vi.fn(), startFlight: vi.fn(), rendererReady: true,
   gameAppearance: null as unknown,
   canvasReady: null as null | ((error?: 'graphicsStartupError' | 'flightStoppedGraphicsError') => void),
   onRunEnded: null as null | (() => void),
@@ -42,7 +42,6 @@ vi.mock('./account-api', () => ({
     abandon = harness.abandon;
     login = harness.login;
     loginDev = harness.loginDev;
-    logout = harness.logout;
     progress = harness.progress;
     shopEquipment = harness.shopEquipment;
     walletBalances = harness.walletBalances;
@@ -64,7 +63,6 @@ vi.mock('./account-trace', async () => {
         harness.traceRecords.set(`${trace.accountId}:${trace.runId}`, trace);
       }),
       remove: async (accountId: string, runId: string) => { harness.traceRecords.delete(`${accountId}:${runId}`); },
-      clearAccount: harness.clearAccount,
     }),
   };
 });
@@ -75,9 +73,8 @@ vi.mock('./GameSettings', () => ({ GameSettings: (props: { open?: boolean; onOpe
   {props.open && <div role="dialog"><button data-testid="switch-locale" onClick={() => props.setLocale('en')}>English</button></div>}
 </> }));
 vi.mock('./AccountShop', () => ({ AccountShop: (props: { open?: boolean; onOpenChange?(open: boolean): void }) => <button className="account-shop-trigger" onClick={() => props.onOpenChange?.(!props.open)}>Shop</button> }));
-vi.mock('./GameWardrobe', () => ({ GameWardrobe: () => null }));
 vi.mock('./useGameAudio', () => ({ useGameAudio: () => ({
-  unlockFromGesture: vi.fn(), flap: vi.fn(), pickup: vi.fn(), setPhase: vi.fn(),
+  unlockFromGesture: harness.unlockAudio, flap: vi.fn(), pickup: vi.fn(), setPhase: vi.fn(),
   preferences: { sound: true, music: true }, toggle: vi.fn(),
 }) }));
 vi.mock('./useGameRun', () => ({ useGameRun: (canPlay: () => boolean, callbacks: { onRunEnded(): void }, options: typeof harness.runOptions) => {
@@ -85,9 +82,9 @@ vi.mock('./useGameRun', () => ({ useGameRun: (canPlay: () => boolean, callbacks:
   harness.runCanPlay = canPlay;
   harness.runOptions = options;
   return {
-    phase: harness.runPhase, score: harness.runScore, runtimeError: harness.runRuntimeError, rendererReady: true, flightCapReached: false,
+    phase: harness.runPhase, score: harness.runScore, runtimeError: harness.runRuntimeError, rendererReady: harness.rendererReady, flightCapReached: false,
     getState: () => ({ phase: harness.runPhase, tick: 1, totals: {} }), getFeedback: () => ({}),
-    acceptRenderer: vi.fn(), start: vi.fn(), pause: vi.fn(), restart: vi.fn(),
+    acceptRenderer: vi.fn(), start: harness.startFlight,
     onFieldPointerDown: vi.fn(), onFieldPointerUp: vi.fn(),
   };
 } }));
@@ -111,17 +108,14 @@ beforeEach(async () => {
   localStorage.clear();
   harness.traceRecords.clear(); harness.runPhase = 'READY'; harness.runOptions = null; harness.runCanPlay = null; harness.runScore = 0; harness.runRuntimeError = ''; harness.canvasReady = null;
   harness.restore.mockResolvedValue(account);
-  harness.restore.mockClear(); harness.login.mockClear(); harness.loginDev.mockClear(); harness.logout.mockClear(); harness.loadTelegramWebApp.mockClear();
+  harness.restore.mockClear(); harness.login.mockClear(); harness.loginDev.mockClear(); harness.loadTelegramWebApp.mockClear();
   harness.loginDev.mockResolvedValue(account);
   harness.loadTelegramWebApp.mockResolvedValue({ initData: '', ready: vi.fn() });
   harness.progress.mockResolvedValue({ bestScore: 0 });
   harness.shopEquipment.mockResolvedValue({ equipment: [{ item_type: 'skin', item_id: 'classic', revision: 1 }, { item_type: 'background', item_id: 'meadow', revision: 1 }] });
   harness.walletBalances.mockReset().mockResolvedValue({ balances: [{ currency: 'FEATHER', balance: '0' }, { currency: 'GAME_STAR', balance: '0' }] });
   harness.completion.mockResolvedValue({ status: 'pending', reason: 'settlement_disabled', credited: { FEATHER: '0', GAME_STAR: '0' } });
-  harness.clearAccount.mockImplementation(async (accountId: string) => {
-    for (const key of harness.traceRecords.keys()) if (key.startsWith(`${accountId}:`)) harness.traceRecords.delete(key);
-  });
-  harness.logout.mockResolvedValue(undefined);
+  harness.rendererReady = true;
   harness.currentRun.mockResolvedValue(undefined);
   harness.latestRun.mockResolvedValue(undefined);
   harness.createRun.mockResolvedValue(runSnapshot());
@@ -156,6 +150,39 @@ describe('account run transport', () => {
       descriptor: { simulationVersion: '3.3.0', generatorVersion: '3.3.0', configId: 'dd-v3-random-pipes-v1' },
       config: { wetland: { catalogVersion: 14 } },
     });
+  });
+
+  it('carries the Start gesture through issuance until the flight renderer is ready', async () => {
+    harness.rendererReady = false;
+    await act(async () => { host.querySelector<HTMLButtonElement>('.account-panel .primary-button')?.click(); });
+    expect(harness.unlockAudio).toHaveBeenCalledTimes(1);
+    expect(harness.startFlight).not.toHaveBeenCalled();
+
+    harness.rendererReady = true;
+    await act(async () => { root.render(<LocaleProvider><AccountGame /></LocaleProvider>); });
+    expect(harness.startFlight).toHaveBeenCalledTimes(1);
+    await act(async () => { root.render(<LocaleProvider><AccountGame /></LocaleProvider>); });
+    expect(harness.startFlight).toHaveBeenCalledTimes(1);
+  });
+
+  it('requires an explicit Start after visibility is lost while issuing a run', async () => {
+    let issueRun!: (snapshot: ReturnType<typeof runSnapshot>) => void;
+    harness.createRun.mockImplementationOnce(() => new Promise(resolve => { issueRun = resolve; }));
+    act(() => { host.querySelector<HTMLButtonElement>('.account-panel .primary-button')?.click(); });
+    const hidden = vi.spyOn(document, 'hidden', 'get');
+    try {
+      hidden.mockReturnValue(true);
+      document.dispatchEvent(new Event('visibilitychange'));
+      hidden.mockReturnValue(false);
+      document.dispatchEvent(new Event('visibilitychange'));
+      await act(async () => { issueRun(runSnapshot()); });
+      expect(harness.startFlight).not.toHaveBeenCalled();
+
+      act(() => { host.querySelector<HTMLButtonElement>('.account-panel .primary-button')?.click(); });
+      expect(harness.startFlight).toHaveBeenCalledTimes(1);
+    } finally {
+      hidden.mockRestore();
+    }
   });
 
   it('returns to the main screen on death while preserving the final checkpoint until acknowledgement', async () => {
@@ -660,7 +687,6 @@ describe('account run transport', () => {
   it('never renders account logout or identity selection controls', async () => {
     expect(host.querySelector('input')).toBeNull();
     expect([...host.querySelectorAll('button')].some((button) => /sign in|войти|выйти|telegram/i.test(button.textContent ?? ''))).toBe(false);
-    expect(harness.logout).not.toHaveBeenCalled();
   });
 
   it('does not apply a latest result from an earlier Telegram launch', async () => {

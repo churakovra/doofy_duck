@@ -91,28 +91,6 @@ describe('account replay trace', () => {
     }
   });
 
-  it('rebuilds pending checkpoints after another storage instance clears the account', async () => {
-    vi.stubGlobal('IDBKeyRange', { bound: (lower: string, upper: string) => ({ lower, upper }) });
-    try {
-      const database = new TraceDatabaseFixture();
-      const storageA = new IndexedDbTraceStorage(Promise.resolve(database.asDatabase()));
-      const storageB = new IndexedDbTraceStorage(Promise.resolve(database.asDatabase()));
-      let trace = newTrace();
-      for (let index = 0; index < 120; index++) trace = appendTraceTick(trace, []);
-      await storageA.save(trace);
-
-      await storageB.clearAccount('account-a');
-      trace = appendTraceTick(trace, []);
-      await storageA.save(trace);
-
-      const reloaded = await new IndexedDbTraceStorage(Promise.resolve(database.asDatabase())).load('account-a', 'run-a');
-      expect(reloaded?.pending).toEqual(trace.pending);
-      expect(reloaded?.unsentTicks).toEqual(trace.unsentTicks);
-    } finally {
-      vi.unstubAllGlobals();
-    }
-  });
-
   it('rebuilds pending checkpoints after another storage instance removes the run', async () => {
     vi.stubGlobal('IDBKeyRange', { bound: (lower: string, upper: string) => ({ lower, upper }) });
     try {

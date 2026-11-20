@@ -22,7 +22,6 @@ export interface TraceStorage {
   load(accountId: string, runId: string): Promise<AccountTrace | undefined>;
   save(trace: AccountTrace): Promise<void>;
   remove(accountId: string, runId: string, writerGeneration?: number): Promise<void>;
-  clearAccount(accountId: string): Promise<void>;
 }
 
 const DB_NAME = 'doofy-duck-account-traces';
@@ -37,10 +36,6 @@ function checkpointKeyRange(key: string): IDBKeyRange {
   return IDBKeyRange.bound(prefix, `${prefix}\uffff`);
 }
 
-function accountKeyRange(accountId: string): IDBKeyRange {
-  const prefix = `${accountId}:`;
-  return IDBKeyRange.bound(prefix, `${prefix}\uffff`);
-}
 
 export function isValidStoredTrace(value: unknown, accountId: string, runId: string): value is AccountTrace {
   if (!value || typeof value !== 'object') return false;
@@ -133,9 +128,6 @@ export class MemoryTraceStorage implements TraceStorage {
     const current = this.traces.get(key);
     if (writerGeneration !== undefined && current?.writerGeneration !== writerGeneration) return;
     this.traces.delete(key);
-  }
-  async clearAccount(accountId: string) {
-    for (const [key, trace] of this.traces) if (trace.accountId === accountId) this.traces.delete(key);
   }
 }
 
@@ -261,22 +253,6 @@ export class IndexedDbTraceStorage implements TraceStorage {
     } catch {
       this.failed = true;
       await this.memory.remove(accountId, runId);
-    }
-  }
-
-  async clearAccount(accountId: string): Promise<void> {
-    if (this.failed) return this.memory.clearAccount(accountId);
-    try {
-      const db = await this.database;
-      const keys = await idbRequest(db.transaction(STORE_NAME, 'readonly').objectStore(STORE_NAME).getAllKeys(accountKeyRange(accountId))) as IDBValidKey[];
-      const transaction = db.transaction(STORE_NAME, 'readwrite');
-      const store = transaction.objectStore(STORE_NAME);
-      for (const key of keys) if (typeof key === 'string') store.delete(key);
-      await transactionDone(transaction);
-      for (const key of this.knownPending.keys()) if (key.startsWith(`${accountId}:`)) this.knownPending.delete(key);
-    } catch {
-      this.failed = true;
-      await this.memory.clearAccount(accountId);
     }
   }
 }

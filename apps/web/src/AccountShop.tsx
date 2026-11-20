@@ -1,13 +1,12 @@
 import { createPortal } from 'react-dom';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { AccountApi, AccountApiError } from './account-api';
-import { accountShopAppearance } from './account-shop-assets';
+import { accountShopAppearance, type Equipment } from './account-shop-assets';
 import { createPurchaseRecovery, formatDecimalBalance, isValidShopQuote, parseWalletBalances, type PurchaseIntent, type ShopCatalog, type ShopCatalogItem, type ShopCurrency, type ShopItemType, type ShopQuote, type WalletBalances } from './account-shop';
 import { GameButton } from './GameButton';
 import { GameWardrobePreview } from './GameWardrobePreview';
 import type { Locale } from './locale';
 import type { MessageCatalog } from './messages.ru';
-import type { Equipment } from './wardrobe';
 import { useDialogKeyboard } from './useDialogKeyboard';
 
 type Props = {
@@ -280,7 +279,7 @@ export function AccountShop({ api, accountId, sessionEpoch, locale, messages, po
     <GameButton ref={triggerRef} variant="control" className="account-shop-trigger" aria-haspopup="dialog" aria-expanded={open} onClick={() => open ? close() : onOpenChange(true)}>{messages.accountShopLabel}</GameButton>
     {open && portalContainer.current && createPortal(<div className="settings-backdrop account-shop-backdrop" onPointerDown={(event) => event.stopPropagation()}>
       <section ref={dialogRef} className="settings-dialog account-shop-dialog" role="dialog" aria-modal="true" aria-labelledby="account-shop-heading" tabIndex={-1}>
-        <header className="settings-dialog-header"><h2 id="account-shop-heading">{messages.accountShopHeading}</h2><GameButton variant="control" className="settings-close" data-dialog-initial-focus aria-label={messages.wardrobeCloseLabel} onClick={close}>×</GameButton></header>
+        <header className="settings-dialog-header"><h2 id="account-shop-heading">{messages.accountShopHeading}</h2><GameButton variant="control" className="settings-close" data-dialog-initial-focus aria-label={messages.closeDialogLabel} onClick={close}>×</GameButton></header>
         <div className="account-shop-wallet" aria-label={messages.accountShopWallet}>
           <p><span>{messages.accountShopCurrencyFeather}</span><strong>{wallet ? balance('FEATHER') : '—'}</strong></p>
           <p><span>{messages.accountShopStarField}</span><strong>{wallet ? balance('GAME_STAR') : '—'}</strong></p>

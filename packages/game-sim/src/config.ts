@@ -1,5 +1,6 @@
 import { deepFreeze } from "./internal.js";
-import { CURVED_PIPES_CONFIG_ID, CURVED_PIPES_GENERATOR_VERSION, CURVED_PIPES_SIMULATION_VERSION, VARIED_BASE_CONFIG_ID, VARIED_BASE_GENERATOR_VERSION, VARIED_BASE_SIMULATION_VERSION, BONUS_SEGMENTS_CONFIG_ID, BONUS_SEGMENTS_GENERATOR_VERSION, BONUS_SEGMENTS_SIMULATION_VERSION, BONUS_SEGMENTS_V2_CONFIG_ID, BONUS_SEGMENTS_V2_GENERATOR_VERSION, BONUS_SEGMENTS_V2_SIMULATION_VERSION, DEFAULT_CONFIG_ID, GENERATOR_VERSION, SIMULATION_VERSION, BASE_BONUS_CONFIG_ID, BASE_BONUS_GENERATOR_VERSION, BASE_BONUS_SIMULATION_VERSION, DENSE_PIPES_CONFIG_ID, DENSE_PIPES_GENERATOR_VERSION, DENSE_PIPES_SIMULATION_VERSION, PRESSURE_PIPES_CONFIG_ID, PRESSURE_PIPES_GENERATOR_VERSION, PRESSURE_PIPES_SIMULATION_VERSION, VARIED_PIPES_CONFIG_ID, VARIED_PIPES_GENERATOR_VERSION, VARIED_PIPES_SIMULATION_VERSION, COIN_COURSE_CONFIG_ID, COIN_COURSE_GENERATOR_VERSION, COIN_COURSE_SIMULATION_VERSION, CURRENCY_FORMATIONS_CONFIG_ID, CURRENCY_FORMATIONS_GENERATOR_VERSION, CURRENCY_FORMATIONS_SIMULATION_VERSION, PAIRED_ROUTES_CONFIG_ID, PAIRED_ROUTES_GENERATOR_VERSION, PAIRED_ROUTES_SIMULATION_VERSION, LEGACY_DEFAULT_CONFIG_ID, LEGACY_GENERATOR_VERSION, LEGACY_SIMULATION_VERSION, PRIOR_DEFAULT_CONFIG_ID, PRIOR_GENERATOR_VERSION, PRIOR_SIMULATION_VERSION, VARIED_OBSTACLE_DEFAULT_CONFIG_ID, VARIED_OBSTACLE_GENERATOR_VERSION, VARIED_OBSTACLE_SIMULATION_VERSION, WETLAND_DEFAULT_CONFIG_ID, WETLAND_GENERATOR_VERSION, WETLAND_SIMULATION_VERSION, type FlightConfig, type GameConfig, type GapPattern, type PipeConfig, type RunDescriptor } from "./types.js";
+import * as versions from "./types.js";
+import type { FlightConfig, GameConfig, GapPattern, PipeConfig, RunDescriptor } from "./types.js";
 
 export const PATTERN_CATALOG: readonly GapPattern[] = deepFreeze([
   { id: "center", gaps: [280000, 280000, 280000, 280000] },
@@ -196,6 +197,86 @@ export const DEFAULT_CONFIG: GameConfig = deepFreeze({
   pipes: { ...CURVED_PIPES_DEFAULT_CONFIG.pipes, gapMinCenter: 110_000, gapMaxCenter: 450_000, maxGapDelta: 140_000 },
   wetland: { ...CURVED_PIPES_DEFAULT_CONFIG.wetland!, catalogVersion: 14 },
 });
+interface Ruleset {
+  readonly config: GameConfig;
+  readonly configId: string;
+  readonly simulationVersion: string;
+  readonly generatorVersion: string;
+  readonly catalogVersionError: string | undefined;
+}
+
+function ruleset(
+  config: GameConfig,
+  configId: string,
+  simulationVersion: string,
+  generatorVersion: string,
+  catalogVersionError?: string,
+): Ruleset {
+  return { config, configId, simulationVersion, generatorVersion, catalogVersionError };
+}
+
+// This order preserves the precedence of canonical preset IDs.
+export const BUILTIN_RULESETS: readonly Ruleset[] = [
+  ruleset(COIN_COURSE_DEFAULT_CONFIG, versions.COIN_COURSE_CONFIG_ID,
+    versions.COIN_COURSE_SIMULATION_VERSION, versions.COIN_COURSE_GENERATOR_VERSION,
+    "catalog-5 wetland config requires the coin-course simulation and generator versions"),
+  ruleset(CURRENCY_FORMATIONS_DEFAULT_CONFIG, versions.CURRENCY_FORMATIONS_CONFIG_ID,
+    versions.CURRENCY_FORMATIONS_SIMULATION_VERSION, versions.CURRENCY_FORMATIONS_GENERATOR_VERSION,
+    "catalog-4 wetland config requires the currency-formation simulation and generator versions"),
+  ruleset(BONUS_SEGMENTS_DEFAULT_CONFIG, versions.BONUS_SEGMENTS_CONFIG_ID,
+    versions.BONUS_SEGMENTS_SIMULATION_VERSION, versions.BONUS_SEGMENTS_GENERATOR_VERSION,
+    "catalog-6 wetland config requires the bonus-segments simulation and generator versions"),
+  ruleset(BONUS_SEGMENTS_V2_DEFAULT_CONFIG, versions.BONUS_SEGMENTS_V2_CONFIG_ID,
+    versions.BONUS_SEGMENTS_V2_SIMULATION_VERSION, versions.BONUS_SEGMENTS_V2_GENERATOR_VERSION,
+    "catalog-7 wetland config requires the bonus-segments-v2 simulation and generator versions"),
+  ruleset(VARIED_PIPES_DEFAULT_CONFIG, versions.VARIED_PIPES_CONFIG_ID,
+    versions.VARIED_PIPES_SIMULATION_VERSION, versions.VARIED_PIPES_GENERATOR_VERSION,
+    "catalog-8 wetland config requires varied-pipes versions"),
+  ruleset(PRESSURE_PIPES_DEFAULT_CONFIG, versions.PRESSURE_PIPES_CONFIG_ID,
+    versions.PRESSURE_PIPES_SIMULATION_VERSION, versions.PRESSURE_PIPES_GENERATOR_VERSION,
+    "catalog-9 wetland config requires pressure-pipes versions"),
+  ruleset(DENSE_PIPES_DEFAULT_CONFIG, versions.DENSE_PIPES_CONFIG_ID,
+    versions.DENSE_PIPES_SIMULATION_VERSION, versions.DENSE_PIPES_GENERATOR_VERSION,
+    "catalog-10 wetland config requires dense-pipes versions"),
+  ruleset(BASE_BONUS_DEFAULT_CONFIG, versions.BASE_BONUS_CONFIG_ID,
+    versions.BASE_BONUS_SIMULATION_VERSION, versions.BASE_BONUS_GENERATOR_VERSION,
+    "catalog-11 wetland config requires base-bonus versions"),
+  ruleset(VARIED_BASE_DEFAULT_CONFIG, versions.VARIED_BASE_CONFIG_ID,
+    versions.VARIED_BASE_SIMULATION_VERSION, versions.VARIED_BASE_GENERATOR_VERSION,
+    "catalog-12 wetland config requires varied-base versions"),
+  ruleset(CURVED_PIPES_DEFAULT_CONFIG, versions.CURVED_PIPES_CONFIG_ID,
+    versions.CURVED_PIPES_SIMULATION_VERSION, versions.CURVED_PIPES_GENERATOR_VERSION,
+    "catalog-13 requires curved-pipes versions"),
+  ruleset(DEFAULT_CONFIG, versions.DEFAULT_CONFIG_ID,
+    versions.SIMULATION_VERSION, versions.GENERATOR_VERSION,
+    "catalog-14 requires random-pipes versions"),
+  ruleset(PAIRED_ROUTES_DEFAULT_CONFIG, versions.PAIRED_ROUTES_CONFIG_ID,
+    versions.PAIRED_ROUTES_SIMULATION_VERSION, versions.PAIRED_ROUTES_GENERATOR_VERSION,
+    "catalog-3 wetland config requires the current simulation and generator versions"),
+  ruleset(VARIED_OBSTACLE_DEFAULT_CONFIG, versions.VARIED_OBSTACLE_DEFAULT_CONFIG_ID,
+    versions.VARIED_OBSTACLE_SIMULATION_VERSION, versions.VARIED_OBSTACLE_GENERATOR_VERSION,
+    "catalog-2 wetland config requires the frozen varied-obstacle simulation and generator versions"),
+  ruleset(PRIOR_DEFAULT_CONFIG, versions.PRIOR_DEFAULT_CONFIG_ID,
+    versions.PRIOR_SIMULATION_VERSION, versions.PRIOR_GENERATOR_VERSION),
+  ruleset(LEGACY_DEFAULT_CONFIG, versions.LEGACY_DEFAULT_CONFIG_ID,
+    versions.LEGACY_SIMULATION_VERSION, versions.LEGACY_GENERATOR_VERSION),
+  ruleset(WETLAND_DEFAULT_CONFIG, versions.WETLAND_DEFAULT_CONFIG_ID,
+    versions.WETLAND_SIMULATION_VERSION, versions.WETLAND_GENERATOR_VERSION),
+];
+
+export const CUSTOM_CONFIG_PREFIX = "dd-v1-config:";
+
+export function matchesRuleset(descriptor: RunDescriptor, ruleset: Ruleset): boolean {
+  return descriptor.simulationVersion === ruleset.simulationVersion &&
+    descriptor.generatorVersion === ruleset.generatorVersion;
+}
+
+export function rulesetForWetlandCatalog(catalogVersion: number | undefined): Ruleset | undefined {
+  // Catalog 1 historically binds its versions only for the built-in preset.
+  if (catalogVersion === undefined || catalogVersion === 1) return undefined;
+  return BUILTIN_RULESETS.find(({ config }) => config.wetland?.catalogVersion === catalogVersion);
+}
+
 const integer = (v: unknown): v is number => Number.isSafeInteger(v);
 function variedRecoveryCentersValid(p: PipeConfig): boolean {
   const offset = p.gapMinCenter - 78_000;
@@ -495,29 +576,6 @@ export function validateConfig(c: GameConfig): GameConfig {
   return c;
 }
 export function validateDescriptor(d: RunDescriptor): RunDescriptor {
-  const supportedRules =
-    (d?.simulationVersion === CURVED_PIPES_SIMULATION_VERSION && d?.generatorVersion === CURVED_PIPES_GENERATOR_VERSION) ||
-    (d?.simulationVersion === BASE_BONUS_SIMULATION_VERSION && d?.generatorVersion === BASE_BONUS_GENERATOR_VERSION) ||
-    (d?.simulationVersion === DENSE_PIPES_SIMULATION_VERSION && d?.generatorVersion === DENSE_PIPES_GENERATOR_VERSION) ||
-    (d?.simulationVersion === PRESSURE_PIPES_SIMULATION_VERSION && d?.generatorVersion === PRESSURE_PIPES_GENERATOR_VERSION) ||
-    (d?.simulationVersion === VARIED_PIPES_SIMULATION_VERSION && d?.generatorVersion === VARIED_PIPES_GENERATOR_VERSION) ||
-    (d?.simulationVersion === VARIED_BASE_SIMULATION_VERSION && d?.generatorVersion === VARIED_BASE_GENERATOR_VERSION) ||
-    (d?.simulationVersion === SIMULATION_VERSION && d?.generatorVersion === GENERATOR_VERSION) ||
-    (d?.simulationVersion === CURRENCY_FORMATIONS_SIMULATION_VERSION && d?.generatorVersion === CURRENCY_FORMATIONS_GENERATOR_VERSION) ||
-    (d?.simulationVersion === COIN_COURSE_SIMULATION_VERSION && d?.generatorVersion === COIN_COURSE_GENERATOR_VERSION) ||
-    (d?.simulationVersion === BONUS_SEGMENTS_SIMULATION_VERSION && d?.generatorVersion === BONUS_SEGMENTS_GENERATOR_VERSION) ||
-    (d?.simulationVersion === BONUS_SEGMENTS_V2_SIMULATION_VERSION && d?.generatorVersion === BONUS_SEGMENTS_V2_GENERATOR_VERSION) ||
-    (d?.simulationVersion === PAIRED_ROUTES_SIMULATION_VERSION && d?.generatorVersion === PAIRED_ROUTES_GENERATOR_VERSION) ||
-    (d?.simulationVersion === VARIED_OBSTACLE_SIMULATION_VERSION && d?.generatorVersion === VARIED_OBSTACLE_GENERATOR_VERSION) ||
-    (d?.simulationVersion === PRIOR_SIMULATION_VERSION && d?.generatorVersion === PRIOR_GENERATOR_VERSION) ||
-    (d?.simulationVersion === LEGACY_SIMULATION_VERSION && d?.generatorVersion === LEGACY_GENERATOR_VERSION) ||
-    (d?.simulationVersion === WETLAND_SIMULATION_VERSION && d?.generatorVersion === WETLAND_GENERATOR_VERSION);
-  const supportedConfig = d?.configId === CURVED_PIPES_CONFIG_ID || d?.configId === VARIED_BASE_CONFIG_ID || d?.configId === BASE_BONUS_CONFIG_ID || d?.configId === DENSE_PIPES_CONFIG_ID || d?.configId === PRESSURE_PIPES_CONFIG_ID || d?.configId === VARIED_PIPES_CONFIG_ID || d?.configId === DEFAULT_CONFIG_ID || d?.configId === BONUS_SEGMENTS_V2_CONFIG_ID || d?.configId === BONUS_SEGMENTS_CONFIG_ID || d?.configId === COIN_COURSE_CONFIG_ID || d?.configId === CURRENCY_FORMATIONS_CONFIG_ID || d?.configId === PAIRED_ROUTES_CONFIG_ID ||
-    d?.configId === VARIED_OBSTACLE_DEFAULT_CONFIG_ID ||
-    d?.configId === PRIOR_DEFAULT_CONFIG_ID ||
-    d?.configId === WETLAND_DEFAULT_CONFIG_ID ||
-    d?.configId === LEGACY_DEFAULT_CONFIG_ID ||
-    (typeof d?.configId === "string" && d.configId.startsWith("dd-v1-config:") && d.configId.length > "dd-v1-config:".length);
   if (
     !d ||
     typeof d.runId !== "string" ||
@@ -525,24 +583,10 @@ export function validateDescriptor(d: RunDescriptor): RunDescriptor {
     !integer(d.seed) ||
     d.seed < 0 ||
     d.seed > 0xffffffff ||
-    !supportedRules ||
-    !supportedConfig ||
-    (d.configId === CURRENCY_FORMATIONS_CONFIG_ID && d.simulationVersion !== CURRENCY_FORMATIONS_SIMULATION_VERSION) ||
-    (d.configId === COIN_COURSE_CONFIG_ID && d.simulationVersion !== COIN_COURSE_SIMULATION_VERSION) ||
-    (d.configId === BONUS_SEGMENTS_CONFIG_ID && d.simulationVersion !== BONUS_SEGMENTS_SIMULATION_VERSION) ||
-    (d.configId === BONUS_SEGMENTS_V2_CONFIG_ID && d.simulationVersion !== BONUS_SEGMENTS_V2_SIMULATION_VERSION) ||
-    (d.configId === VARIED_PIPES_CONFIG_ID && d.simulationVersion !== VARIED_PIPES_SIMULATION_VERSION) ||
-    (d.configId === PRESSURE_PIPES_CONFIG_ID && d.simulationVersion !== PRESSURE_PIPES_SIMULATION_VERSION) ||
-    (d.configId === DENSE_PIPES_CONFIG_ID && d.simulationVersion !== DENSE_PIPES_SIMULATION_VERSION) ||
-    (d.configId === BASE_BONUS_CONFIG_ID && d.simulationVersion !== BASE_BONUS_SIMULATION_VERSION) ||
-    (d.configId === CURVED_PIPES_CONFIG_ID && d.simulationVersion !== CURVED_PIPES_SIMULATION_VERSION) ||
-    (d.configId === VARIED_BASE_CONFIG_ID && d.simulationVersion !== VARIED_BASE_SIMULATION_VERSION) ||
-    (d.configId === DEFAULT_CONFIG_ID && d.simulationVersion !== SIMULATION_VERSION) ||
-    (d.configId === PAIRED_ROUTES_CONFIG_ID && d.simulationVersion !== PAIRED_ROUTES_SIMULATION_VERSION) ||
-    (d.configId === VARIED_OBSTACLE_DEFAULT_CONFIG_ID && d.simulationVersion !== VARIED_OBSTACLE_SIMULATION_VERSION) ||
-    (d.configId === PRIOR_DEFAULT_CONFIG_ID && d.simulationVersion !== PRIOR_SIMULATION_VERSION) ||
-    (d.configId === WETLAND_DEFAULT_CONFIG_ID && d.simulationVersion !== WETLAND_SIMULATION_VERSION) ||
-    (d.configId === LEGACY_DEFAULT_CONFIG_ID && d.simulationVersion !== LEGACY_SIMULATION_VERSION)
+    !BUILTIN_RULESETS.some(ruleset => matchesRuleset(d, ruleset) && (
+      d.configId === ruleset.configId ||
+      (typeof d.configId === "string" && d.configId.startsWith(CUSTOM_CONFIG_PREFIX) && d.configId.length > CUSTOM_CONFIG_PREFIX.length)
+    ))
   )
     throw Error(
       "invalid descriptor, seed, config ID, or unsupported simulation version or generator version",

@@ -14,7 +14,6 @@ RUN uv sync --locked --no-dev --no-install-project
 COPY app ./app
 COPY migrations ./migrations
 COPY alembic-platform.ini alembic-economy.ini ./
-RUN useradd --system --uid 10001 platform && chown -R platform:platform /srv/platform /opt/venv
 USER 10001:10001
 EXPOSE 8080
 CMD ["/opt/venv/bin/uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080", "--no-access-log"]

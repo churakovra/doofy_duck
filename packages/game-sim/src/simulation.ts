@@ -1,33 +1,20 @@
 import { configIdFor } from "./canonical.js";
 import { bonusY, currencyFormationPoints, generateNext, isBonusSegmentBlock, isScheduledBonusBlock, isCoinCourseBlock, worldSpeedAt } from "./generation.js";
 import { deepFreeze, incrementCounter } from "./internal.js";
-import { CURVED_PIPES_DEFAULT_CONFIG, VARIED_BASE_DEFAULT_CONFIG, BONUS_SEGMENTS_DEFAULT_CONFIG, BONUS_SEGMENTS_V2_DEFAULT_CONFIG, VARIED_PIPES_DEFAULT_CONFIG, PRESSURE_PIPES_DEFAULT_CONFIG, DENSE_PIPES_DEFAULT_CONFIG, BASE_BONUS_DEFAULT_CONFIG, COIN_COURSE_DEFAULT_CONFIG, CURRENCY_FORMATIONS_DEFAULT_CONFIG, DEFAULT_CONFIG, LEGACY_DEFAULT_CONFIG, PAIRED_ROUTES_DEFAULT_CONFIG, PRIOR_DEFAULT_CONFIG, VARIED_OBSTACLE_DEFAULT_CONFIG, WETLAND_DEFAULT_CONFIG, validateConfig, validateDescriptor } from "./config.js";
-import { CURVED_PIPES_CONFIG_ID, CURVED_PIPES_GENERATOR_VERSION, CURVED_PIPES_SIMULATION_VERSION, VARIED_BASE_CONFIG_ID, VARIED_BASE_GENERATOR_VERSION, VARIED_BASE_SIMULATION_VERSION, mix32, BONUS_SEGMENTS_CONFIG_ID, BONUS_SEGMENTS_V2_CONFIG_ID, VARIED_PIPES_CONFIG_ID, PRESSURE_PIPES_CONFIG_ID, DENSE_PIPES_CONFIG_ID, BASE_BONUS_CONFIG_ID, BASE_BONUS_SIMULATION_VERSION, BASE_BONUS_GENERATOR_VERSION, DENSE_PIPES_SIMULATION_VERSION, DENSE_PIPES_GENERATOR_VERSION, PRESSURE_PIPES_SIMULATION_VERSION, PRESSURE_PIPES_GENERATOR_VERSION, VARIED_PIPES_SIMULATION_VERSION, VARIED_PIPES_GENERATOR_VERSION, BONUS_SEGMENTS_V2_SIMULATION_VERSION, BONUS_SEGMENTS_V2_GENERATOR_VERSION, BONUS_SEGMENTS_GENERATOR_VERSION, BONUS_SEGMENTS_SIMULATION_VERSION, COIN_COURSE_CONFIG_ID, COIN_COURSE_GENERATOR_VERSION, COIN_COURSE_SIMULATION_VERSION, CURRENCY_FORMATIONS_CONFIG_ID, CURRENCY_FORMATIONS_GENERATOR_VERSION, CURRENCY_FORMATIONS_SIMULATION_VERSION, SIMULATION_VERSION, GENERATOR_VERSION, PAIRED_ROUTES_CONFIG_ID, PAIRED_ROUTES_GENERATOR_VERSION, PAIRED_ROUTES_SIMULATION_VERSION, LEGACY_DEFAULT_CONFIG_ID, LEGACY_SIMULATION_VERSION, LEGACY_GENERATOR_VERSION, PRIOR_DEFAULT_CONFIG_ID, PRIOR_SIMULATION_VERSION, PRIOR_GENERATOR_VERSION, VARIED_OBSTACLE_DEFAULT_CONFIG_ID, VARIED_OBSTACLE_GENERATOR_VERSION, VARIED_OBSTACLE_SIMULATION_VERSION, WETLAND_DEFAULT_CONFIG_ID, WETLAND_GENERATOR_VERSION, WETLAND_SIMULATION_VERSION, type Collectible, type GameConfig, type InputFrame, type Phase, type RunDescriptor, type RunDescriptorIdentity, type RunState, type StepResult, type GameEvent } from "./types.js";
+import { BUILTIN_RULESETS, DEFAULT_CONFIG, matchesRuleset, rulesetForWetlandCatalog, validateDescriptor } from "./config.js";
+import { SIMULATION_VERSION, GENERATOR_VERSION, mix32, type Collectible, type GameConfig, type InputFrame, type Phase, type RunDescriptor, type RunDescriptorIdentity, type RunState, type StepResult, type GameEvent } from "./types.js";
 
 export function createRunDescriptor(
   identity: RunDescriptorIdentity,
   config: GameConfig = DEFAULT_CONFIG,
 ): RunDescriptor {
   const configId = configIdFor(config);
-  const legacy = configId === LEGACY_DEFAULT_CONFIG_ID;
-  const prior = configId === PRIOR_DEFAULT_CONFIG_ID;
-  const wetland = configId === WETLAND_DEFAULT_CONFIG_ID;
-  const coinCourse = config.wetland?.catalogVersion === 5;
-  const bonusSegments = config.wetland?.catalogVersion === 6;
-  const curvedPipes = config.wetland?.catalogVersion === 13;
-  const variedBase = config.wetland?.catalogVersion === 12;
-  const baseBonus = config.wetland?.catalogVersion === 11;
-  const densePipes = config.wetland?.catalogVersion === 10;
-  const pressurePipes = config.wetland?.catalogVersion === 9;
-  const variedPipes = config.wetland?.catalogVersion === 8;
-  const bonusSegmentsV2 = config.wetland?.catalogVersion === 7;
-  const currencyFormations = config.wetland?.catalogVersion === 4;
-  const paired = config.wetland?.catalogVersion === 3;
-  const varied = config.wetland?.catalogVersion === 2;
+  const ruleset = BUILTIN_RULESETS.find(preset => preset.configId === configId) ??
+    rulesetForWetlandCatalog(config.wetland?.catalogVersion);
   return {
     ...identity,
-    simulationVersion: curvedPipes ? CURVED_PIPES_SIMULATION_VERSION : variedBase ? VARIED_BASE_SIMULATION_VERSION : baseBonus ? BASE_BONUS_SIMULATION_VERSION : densePipes ? DENSE_PIPES_SIMULATION_VERSION : pressurePipes ? PRESSURE_PIPES_SIMULATION_VERSION : variedPipes ? VARIED_PIPES_SIMULATION_VERSION : bonusSegmentsV2 ? BONUS_SEGMENTS_V2_SIMULATION_VERSION : bonusSegments ? BONUS_SEGMENTS_SIMULATION_VERSION : coinCourse ? COIN_COURSE_SIMULATION_VERSION : currencyFormations ? CURRENCY_FORMATIONS_SIMULATION_VERSION : legacy ? LEGACY_SIMULATION_VERSION : prior ? PRIOR_SIMULATION_VERSION : wetland ? WETLAND_SIMULATION_VERSION : varied ? VARIED_OBSTACLE_SIMULATION_VERSION : paired ? PAIRED_ROUTES_SIMULATION_VERSION : SIMULATION_VERSION,
-    generatorVersion: curvedPipes ? CURVED_PIPES_GENERATOR_VERSION : variedBase ? VARIED_BASE_GENERATOR_VERSION : baseBonus ? BASE_BONUS_GENERATOR_VERSION : densePipes ? DENSE_PIPES_GENERATOR_VERSION : pressurePipes ? PRESSURE_PIPES_GENERATOR_VERSION : variedPipes ? VARIED_PIPES_GENERATOR_VERSION : bonusSegmentsV2 ? BONUS_SEGMENTS_V2_GENERATOR_VERSION : bonusSegments ? BONUS_SEGMENTS_GENERATOR_VERSION : coinCourse ? COIN_COURSE_GENERATOR_VERSION : currencyFormations ? CURRENCY_FORMATIONS_GENERATOR_VERSION : legacy ? LEGACY_GENERATOR_VERSION : prior ? PRIOR_GENERATOR_VERSION : wetland ? WETLAND_GENERATOR_VERSION : varied ? VARIED_OBSTACLE_GENERATOR_VERSION : paired ? PAIRED_ROUTES_GENERATOR_VERSION : GENERATOR_VERSION,
+    simulationVersion: ruleset?.simulationVersion ?? SIMULATION_VERSION,
+    generatorVersion: ruleset?.generatorVersion ?? GENERATOR_VERSION,
     configId,
   };
 }
@@ -37,49 +24,14 @@ export function createRun(
   config?: GameConfig,
 ): RunState {
   validateDescriptor(descriptor);
-  const resolvedConfig = config ?? (descriptor.configId === CURVED_PIPES_CONFIG_ID ? CURVED_PIPES_DEFAULT_CONFIG : descriptor.configId === VARIED_BASE_CONFIG_ID ? VARIED_BASE_DEFAULT_CONFIG : descriptor.configId === BASE_BONUS_CONFIG_ID ? BASE_BONUS_DEFAULT_CONFIG : descriptor.configId === DENSE_PIPES_CONFIG_ID ? DENSE_PIPES_DEFAULT_CONFIG : descriptor.configId === PRESSURE_PIPES_CONFIG_ID ? PRESSURE_PIPES_DEFAULT_CONFIG : descriptor.configId === VARIED_PIPES_CONFIG_ID ? VARIED_PIPES_DEFAULT_CONFIG : descriptor.configId === BONUS_SEGMENTS_V2_CONFIG_ID ? BONUS_SEGMENTS_V2_DEFAULT_CONFIG : descriptor.configId === BONUS_SEGMENTS_CONFIG_ID ? BONUS_SEGMENTS_DEFAULT_CONFIG : descriptor.configId === COIN_COURSE_CONFIG_ID ? COIN_COURSE_DEFAULT_CONFIG : descriptor.configId === CURRENCY_FORMATIONS_CONFIG_ID ? CURRENCY_FORMATIONS_DEFAULT_CONFIG : descriptor.configId === LEGACY_DEFAULT_CONFIG_ID ? LEGACY_DEFAULT_CONFIG : descriptor.configId === PRIOR_DEFAULT_CONFIG_ID ? PRIOR_DEFAULT_CONFIG : descriptor.configId === WETLAND_DEFAULT_CONFIG_ID ? WETLAND_DEFAULT_CONFIG : descriptor.configId === VARIED_OBSTACLE_DEFAULT_CONFIG_ID ? VARIED_OBSTACLE_DEFAULT_CONFIG : descriptor.configId === PAIRED_ROUTES_CONFIG_ID ? PAIRED_ROUTES_DEFAULT_CONFIG : DEFAULT_CONFIG);
-  validateConfig(resolvedConfig);
+  const resolvedConfig = config ??
+    BUILTIN_RULESETS.find(preset => preset.configId === descriptor.configId)?.config ??
+    DEFAULT_CONFIG;
   if (descriptor.configId !== configIdFor(resolvedConfig))
     throw Error("configId does not identify supplied config");
-  if (resolvedConfig.wetland?.catalogVersion === 2 &&
-      (descriptor.simulationVersion !== VARIED_OBSTACLE_SIMULATION_VERSION || descriptor.generatorVersion !== VARIED_OBSTACLE_GENERATOR_VERSION))
-    throw Error("catalog-2 wetland config requires the frozen varied-obstacle simulation and generator versions");
-  if (resolvedConfig.wetland?.catalogVersion === 3 &&
-      (descriptor.simulationVersion !== PAIRED_ROUTES_SIMULATION_VERSION || descriptor.generatorVersion !== PAIRED_ROUTES_GENERATOR_VERSION))
-    throw Error("catalog-3 wetland config requires the current simulation and generator versions");
-  if (resolvedConfig.wetland?.catalogVersion === 4 &&
-      (descriptor.simulationVersion !== CURRENCY_FORMATIONS_SIMULATION_VERSION || descriptor.generatorVersion !== CURRENCY_FORMATIONS_GENERATOR_VERSION))
-    throw Error("catalog-4 wetland config requires the currency-formation simulation and generator versions");
-  if (resolvedConfig.wetland?.catalogVersion === 5 &&
-      (descriptor.simulationVersion !== COIN_COURSE_SIMULATION_VERSION || descriptor.generatorVersion !== COIN_COURSE_GENERATOR_VERSION))
-    throw Error("catalog-5 wetland config requires the coin-course simulation and generator versions");
-  if (resolvedConfig.wetland?.catalogVersion === 6 &&
-      (descriptor.simulationVersion !== BONUS_SEGMENTS_SIMULATION_VERSION || descriptor.generatorVersion !== BONUS_SEGMENTS_GENERATOR_VERSION))
-    throw Error("catalog-6 wetland config requires the bonus-segments simulation and generator versions");
-  if (resolvedConfig.wetland?.catalogVersion === 7 &&
-      (descriptor.simulationVersion !== BONUS_SEGMENTS_V2_SIMULATION_VERSION || descriptor.generatorVersion !== BONUS_SEGMENTS_V2_GENERATOR_VERSION))
-    throw Error("catalog-7 wetland config requires the bonus-segments-v2 simulation and generator versions");
-  if (resolvedConfig.wetland?.catalogVersion === 8 &&
-      (descriptor.simulationVersion !== VARIED_PIPES_SIMULATION_VERSION || descriptor.generatorVersion !== VARIED_PIPES_GENERATOR_VERSION))
-    throw Error("catalog-8 wetland config requires varied-pipes versions");
-  if (resolvedConfig.wetland?.catalogVersion === 9 &&
-      (descriptor.simulationVersion !== PRESSURE_PIPES_SIMULATION_VERSION || descriptor.generatorVersion !== PRESSURE_PIPES_GENERATOR_VERSION))
-    throw Error("catalog-9 wetland config requires pressure-pipes versions");
-  if (resolvedConfig.wetland?.catalogVersion === 10 &&
-      (descriptor.simulationVersion !== DENSE_PIPES_SIMULATION_VERSION || descriptor.generatorVersion !== DENSE_PIPES_GENERATOR_VERSION))
-    throw Error("catalog-10 wetland config requires dense-pipes versions");
-  if (resolvedConfig.wetland?.catalogVersion === 11 &&
-      (descriptor.simulationVersion !== BASE_BONUS_SIMULATION_VERSION || descriptor.generatorVersion !== BASE_BONUS_GENERATOR_VERSION))
-    throw Error("catalog-11 wetland config requires base-bonus versions");
-  if (resolvedConfig.wetland?.catalogVersion === 12 &&
-      (descriptor.simulationVersion !== VARIED_BASE_SIMULATION_VERSION || descriptor.generatorVersion !== VARIED_BASE_GENERATOR_VERSION))
-    throw Error("catalog-12 wetland config requires varied-base versions");
-  if (resolvedConfig.wetland?.catalogVersion === 13 &&
-      (descriptor.simulationVersion !== CURVED_PIPES_SIMULATION_VERSION || descriptor.generatorVersion !== CURVED_PIPES_GENERATOR_VERSION))
-    throw Error("catalog-13 requires curved-pipes versions");
-  if (resolvedConfig.wetland?.catalogVersion === 14 &&
-      (descriptor.simulationVersion !== SIMULATION_VERSION || descriptor.generatorVersion !== GENERATOR_VERSION))
-    throw Error("catalog-14 requires random-pipes versions");
+  const ruleset = rulesetForWetlandCatalog(resolvedConfig.wetland?.catalogVersion);
+  if (ruleset && !matchesRuleset(descriptor, ruleset))
+    throw Error(ruleset.catalogVersionError);
   const ownedConfig = cloneConfig(resolvedConfig);
   const starSchedule = ownedConfig.starSchedule;
   const starInterval = starSchedule ? seededStarInterval(descriptor.seed, 0, starSchedule.minIntervalPipes, starSchedule.maxIntervalPipes) : undefined;

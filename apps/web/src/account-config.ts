@@ -18,5 +18,3 @@ export function localDevAccount(environment: AccountEnvironment): LocalDevAccoun
     telegramUserId: validId ? telegramUserId : DEFAULT_LOCAL_TELEGRAM_USER_ID,
   };
 }
-
-export const LOCAL_DEV_ACCOUNT = localDevAccount(import.meta.env);

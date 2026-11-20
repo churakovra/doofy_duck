@@ -237,13 +237,6 @@ export class AccountApi {
     return await this.authorized(`/api/v1/shop/purchases/lookup?${query}`);
   }
 
-  async shopPurchases(cursor?: string, limit = 50): Promise<unknown> {
-    if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new AccountApiError(400, 'shop_page_limit_invalid');
-    const query = new URLSearchParams({ limit: String(limit) });
-    if (cursor) query.set('cursor', cursor);
-    return await this.authorized(`/api/v1/shop/purchases?${query}`);
-  }
-
   async walletBalances(): Promise<unknown> {
     return await this.authorized('/api/v1/wallets');
   }
@@ -270,23 +263,6 @@ export class AccountApi {
     return await this.authorized(`/api/v1/runs/${encodeURIComponent(runId)}/abandon`, {
       method: 'POST', body: JSON.stringify({ writerGeneration, writerToken }),
     }) as AccountRunSnapshot;
-  }
-
-  async logout(): Promise<void> {
-    const generation = this.beginSessionChange();
-    await withAuthCookieLock(async () => {
-      if (generation !== this.#sessionGeneration) return;
-      const csrf = csrfCookie();
-      const response = await this.fetchWithDeadline(this.url('/api/v1/auth/logout'), {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          ...(this.#accessToken ? { Authorization: `Bearer ${this.#accessToken}` } : {}),
-          ...(csrf ? { 'X-CSRF-Token': csrf } : {}),
-        },
-      });
-      if (response.ok) clearUncertainRefresh();
-    });
   }
 
   cancelPendingRequests(): void {

@@ -21,7 +21,7 @@ compatibility with the previous supported HTTP/event contract during rollout. St
 new run issuance if schema, signing configuration or durable storage is unavailable.
 A successful readiness response is not a guarantee against a later outage.
 
-Core readiness requires every migration embedded in the running binary, including
+Core readiness requires every migration shipped with the running service, including
 the delivery-lifecycle migration. A database containing only an earlier migration
 must remain unready until the release migration job completes.
 
@@ -140,45 +140,3 @@ Provider pricing comparisons must state region, application/database sizing, HA 
 backup retention, traffic assumptions and excluded charges. Do not present a base-tier
 price as the cost of the required redundant deployment. Budget and deployment require
 separate owner approval.
-
-## Hosting shortlist — researched October 17, 2026
-
-Hosted capacity for the current Core has not been established. Start evaluation with two Core
-replicas of 2 vCPU/4 GiB each so one can carry the traffic, two Python replicas,
-redundant ingress and a synchronously protected managed database. Separate owned
-databases/roles may share a managed cluster; separate clusters cost more.
-
-Compare a European region near the eventual pilot population. Region, eligibility,
-tax, network latency and account-specific availability must be confirmed before a
-quote or deployment. Illustrative always-on USD/month component estimates:
-
-| Option | Applications and ingress | Managed database | Durability decision |
-| --- | --- | --- | --- |
-| DigitalOcean App Platform + Advanced PostgreSQL | Two Core 2-vCPU/4-GiB instances at $78 each; two Python and two ingress 1-vCPU/1-GiB instances at $34 each: $292 | Entry 2-vCPU/8-GiB primary and matching standby at $130 each: $260; combined compute floor $552 | Conditional candidate only: require plan support for quorum synchronous replication, verify actual settings and failure behavior; Advanced is public preview |
-| Render applications + Render PostgreSQL HA | Two Core 2-CPU/4-GB instances at $85 each; two Python and two ingress 1-CPU/2-GB instances at $25 each: $270 | Two 1-CPU/4-GB database instances at $55 each plus $25 Pro workspace: combined floor $405 before storage | Exclude the documented async database HA from the approved zero acknowledged-loss target |
-| AWS applications + RDS PostgreSQL Multi-AZ | Quote two Core and two Python instances across zones plus redundant load balancing | Quote a Multi-AZ instance deployment with synchronous standby, storage, backups and I/O in the chosen region | Candidate for a synchronous deployment; measure failover and accepted-record preservation before acceptance |
-
-DigitalOcean figures come from its [application pricing](https://docs.digitalocean.com/products/app-platform/details/pricing/)
-and [PostgreSQL pricing](https://docs.digitalocean.com/products/databases/postgresql/details/pricing/).
-New Standard clusters cannot add standby nodes under the October 2026 plan change;
-do not reuse an older $60 HA estimate. Its [API contract](https://docs.digitalocean.com/products/databases/postgresql/reference/api/)
-exposes plan-dependent synchronous replication and describes Advanced preview status.
-If the approved quorum/failover topology needs three database nodes, the illustrative
-DigitalOcean database compute becomes $390 and the combined floor $682. A two-node
-price alone does not establish quorum availability after one node fails.
-Render figures use its [pricing table](https://render.com/pricing); its
-[HA documentation](https://render.com/docs/postgresql-high-availability) explicitly
-permits losing recent writes during asynchronous failover. AWS documents a synchronous
-standby for [RDS Multi-AZ instances](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Concepts.MultiAZSingleStandby.html);
-use its [regional pricing/calculator](https://aws.amazon.com/rds/postgresql/pricing/)
-for a comparable quote rather than inventing a region-independent total.
-
-The floors exclude additional storage, retention growth, backup overages, traffic,
-logs/alerts, support, tax and migration/failover test environments. They are not an
-approved spend or a statement that these sizes pass the workload. Budget seven days
-of PITR initially and price retained evidence separately. The early local sample
-used about 179 MB for 39,759 checkpoint records plus related database objects; at
-continuous target load, storage can grow by hundreds of GB per day. This is a rough
-extrapolation, not a measured daily rate. Set an approved evidence retention/archive
-policy and measure total write/storage/egress rates before approving monthly spend.
-Do not delete accepted evidence automatically to fit a small database tier.

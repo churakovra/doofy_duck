@@ -8,11 +8,10 @@ import { GameSettings } from './GameSettings';
 import { AccountShop } from './AccountShop';
 import { AccountWallet, type WalletSettlementStatus } from './AccountWallet';
 import { AccountHud } from './AccountHud';
-import { accountEquipmentAppearance } from './account-shop-assets';
+import { accountEquipmentAppearance, DEFAULT_EQUIPMENT, type Equipment } from './account-shop-assets';
 import { formatCountUnit, formatNumber, useLocale } from './locale';
 import { useGameAudio } from './useGameAudio';
 import { useGameRun } from './useGameRun';
-import { DEFAULT_EQUIPMENT, type Equipment } from './wardrobe';
 import { loadTelegramWebApp, TelegramWebAppUnavailableError } from './telegram-web-app';
 import { CheckpointBackoff } from './checkpoint-backoff';
 import { localDevAccount } from './account-config';
@@ -74,6 +73,7 @@ export function AccountGame() {
   const [trace, setTrace] = useState<AccountTrace | null>(null);
   const traceRef = useRef<AccountTrace | null>(null);
   const [busy, setBusy] = useState(false);
+  const startIntentRef = useRef<{ runId?: string } | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [reauthRequired, setReauthRequired] = useState(false);
@@ -573,8 +573,25 @@ export function AccountGame() {
     } finally { if (epoch === sessionEpochRef.current) setBusy(false); }
   };
 
+  useEffect(() => {
+    const clearHiddenStart = () => {
+      if (document.hidden) startIntentRef.current = null;
+    };
+    document.addEventListener('visibilitychange', clearHiddenStart);
+    return () => document.removeEventListener('visibilitychange', clearHiddenStart);
+  }, []);
+
+  const consumeStartIntent = useCallback((runId: string) => {
+    if (startIntentRef.current?.runId !== runId) return false;
+    startIntentRef.current = null;
+    return !document.hidden;
+  }, []);
+
   const createRun = async () => {
-    if (!account) return;
+    if (!account || busy) return;
+    const startIntent = {};
+    startIntentRef.current = document.hidden ? null : startIntent;
+    audio.unlockFromGesture();
     const epoch = sessionEpochRef.current;
     setBusy(true); setError('');
     try {
@@ -599,6 +616,7 @@ export function AccountGame() {
       };
       await storage.save(fresh);
       if (epoch !== sessionEpochRef.current) return;
+      if (startIntentRef.current === startIntent) startIntentRef.current = { runId: created.runId };
       installSnapshot(created, fresh);
     } catch (reason) {
       if (epoch !== sessionEpochRef.current) return;
@@ -610,7 +628,10 @@ export function AccountGame() {
         } catch { /* Show the original conflict if recovery status cannot be loaded. */ }
       }
       setError(accountErrorCopy(reason, messages));
-    } finally { if (epoch === sessionEpochRef.current) setBusy(false); }
+    } finally {
+      if (startIntentRef.current === startIntent) startIntentRef.current = null;
+      if (epoch === sessionEpochRef.current) setBusy(false);
+    }
   };
 
   const takeover = async () => {
@@ -708,36 +729,44 @@ export function AccountGame() {
     } finally { if (epoch === sessionEpochRef.current) setBusy(false); }
   };
 
+  const sessionEpoch = sessionEpochRef.current;
+  const renderHud = (runningScore?: number) => (
+    <AccountHud bestScore={bestScore} locale={locale} recordLabel={messages.bestScoreLabel}
+      runningScore={runningScore}
+      wallet={account && <AccountWallet api={api} accountId={account.account_id}
+        sessionEpoch={sessionEpoch} locale={locale} messages={messages}
+        refreshKey={walletRefreshKey} suspended={runningScore !== undefined}
+        settlement={walletSettlementStatus(settlement)}
+        onRetrySettlement={() => setSettlementRetryKey((key) => key + 1)} />}
+      actions={<>
+        {account && runningScore === undefined && <AccountShop api={api} accountId={account.account_id}
+          sessionEpoch={sessionEpoch} locale={locale} messages={messages}
+          portalContainer={frameRef} open={shopOpen} onOpenChange={onShopOpenChange}
+          equipment={equipment} onEquipment={setEquipment} />}
+        <GameSettings open={settingsOpen} onOpenChange={setSettingsOpen}
+          locale={locale} setLocale={setLocale} messages={messages}
+          preferences={audio.preferences} toggle={audio.toggle} portalContainer={frameRef} />
+      </>} />
+  );
+
   const activeSnapshot = snapshot?.status === 'active' && screen === 'active' && trace ? snapshot : null;
   if (activeSnapshot && account) return <AccountFlight
     key={activeSnapshot.runId}
     snapshot={activeSnapshot}
-    bestScore={bestScore}
     messages={messages}
     locale={locale}
-    setLocale={setLocale}
     audio={audio}
     frameRef={frameRef}
-    settingsOpen={settingsOpen}
-    setSettingsOpen={setSettingsOpen}
-    shopOpen={shopOpen}
-    onShopOpenChange={onShopOpenChange}
-    walletRefreshKey={walletRefreshKey}
-    settlement={walletSettlementStatus(settlement)}
-    onRetrySettlement={() => setSettlementRetryKey((key) => key + 1)}
-    equipment={equipment}
-    setEquipment={setEquipment}
+    renderHud={renderHud}
+    canPlay={() => !settingsOpen && !shopOpen}
     appearance={appearance}
-    api={api}
-    accountId={account.account_id}
-    sessionEpoch={sessionEpochRef.current}
     storageWarning={!storage.persistent}
     notice={notice}
     error={error}
+    consumeStartIntent={consumeStartIntent}
     onTick={recordTick}
     onFinish={finishTrace}
-    onReauthenticate={reauthenticate}
-    reauthRequired={reauthRequired}
+    retryAuthentication={reauthRequired ? reauthenticate : undefined}
     onAbandon={abandon}
     busy={busy}
   />;
@@ -747,17 +776,10 @@ export function AccountGame() {
     : snapshot?.status === 'completion_pending' ? messages.accountPendingVerification
       : snapshot?.status === 'rejected' ? messages.accountGameplayRejected : '';
   const verifiedRun = snapshot && snapshot.verificationStatus === 'verified' ? snapshot.state : null;
-  return <main className="game-shell" onPointerDown={() => undefined}>
+  return <main className="game-shell">
     <div className="game-viewport"><div className={`game-frame ready${verifiedRun ? ' result-screen' : ''}`} ref={frameRef}>
       <div className="stage" aria-label={messages.gameFieldLabel}><GameCanvas getState={() => snapshot?.state ?? EMPTY_STATE} onReady={canvasReady} appearance={appearance} /></div>
-      <AccountHud bestScore={bestScore} locale={locale} recordLabel={messages.bestScoreLabel}
-        wallet={account && <AccountWallet api={api} accountId={account.account_id} sessionEpoch={sessionEpochRef.current} locale={locale} messages={messages} refreshKey={walletRefreshKey} suspended={false} settlement={walletSettlementStatus(settlement)} onRetrySettlement={() => setSettlementRetryKey((key) => key + 1)} />}
-        actions={<>
-          {account && <AccountShop api={api} accountId={account.account_id} sessionEpoch={sessionEpochRef.current} locale={locale} messages={messages} portalContainer={frameRef} open={shopOpen} onOpenChange={onShopOpenChange} equipment={equipment} onEquipment={setEquipment} />}
-          <GameSettings open={settingsOpen} onOpenChange={setSettingsOpen} locale={locale} setLocale={setLocale} messages={messages}
-            preferences={audio.preferences} toggle={audio.toggle} wallet={{ FEATHER: 0, GAME_STAR: 0 }} walletPersistent walletStatus="" walletBlocked={false}
-            portalContainer={frameRef} hideWallet />
-        </>} />
+      {renderHud()}
       <section className="screen-card" aria-live="polite"><div className="screen-panel account-panel">
         {screen === 'signed-out' && <>
           {error && <GameButton variant="control" onClick={() => void retryAuthentication()} disabled={busy}>{messages.accountRetry}</GameButton>}
@@ -796,27 +818,41 @@ export function AccountGame() {
 const EMPTY_STATE = createRun(createRunDescriptor({ runId: '00000000-0000-4000-8000-000000000001', seed: 0 }));
 
 type FlightProps = {
-  snapshot: AccountRunSnapshot; bestScore: number | null; messages: ReturnType<typeof useLocale>['messages']; locale: 'ru' | 'en'; setLocale(locale: 'ru' | 'en'): void;
-  audio: ReturnType<typeof useGameAudio>; frameRef: React.RefObject<HTMLDivElement | null>; settingsOpen: boolean; setSettingsOpen(open: boolean): void;
-  shopOpen: boolean; onShopOpenChange(open: boolean): void; walletRefreshKey: number; settlement: WalletSettlementStatus;
-  onRetrySettlement(): void; equipment: Equipment; setEquipment(next: Equipment): void;
-  appearance: ReturnType<typeof accountEquipmentAppearance>; storageWarning: boolean; api: AccountApi; accountId: string; sessionEpoch: number;
-  notice: string; error: string; onTick(state: RunState, inputs: readonly { sequence: number; action: 'FLAP' }[]): void; onFinish(): void; onReauthenticate(): void; reauthRequired: boolean; onAbandon(): void; busy: boolean;
+  snapshot: AccountRunSnapshot;
+  messages: ReturnType<typeof useLocale>['messages'];
+  locale: 'ru' | 'en';
+  audio: ReturnType<typeof useGameAudio>;
+  frameRef: React.RefObject<HTMLDivElement | null>;
+  renderHud(runningScore?: number): React.ReactNode;
+  canPlay(): boolean;
+  appearance: ReturnType<typeof accountEquipmentAppearance>;
+  storageWarning: boolean;
+  consumeStartIntent(runId: string): boolean;
+  notice: string;
+  error: string;
+  onTick(state: RunState, inputs: readonly { sequence: number; action: 'FLAP' }[]): void;
+  onFinish(): void;
+  retryAuthentication: (() => void) | undefined;
+  onAbandon(): void;
+  busy: boolean;
 };
 
 function AccountFlight(props: FlightProps) {
-  const { messages, locale, setLocale, audio, frameRef, snapshot } = props;
+  const { messages, locale, audio, frameRef, snapshot } = props;
   const initial = snapshot.state.phase === 'RUNNING' ? pauseRun(snapshot.state) : snapshot.state;
-  const callbacks = useMemo(() => ({
+  const run = useGameRun(props.canPlay, {
     onFlapUnlock: audio.unlockFromGesture, onFlap: audio.flap, onPickup: audio.pickup,
-    onPhaseChange: audio.setPhase, onRunEnded: () => props.onFinish(),
-  }), [audio, props.onFinish]);
-  const run = useGameRun(() => !props.settingsOpen && !props.shopOpen, callbacks, {
+    onPhaseChange: audio.setPhase, onRunEnded: props.onFinish,
+  }, {
     initialState: initial,
     activeTickLimit: snapshot.activeTickLimit || ACTIVE_TICK_LIMIT,
     onTick: props.onTick,
   });
-  const [settingsOpen, setSettingsOpen] = [props.settingsOpen, props.setSettingsOpen];
+  useEffect(() => {
+    if (run.rendererReady && run.phase === 'READY' && !props.busy && props.consumeStartIntent(snapshot.runId)) {
+      run.start();
+    }
+  }, [props.busy, props.consumeStartIntent, run.rendererReady, run.phase, run.start, snapshot.runId]);
   const totals = run.getState().totals;
   const feathers = totals.FEATHER ?? 0;
   const stars = totals.GAME_STAR ?? 0;
@@ -825,17 +861,8 @@ function AccountFlight(props: FlightProps) {
   return <main className="game-shell" onPointerDown={run.onFieldPointerDown} onPointerUp={run.onFieldPointerUp}>
     <div className="game-viewport"><div className={`game-frame ${run.phase.toLowerCase()}${run.phase === 'DEAD' ? ' result-screen' : ''}`} ref={frameRef}>
       <div className="stage" aria-label={messages.gameFieldLabel}><GameCanvas getState={run.getState} onReady={run.acceptRenderer} getFeedback={run.getFeedback} appearance={props.appearance} /></div>
-      <AccountHud bestScore={props.bestScore} locale={locale} recordLabel={messages.bestScoreLabel}
-        wallet={<AccountWallet api={props.api} accountId={props.accountId} sessionEpoch={props.sessionEpoch} locale={locale} messages={messages} refreshKey={props.walletRefreshKey} suspended={run.phase === 'RUNNING'} settlement={props.settlement} onRetrySettlement={props.onRetrySettlement} />}
-        runningScore={run.phase === 'RUNNING' ? run.score : undefined}
-        status={props.reauthRequired && <GameButton variant="control" onClick={props.onReauthenticate} disabled={props.busy}>{messages.accountRetry}</GameButton>}
-        actions={<>
-          {run.phase !== 'RUNNING' && <AccountShop api={props.api} accountId={props.accountId} sessionEpoch={props.sessionEpoch} locale={locale} messages={messages} portalContainer={frameRef} open={props.shopOpen} onOpenChange={props.onShopOpenChange} equipment={props.equipment} onEquipment={props.setEquipment} />}
-          <GameSettings open={settingsOpen} onOpenChange={setSettingsOpen} locale={locale} setLocale={setLocale} messages={messages}
-            preferences={audio.preferences} toggle={audio.toggle} wallet={{ FEATHER: 0, GAME_STAR: 0 }} walletPersistent walletStatus="" walletBlocked={false}
-            portalContainer={frameRef} hideWallet />
-        </>} />
-      {(props.error || props.notice || props.storageWarning || props.reauthRequired) && <footer className="wallet-status-strip"><p role={props.error ? 'alert' : 'status'} className={`wallet-storage${props.storageWarning ? ' not-saved' : ''}`}>{props.error || props.notice || (props.storageWarning ? messages.accountStorageWarning : '')}</p>{props.reauthRequired && <GameButton variant="control" onClick={props.onReauthenticate} disabled={props.busy}>{messages.accountRetry}</GameButton>}</footer>}
+      {props.renderHud(run.phase === 'RUNNING' ? run.score : undefined)}
+      {(props.error || props.notice || props.storageWarning || props.retryAuthentication) && <footer className="wallet-status-strip"><p role={props.error ? 'alert' : 'status'} className={`wallet-storage${props.storageWarning ? ' not-saved' : ''}`}>{props.error || props.notice || (props.storageWarning ? messages.accountStorageWarning : '')}</p>{props.retryAuthentication && <GameButton variant="control" onClick={props.retryAuthentication} disabled={props.busy}>{messages.accountRetry}</GameButton>}</footer>}
       {run.phase !== 'RUNNING' && <section className="screen-card" aria-live="polite"><div className="screen-panel account-panel">
         {run.runtimeError ? <><p role="alert" className="error-copy">{messages[run.runtimeError]}</p><GameButton variant="primary" onClick={() => window.location.reload()}>{messages.reloadPageButton}</GameButton></> : <>
           {run.phase === 'READY' && <><p className="flight-kicker">{messages.smallFlightEyebrow}</p><h1>{messages.lobbyHeading}</h1><p className="flight-instruction">{messages.readyInstructionFirstLine} {messages.readyInstructionSecondLine}</p><GameButton variant="primary" onClick={start} disabled={!run.rendererReady || props.busy}>{messages.startFlightButton} <span>{messages.forwardGlyph}</span></GameButton></>}

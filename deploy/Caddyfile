@@ -1,8 +1,6 @@
 :80 {
-    @internal path /internal/*
-    respond @internal 404
-
     route {
+        respond /internal/* 404
         @coreRuns path /api/v1/runs /api/v1/runs/*
         handle @coreRuns {
             reverse_proxy core:8080
@@ -20,7 +18,9 @@
             reverse_proxy platform:8080
         }
         handle {
-            reverse_proxy web:80
+            root * /srv/game
+            try_files {path} /index.html
+            file_server
         }
     }
 }
