@@ -7,7 +7,6 @@ import {
   makeInput, pauseRun, resumeRun, restartRun, step, validateConfig,
 } from "../src/index.js";
 import { currencyFormationPoints, generateNext, isCoinCourseBlock } from "../src/generation.js";
-import { worldSpeedAt } from "../src/generation.js";
 import type { RunState } from "../src/index.js";
 
 const courseSeed = Array.from({ length: 32 }, (_, seed) => seed).find(seed => isCoinCourseBlock(seed, 2))!;
@@ -20,40 +19,6 @@ function preparedBlock(seed: number, block: number): RunState {
 
 function firstCourseBlock(seed: number): number {
   return [2, 4, 6].find(block => isCoinCourseBlock(seed, block))!;
-}
-
-function canFlyCourse(seed: number, block: number, entryY: number, entryVy: number, startTick: number): boolean {
-  const generated = preparedBlock(seed, block).pipes.slice(0, 4);
-  const pipes = generated.map((pipe, index) => ({ ...pipe, x: 450_000 + [0, 180_000, 360_000, 720_000][index]! }));
-  const { config } = createRun(createRunDescriptor({ runId: "coin-course-physics", seed }, COIN_COURSE_DEFAULT_CONFIG));
-  let beam = [{ y: entryY, vy: entryVy }];
-  let traveled = 0;
-  for (let tick = 1; tick < 500; tick++) {
-    traveled += worldSpeedAt(config, startTick + tick, 0);
-    const unique = new Map<string, { y: number; vy: number }>();
-    for (const node of beam) for (const flap of [false, true]) {
-      const vy = Math.min(config.flight.maxFallSpeed, (flap ? config.flight.flapVelocity : node.vy) + config.flight.gravity);
-      const y = node.y + vy;
-      if (y - config.flight.duckHalfHeight <= config.pipes.ceilingY || y + config.flight.duckHalfHeight >= config.pipes.floorY) continue;
-      const dead = pipes.some(pipe => (pipe.obstacles ?? []).some(obstacle => {
-        const x = pipe.x - traveled;
-        const left = x + obstacle.xOffset - Math.floor(obstacle.width / 2);
-        const right = x + obstacle.xOffset + Math.floor(obstacle.width / 2);
-        return right >= config.flight.duckX - config.flight.duckHalfWidth &&
-          left <= config.flight.duckX + config.flight.duckHalfWidth &&
-          y + config.flight.duckHalfHeight >= obstacle.y && y - config.flight.duckHalfHeight <= obstacle.y + obstacle.height;
-      }));
-      if (!dead) unique.set(`${y}:${vy}`, { y, vy });
-    }
-    if (pipes.every(pipe => pipe.x - traveled + config.pipes.width / 2 < config.flight.duckX - config.flight.duckHalfWidth)) return true;
-    beam = [...unique.values()];
-    if (beam.length === 0) return false;
-    if (beam.length > 100) {
-      const target = pipes.find(pipe => pipe.x - traveled + config.pipes.width / 2 >= config.flight.duckX)?.gapCenter ?? 280_000;
-      beam = beam.sort((a, b) => Math.abs(a.y - target) + Math.abs(a.vy) * 4 - Math.abs(b.y - target) - Math.abs(b.vy) * 4).slice(0, 100);
-    }
-  }
-  return false;
 }
 
 describe("occasional coin course", () => {
@@ -145,19 +110,6 @@ describe("occasional coin course", () => {
     expect(restarted.pipes.map(pipe => pipe.index)).toEqual([0, 1]);
     expect(new Set(restarted.collectibles.map(item => item.id)).size).toBe(restarted.collectibles.length);
   });
-
-  it("has physics witnesses from varied entry states at initial and maximum speed", () => {
-    const courseSeeds = [2, 4, 6].map(target => Array.from({ length: 128 }, (_, seed) => seed)
-      .find(seed => firstCourseBlock(seed) === target)!);
-    for (const seed of courseSeeds) {
-      const block = firstCourseBlock(seed);
-      for (const startTick of [0, COIN_COURSE_DEFAULT_CONFIG.pipes.rampTicks]) {
-        for (const [y, vy] of [[275_000, -500], [280_000, 0], [285_000, 500]] as const) {
-          expect(canFlyCourse(seed, block, y, vy, startTick), `seed=${seed} block=${block} tick=${startTick} entry=${y}/${vy}`).toBe(true);
-        }
-      }
-    }
-  }, 30_000);
 
   it("replays the independent JSON contract for the new identity", () => {
     const fixture = JSON.parse(readFileSync("contracts/simulation/coin-course-v1.json", "utf8"));

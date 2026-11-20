@@ -9,11 +9,6 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-COMPOSE_FILES = (
-    "-f", "deploy/compose.yaml",
-    "-f", "deploy/compose.telegram-test.yaml",
-    "--profile", "local",
-)
 TEST_ENV = {
     "POSTGRES_ADMIN_PASSWORD": "test-admin",
     "PLATFORM_DB_PASSWORD": "test-platform",
@@ -31,15 +26,29 @@ TEST_ENV = {
 
 @unittest.skipUnless(shutil.which("docker"), "Docker Compose is required for rendered config checks")
 class TelegramComposeConfigTests(unittest.TestCase):
-    def run_compose_config(self, environment: dict[str, str]) -> subprocess.CompletedProcess[str]:
+    def run_compose_config(
+        self, environment: dict[str, str], *, telegram_test: bool = True
+    ) -> subprocess.CompletedProcess[str]:
+        compose = ["docker", "compose", "--env-file", "/dev/null", "-f", "deploy/compose.yaml"]
+        if telegram_test:
+            compose.extend(("-f", "deploy/compose.telegram-test.yaml"))
         return subprocess.run(
-            ["docker", "compose", "--env-file", "/dev/null", *COMPOSE_FILES, "config", "--format", "json"],
+            [*compose, "config", "--format", "json"],
             cwd=ROOT.parent,
             env={**os.environ, **environment},
             capture_output=True,
             text=True,
             check=False,
         )
+
+    def test_local_stack_uses_vite_and_migrates_core_on_startup(self) -> None:
+        result = self.run_compose_config(TEST_ENV, telegram_test=False)
+        self.assertEqual(result.returncode, 0, "Local Compose configuration should render")
+        services = json.loads(result.stdout)["services"]
+        self.assertNotIn("web", services)
+        self.assertNotIn("core-migrate", services)
+        self.assertNotIn("build", services["gateway"])
+        self.assertEqual(services["core"]["environment"]["CORE_AUTO_MIGRATE"], "true")
 
     def test_overlay_requires_a_real_bot_token_and_disables_development_auth(self) -> None:
         result = self.run_compose_config(TEST_ENV)
@@ -51,12 +60,10 @@ class TelegramComposeConfigTests(unittest.TestCase):
         self.assertEqual(platform["DEV_AUTH_USER_ID"], "0")
         self.assertEqual(platform["TELEGRAM_BOT_TOKEN"], TEST_ENV["TELEGRAM_BOT_TOKEN_REAL"])
 
-        web = config["services"]["web"]["build"]["args"]
-        self.assertEqual(web["DD_LOCAL_DEV_AUTH"], "false")
-        port = config["services"]["gateway"]["ports"][0]
+        gateway = config["services"]["gateway"]
+        self.assertEqual(gateway["build"]["dockerfile"], "deploy/gateway.Dockerfile")
+        port = gateway["ports"][0]
         self.assertEqual((port["host_ip"], port["published"], port["target"]), ("127.0.0.1", "8080", 80))
-        self.assertIn("local", config["services"]["gateway"]["profiles"])
-        self.assertIn("local", config["services"]["economy-settlement"]["profiles"])
         self.assertNotIn(TEST_ENV["TELEGRAM_BOT_TOKEN_REAL"], result.stderr)
 
     def test_overlay_fails_when_real_bot_token_is_missing(self) -> None:

@@ -1,10 +1,16 @@
+x-platform-environment: &platform-env
+  DD_ENV: development
+  PLATFORM_DATABASE_URL: postgresql+psycopg://platform:${PLATFORM_DB_PASSWORD}@postgres:5432/platform
+  ECONOMY_DATABASE_URL: postgresql+psycopg://economy:${ECONOMY_DB_PASSWORD}@postgres:5432/economy
+  ECONOMY_SETTLEMENT_ENABLED: ${ECONOMY_SETTLEMENT_ENABLED:-true}
+  ECONOMY_SETTLEMENT_ACTIVATED_AT: ${ECONOMY_SETTLEMENT_ACTIVATED_AT:-}
+  ECONOMY_SHOP_ENABLED: ${ECONOMY_SHOP_ENABLED:-true}
+
 services:
   postgres:
     image: postgres:18.0
     environment:
-      POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:?run generate-dev-keys.py first}
-      POSTGRES_DB: postgres
       PLATFORM_DB_PASSWORD: ${PLATFORM_DB_PASSWORD:?run generate-dev-keys.py first}
       ECONOMY_DB_PASSWORD: ${ECONOMY_DB_PASSWORD:?run generate-dev-keys.py first}
       CORE_DB_PASSWORD: ${CORE_DB_PASSWORD:?run generate-dev-keys.py first}
@@ -14,25 +20,17 @@ services:
       - postgres_data:/var/lib/postgresql
       - ./scripts/init-databases.sh:/docker-entrypoint-initdb.d/01-init-databases.sh:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d postgres"]
       interval: 5s
       timeout: 3s
       retries: 20
-    networks: [backend, host-access]
 
   platform:
-    build:
-      context: ../services/platform
-      dockerfile: Dockerfile
+    build: &platform-build ../services/platform
     environment:
-      DD_ENV: development
+      <<: *platform-env
       DEV_AUTH_ENABLED: "true"
       DEV_AUTH_USER_ID: ${DD_DEV_TELEGRAM_USER_ID:-100000001}
-      PLATFORM_DATABASE_URL: postgresql+psycopg://platform:${PLATFORM_DB_PASSWORD}@postgres:5432/platform
-      ECONOMY_DATABASE_URL: postgresql+psycopg://economy:${ECONOMY_DB_PASSWORD}@postgres:5432/economy
-      ECONOMY_SETTLEMENT_ENABLED: ${ECONOMY_SETTLEMENT_ENABLED:-true}
-      ECONOMY_SETTLEMENT_ACTIVATED_AT: ${ECONOMY_SETTLEMENT_ACTIVATED_AT:-}
-      ECONOMY_SHOP_ENABLED: ${ECONOMY_SHOP_ENABLED:-true}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?set in generated local env}
       ACCESS_TOKEN_PRIVATE_KEY_B64: ${ACCESS_TOKEN_PRIVATE_KEY_B64:?set in generated local env}
       ACCESS_TOKEN_KEY_ID: ${ACCESS_TOKEN_KEY_ID:?set in generated local env}
@@ -41,8 +39,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    expose:
-      - "8080"
     healthcheck:
       test: ["CMD", "/opt/venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/readyz', timeout=2).read()"]
       interval: 5s
@@ -56,20 +52,6 @@ services:
         /opt/venv/bin/alembic -c alembic-platform.ini upgrade head;
         /opt/venv/bin/alembic -c alembic-economy.ini upgrade head;
         exec /opt/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8080 --no-access-log
-    networks: [backend]
-
-
-  core-migrate:
-    build:
-      context: ..
-      dockerfile: services/core/typescript/Dockerfile
-    environment:
-      CORE_DATABASE_URL: postgres://core:${CORE_DB_PASSWORD}@postgres:5432/core?sslmode=disable
-    depends_on:
-      postgres:
-        condition: service_healthy
-    entrypoint: ["node", "services/core/typescript/dist/migrate-main.js"]
-    networks: [backend]
 
   core:
     build:
@@ -84,39 +66,16 @@ services:
       ACCESS_TOKEN_ISSUER: doofy-platform
       ACCESS_TOKEN_AUDIENCE: doofy-core
       ACCESS_TOKEN_PUBLIC_KEYS_JSON: ${ACCESS_TOKEN_PUBLIC_KEYS_JSON:?set in generated local env}
-      CORE_AUTO_MIGRATE: "false"
+      CORE_AUTO_MIGRATE: "true"
     depends_on:
-      core-migrate:
-        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
       platform:
         condition: service_started
-    expose:
-      - "8080"
-    networks: [backend]
-
-  web:
-    build:
-      context: ..
-      dockerfile: deploy/web.Dockerfile
-      args:
-        DD_LOCAL_DEV_AUTH: "true"
-        DD_LOCAL_DEV_USER_ID: ${DD_DEV_TELEGRAM_USER_ID:-100000001}
-    expose:
-      - "80"
-    networks: [backend]
 
   economy-settlement:
-    profiles: [local]
-    build:
-      context: ../services/platform
-      dockerfile: Dockerfile
-    environment:
-      DD_ENV: development
-      PLATFORM_DATABASE_URL: postgresql+psycopg://platform:${PLATFORM_DB_PASSWORD}@postgres:5432/platform
-      ECONOMY_DATABASE_URL: postgresql+psycopg://economy:${ECONOMY_DB_PASSWORD}@postgres:5432/economy
-      ECONOMY_SETTLEMENT_ENABLED: ${ECONOMY_SETTLEMENT_ENABLED:-true}
-      ECONOMY_SETTLEMENT_ACTIVATED_AT: ${ECONOMY_SETTLEMENT_ACTIVATED_AT:-}
-      ECONOMY_SHOP_ENABLED: ${ECONOMY_SHOP_ENABLED:-true}
+    build: *platform-build
+    environment: *platform-env
     depends_on:
       platform:
         condition: service_healthy
@@ -129,25 +88,14 @@ services:
           *) echo 'Local settlement is disabled by .env.dev'; exit 0 ;;
         esac;
         exec /opt/venv/bin/python -m app.economy.settlement_cli worker
-    networks: [backend]
 
   gateway:
-    profiles: [local]
     image: caddy:2.10.2-alpine
     volumes:
-      - ./Caddyfile.local:/etc/caddy/Caddyfile:ro
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
     ports:
       - "127.0.0.1:8080:80"
-    depends_on: [web, platform, core]
-    networks: [backend, edge]
-
-networks:
-  backend:
-    internal: true
-  edge:
-    internal: false
-  host-access:
-    internal: false
+    depends_on: [platform, core]
 
 volumes:
   postgres_data:
